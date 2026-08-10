@@ -1,0 +1,150 @@
+// ============================================================================
+// api/conciliacao/conciliar - Gravação do status de conciliação
+// Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// Atende os itens 6.1.3.6 (Conciliar) e 6.1.3.7 (Desfazer Conciliação):
+// a diferença entre as somatórias selecionadas deve ser zero; só então o
+// status SIM/NÃO é gravado nos lançamentos e movimentos escolhidos.
+//
+// Segue a orientação do padrão de programação para transações:
+//   - todas as validações ocorrem ANTES de iniciar a gravação;
+//   - a mensagem de sucesso é montada somente após a conclusão.
+// ============================================================================
+
+import { NextResponse } from 'next/server';
+import { buscaContaPorCodigo } from '../../../../lib/repositories/contaRepository.js';
+import { atualizaStatusLancamentos } from '../../../../lib/repositories/lancamentoRepository.js';
+import { atualizaStatusMovimentos } from '../../../../lib/repositories/movimentoRepository.js';
+import {
+   ACAO_CONCILIACAO,
+   ACAO_CONCILIACAO_AUTOMATICA,
+   ACAO_ESTORNO,
+   registraAuditoria,
+} from '../../../../lib/repositories/auditoriaRepository.js';
+import { calculaDiferenca } from '../../../../utils/subsetSum.js';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * Soma o valor líquido (entradas menos saídas) de uma lista de registros.
+ * @param {Array<{ valMovimento: number, bEntrada: boolean }>} aItens
+ * @returns {number}
+ */
+function somaLiquido(aItens) {
+   return (aItens ?? []).reduce(
+      (nSoma, oItem) => (oItem.bEntrada ? nSoma + Number(oItem.valMovimento) : nSoma - Number(oItem.valMovimento)),
+      0
+   );
+} // somaLiquido
+
+/**
+ * POST /api/conciliacao/conciliar
+ * Corpo: {
+ *   conta, bConciliado, automatica?,
+ *   lancamentos: [{ codLancamento, valMovimento, bEntrada }],
+ *   movimentos:  [{ codMovimento,  valMovimento, bEntrada }]
+ * }
+ * @param {Request} oRequisicao
+ * @returns {Promise<NextResponse>}
+ */
+export async function POST(oRequisicao) {
+   let oCorpo = null;
+
+   try {
+      oCorpo = await oRequisicao.json();
+   } catch {
+      return NextResponse.json({ erro: 'Corpo da requisição inválido.' }, { status: 400 });
+   }
+
+   const sCodConta = String(oCorpo?.conta ?? '');
+   const aLancamentos = Array.isArray(oCorpo?.lancamentos) ? oCorpo.lancamentos : [];
+   const aMovimentos = Array.isArray(oCorpo?.movimentos) ? oCorpo.movimentos : [];
+   const bConciliado = Boolean(oCorpo?.bConciliado);
+   const bAutomatica = Boolean(oCorpo?.automatica);
+
+   // ---------- Validações (fora da gravação) ----------
+   if (!sCodConta) {
+      return NextResponse.json({ erro: 'Selecione a conta corrente.' }, { status: 400 });
+   }
+   if (aLancamentos.length === 0 && aMovimentos.length === 0) {
+      return NextResponse.json(
+         { erro: 'Selecione os registros que deseja conciliar ou estornar.' },
+         { status: 400 }
+      );
+   }
+
+   // A conciliação automática já trabalha com pares equivalentes; na operação
+   // manual a diferença precisa ser conferida antes de gravar
+   if (!bAutomatica) {
+      const nDiferenca = calculaDiferenca(somaLiquido(aLancamentos), somaLiquido(aMovimentos));
+      if (nDiferenca !== 0) {
+         return NextResponse.json(
+            {
+               erro:
+                  'A diferença entre as somatórias selecionadas deve ser zero para ' +
+                  `${bConciliado ? 'conciliar' : 'estornar'}. Diferença atual: ${nDiferenca.toFixed(2)}.`,
+               valDiferenca: nDiferenca,
+            },
+            { status: 409 }
+         );
+      }
+   }
+
+   try {
+      const oConta = await buscaContaPorCodigo(sCodConta);
+      if (!oConta) {
+         return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
+      }
+
+      // ---------- Gravação ----------
+      const iLancAtualizados = await atualizaStatusLancamentos(
+         oConta.idConta,
+         aLancamentos.map((oItem) => oItem.codLancamento),
+         bConciliado
+      );
+      const iMovAtualizados = await atualizaStatusMovimentos(
+         oConta.idConta,
+         aMovimentos.map((oItem) => oItem.codMovimento),
+         bConciliado
+      );
+
+      const nValorConciliado = Math.abs(somaLiquido(aMovimentos.length > 0 ? aMovimentos : aLancamentos));
+      const sTipAcao = bAutomatica
+         ? ACAO_CONCILIACAO_AUTOMATICA
+         : bConciliado
+           ? ACAO_CONCILIACAO
+           : ACAO_ESTORNO;
+
+      await registraAuditoria({
+         idConta: oConta.idConta,
+         tipAcao: sTipAcao,
+         desEntidade: 'conciliacao',
+         codEntidade: aMovimentos[0]?.codMovimento ?? aLancamentos[0]?.codLancamento ?? null,
+         desDetalhe:
+            `${bConciliado ? 'Conciliação' : 'Estorno'}${bAutomatica ? ' automática' : ' manual'}: ` +
+            `${iLancAtualizados} lançamento(s) e ${iMovAtualizados} movimento(s) atualizados.`,
+         valReferencia: formataValorAuditoria(nValorConciliado),
+      });
+
+      return NextResponse.json({
+         ok: true,
+         iLancamentosAtualizados: iLancAtualizados,
+         iMovimentosAtualizados: iMovAtualizados,
+         mensagem: bConciliado
+            ? `Conciliação gravada: ${iLancAtualizados} lançamento(s) e ${iMovAtualizados} movimento(s).`
+            : `Conciliação estornada: ${iLancAtualizados} lançamento(s) e ${iMovAtualizados} movimento(s) voltaram para "Não Conciliado".`,
+      });
+   } catch (oErro) {
+      console.error('[api/conciliacao/conciliar] Falha ao gravar:', oErro);
+      return NextResponse.json({ erro: oErro.message }, { status: 500 });
+   }
+} // POST
+
+/**
+ * Protege o campo de auditoria contra valores não numéricos.
+ * @param {number} nValor
+ * @returns {number|null}
+ */
+function formataValorAuditoria(nValor) {
+   return Number.isFinite(nValor) ? Number(nValor.toFixed(2)) : null;
+}

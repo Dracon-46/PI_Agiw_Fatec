@@ -1,128 +1,196 @@
 'use client';
-// BankSelectorPage - Tela de seleção de banco
-// Ticket 37060 - Refatoração Strategy/Factory
+// ============================================================================
+// BankSelectorPage.jsx - Escolha da conta corrente a ser conciliada
+// Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// Tela inicial descrita no item 6.1.1 do documento de visão: ao acessar a
+// opção "Bancos", o usuário escolhe a conta corrente. Cada cartão exibe o
+// banco, a agência, o saldo previsto no sistema e a data do último bloqueio.
+// Também permite cadastrar nova conta (banco/agência/C.C.).
+// ============================================================================
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { CheckCircle2, CircleDashed, Landmark, Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { useBankContext } from '../../contexts/BankContext.jsx';
-import { Landmark, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { MarcaBanco } from '../comum/MarcaBanco.jsx';
+import { CadastroContaModal } from '../comum/CadastroContaModal.jsx';
+import { formataMoeda, normalizaTexto, trataDataNula } from '../../utils/formatters.js';
 
-const BANK_ICONS = {
-  bradesco: (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <rect width="48" height="48" rx="12" fill="#cc092f"/>
-      <path d="M12 34 L24 14 L36 34 Z" fill="white" fillOpacity="0.95"/>
-    </svg>
-  ),
-  itau: (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <rect width="48" height="48" rx="12" fill="#003399"/>
-      <rect x="14" y="14" width="20" height="20" rx="10" fill="#ff6600"/>
-      <rect x="20" y="20" width="8" height="8" rx="4" fill="white"/>
-    </svg>
-  ),
-  bb: (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <rect width="48" height="48" rx="12" fill="#003882"/>
-      <path d="M14 24 L24 14 L34 24 L24 34 Z" fill="#ffef00"/>
-    </svg>
-  ),
-};
+/**
+ * Tela de seleção da conta corrente.
+ * @param {object} oPropriedades
+ * @param {(codConta: string) => void} oPropriedades.aoSelecionar Callback da escolha
+ */
+export function BankSelectorPage({ aoSelecionar }) {
+   const { aContas, bCarregando, sErro, selecionaConta, removeContaCadastrada } = useBankContext();
+   const [sPesquisa, setPesquisa] = useState('');
+   const [bCadastroAberto, setCadastroAberto] = useState(false);
 
-export function BankSelectorPage() {
-  const { availableBanks, selectBank, loading } = useBankContext();
-  const router = useRouter();
+   // Filtra pelo banco, agência, conta ou descrição da agência
+   const aContasFiltradas = useMemo(() => {
+      const sTermo = normalizaTexto(sPesquisa);
+      if (!sTermo) {
+         return aContas;
+      }
 
-  const handleSelectBank = (slug) => {
-    selectBank(slug);
-    router.push('/conciliacao');
-  };
+      return aContas.filter((oConta) => {
+         const sConteudo = normalizaTexto(
+            `${oConta.codBanco} ${oConta.nomBanco} ${oConta.codAgencia} ${oConta.numContaCorrente} ${oConta.desAgencia}`
+         );
+         return sConteudo.includes(sTermo);
+      });
+   }, [aContas, sPesquisa]);
 
-  if (loading) {
-    return (
-      <div className="bank-selector-page">
-        <div className="bank-selector-loading">
-          <Loader2 size={32} className="spin-icon" />
-          <p>Carregando bancos disponíveis...</p>
-        </div>
-      </div>
-    );
-  }
+   /**
+    * Registra a conta escolhida e avança para a tela de conciliação.
+    * @param {string} sCodConta
+    */
+   function trataEscolha(sCodConta) {
+      selecionaConta(sCodConta);
+      aoSelecionar?.(sCodConta);
+   } // trataEscolha
 
-  return (
-    <div className="bank-selector-page">
-      <div className="bank-selector-container">
-        {/* Header */}
-        <div className="bank-selector-header">
-          <div className="bank-selector-logo">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <rect width="40" height="40" rx="8" fill="#1a6fdb" />
-              <path d="M8 28L16 12L24 22L29 16L34 28H8Z" fill="white" fillOpacity="0.95" />
-            </svg>
-            <span className="bank-selector-brand">AGIW</span>
-          </div>
-          <h1 className="bank-selector-title">Conciliação Bancária</h1>
-          <p className="bank-selector-subtitle">
-            Selecione o banco para iniciar a conciliação
-          </p>
-        </div>
+   /**
+    * Remove conta cadastrada localmente sem selecioná-la.
+    * @param {import('react').MouseEvent} oEvento
+    * @param {string} sCodConta
+    */
+   function trataRemocao(oEvento, sCodConta) {
+      oEvento.stopPropagation();
+      void removeContaCadastrada(sCodConta);
+   } // trataRemocao
 
-        {/* Bank Cards */}
-        <div className="bank-cards-grid">
-          {availableBanks.map((bank) => (
-            <button
-              key={bank.slug}
-              className={`bank-card ${bank.configured ? 'bank-card-configured' : 'bank-card-disabled'}`}
-              onClick={() => handleSelectBank(bank.slug)}
-              style={{ '--bank-color': bank.color }}
-            >
-              <div className="bank-card-icon">
-                {BANK_ICONS[bank.slug] || (
-                  <div className="bank-card-icon-fallback">
-                    <Landmark size={28} />
+   return (
+      <div className="selecao-banco-pagina">
+         <div className="selecao-banco-caixa">
+            <header className="painel-cabecalho">
+               <Landmark size={15} />
+               Banco/Agência para Conciliação Bancária
+               <div className="painel-acoes">
+                  <button
+                     type="button"
+                     className="btn btn-primario btn-pequeno"
+                     onClick={() => setCadastroAberto(true)}
+                  >
+                     <Plus size={13} />
+                     Cadastrar conta
+                  </button>
+               </div>
+            </header>
+
+            <div className="selecao-banco-corpo">
+               <div className="selecao-banco-busca">
+                  <span className="campo-rotulo">Banco/Agência</span>
+                  <div className="campo-busca">
+                     <input
+                        type="search"
+                        className="campo-controle"
+                        placeholder="Pesquisar por banco, agência ou conta corrente"
+                        value={sPesquisa}
+                        onChange={(oEvento) => setPesquisa(oEvento.target.value)}
+                        aria-label="Pesquisar conta corrente"
+                     />
+                     <Search className="campo-busca-icone" />
                   </div>
-                )}
-              </div>
+               </div>
 
-              <div className="bank-card-info">
-                <span className="bank-card-name">{bank.name}</span>
-                <span className={`bank-card-status ${bank.configured ? 'status-configured' : 'status-pending'}`}>
-                  {bank.configured ? (
-                    <>
-                      <CheckCircle2 size={12} />
-                      Configurado
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle size={12} />
-                      Não configurado
-                    </>
-                  )}
-                </span>
-              </div>
+               {bCarregando ? (
+                  <div className="carregando">
+                     <Loader2 size={22} className="girando" />
+                     Carregando contas correntes...
+                  </div>
+               ) : null}
 
-              <div className="bank-card-arrow">
-                <ArrowRight size={18} />
-              </div>
-            </button>
-          ))}
-        </div>
+               {!bCarregando && sErro ? <div className="alerta alerta-erro">{sErro}</div> : null}
 
-        {/* Footer */}
-        <div className="bank-selector-footer">
-          <p>Configure as credenciais no arquivo <code>.env</code> para ativar cada banco.</p>
-        </div>
+               {!bCarregando && !sErro && aContasFiltradas.length === 0 ? (
+                  <div className="grade-vazia">
+                     Nenhuma conta corrente localizada.
+                     {' '}
+                     <button
+                        type="button"
+                        className="btn btn-primario btn-pequeno"
+                        onClick={() => setCadastroAberto(true)}
+                        style={{ marginTop: 10 }}
+                     >
+                        <Plus size={13} />
+                        Cadastrar a primeira conta
+                     </button>
+                  </div>
+               ) : null}
+
+               {!bCarregando && aContasFiltradas.length > 0 ? (
+                  <div className="selecao-banco-grade">
+                     {aContasFiltradas.map((oConta) => (
+                        <button
+                           key={oConta.codConta}
+                           type="button"
+                           className="cartao-banco"
+                           onClick={() => trataEscolha(oConta.codConta)}
+                        >
+                           <div className="cartao-banco-topo">
+                              <MarcaBanco
+                                 codBanco={oConta.codBanco}
+                                 corBanco={oConta.corBanco}
+                                 corTexto={oConta.corTexto}
+                                 nomBanco={oConta.nomBanco}
+                              />
+                              <span className="cartao-banco-nome">
+                                 {oConta.codBanco} - {oConta.nomBanco}
+                              </span>
+                              <span
+                                 role="button"
+                                 tabIndex={0}
+                                 className="cartao-banco-remover"
+                                 title="Remover conta do MySQL"
+                                 onClick={(oEvento) => trataRemocao(oEvento, oConta.codConta)}
+                                 onKeyDown={(oEvento) => {
+                                    if (oEvento.key === 'Enter' || oEvento.key === ' ') {
+                                       trataRemocao(oEvento, oConta.codConta);
+                                    }
+                                 }}
+                              >
+                                 <Trash2 size={12} />
+                              </span>
+                           </div>
+
+                           <div className="cartao-banco-dados">
+                              <span>
+                                 Agência <span className="destaque">{oConta.codAgencia}</span>
+                                 {'  ·  '}
+                                 C.C.: <span className="destaque">{oConta.numContaCorrente}</span>
+                              </span>
+                              <span>{oConta.desAgencia}</span>
+                              <span>
+                                 Saldo previsto:{' '}
+                                 <span className="destaque">{formataMoeda(oConta.valSaldoSistema)}</span>
+                              </span>
+                              <span>Último bloqueio: {trataDataNula(oConta.datUltimoBloqueio)}</span>
+                           </div>
+
+                           {oConta.bIntegracaoConfigurada ? (
+                              <span className="cartao-banco-situacao situacao-configurado">
+                                 <CheckCircle2 size={11} />
+                                 Integração configurada
+                              </span>
+                           ) : (
+                              <span className="cartao-banco-situacao situacao-pendente">
+                                 <CircleDashed size={11} />
+                                 Importação por arquivo ou homologação
+                              </span>
+                           )}
+                        </button>
+                     ))}
+                  </div>
+               ) : null}
+            </div>
+         </div>
+
+         <CadastroContaModal
+            aberto={bCadastroAberto}
+            aoFechar={() => setCadastroAberto(false)}
+            aoCadastrar={trataEscolha}
+         />
       </div>
-
-      <style>{`
-        .spin-icon {
-          animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-}
+   );
+} // BankSelectorPage

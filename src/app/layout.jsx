@@ -1,6 +1,7 @@
 // app/layout.jsx - Projeto Banco - Ticket 37060
 import '../styles/globals.css';
 import { BankContextProvider } from '../contexts/BankContext.jsx';
+import { NotificacoesProvider } from '../components/comum/Notificacoes.jsx';
 
 export const metadata = {
   title: 'Conciliação Bancária | AGIW',
@@ -16,7 +17,7 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <BankContextProvider>
-          {children}
+          <NotificacoesProvider>{children}</NotificacoesProvider>
         </BankContextProvider>
       </body>
     </html>

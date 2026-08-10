@@ -1,461 +1,612 @@
 'use client';
-// ConciliacaoBancariaPage - Projeto Banco - Ticket 37060
-// Gustavo Vieira | 04/06/2026 — Refatorado para multi-banco
+// ============================================================================
+// ConciliacaoBancariaPage.jsx - Tela principal de conciliação
+// Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// Atende o item 6.1.3 do documento de visão: filtro inicial, grades de
+// movimentos do sistema e do banco, conciliação manual/automática e bloqueio.
+// ============================================================================
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Upload,
-  ArrowLeftRight,
-  Download,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  ArrowLeft,
+   CheckCircle2,
+   Circle,
+   Download,
+   Lock,
+   PlusCircle,
+   Search,
+   ShieldCheck,
+   Trash2,
+   Unlock,
+   Upload,
+   Zap,
 } from 'lucide-react';
-
-import { Sidebar } from './Sidebar.jsx';
-import { TopBar } from './TopBar.jsx';
-import { CardsResumo } from './CardsResumo.jsx';
-import { ExtratoERP } from './ExtratoERP.jsx';
-import { ExtratoBanco } from './ExtratoBanco.jsx';
-import { PainelConciliar } from './PainelConciliar.jsx';
-import { MovimentacoesPeriodo } from './MovimentacoesPeriodo.jsx';
-
-import { lancamentosERP, movimentosPeriodo } from '../../utils/mockData.js';
-import {
-  buscaExtratoBanco,
-  executaAutoMatch,
-} from '../../services/conciliacaoService.js';
+import { AppShell } from '../layout/AppShell.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
+import { useNotificacoes } from '../comum/Notificacoes.jsx';
+import { useConciliacao } from '../../hooks/useConciliacao.js';
+import { ModalNovoLancamento } from './ModalNovoLancamento.jsx';
+import { MenuExportar } from './MenuExportar.jsx';
+import {
+   formataContaCorrente,
+   formataMoeda,
+   formataValor,
+} from '../../utils/formatters.js';
+
+/**
+ * Filtra a grade conforme chips conciliado / não conciliado.
+ * @param {Array<object>} aItens
+ * @param {boolean} bConciliados
+ * @param {boolean} bNaoConciliados
+ * @returns {Array<object>}
+ */
+function filtraPorStatus(aItens, bConciliados, bNaoConciliados) {
+   return aItens.filter((oItem) => {
+      if (oItem.staConciliado) {
+         return bConciliados;
+      }
+      return bNaoConciliados;
+   });
+} // filtraPorStatus
+
+/**
+ * Célula de valor entrada/saída da grade.
+ * @param {{ bEntrada: boolean, valMovimento: number }} oPropriedades
+ */
+function CelulaValor({ bEntrada, valMovimento }) {
+   return (
+      <td className={`col-valor ${bEntrada ? 'valor-entrada' : 'valor-saida'}`}>
+         {bEntrada ? formataValor(valMovimento) : formataValor(valMovimento)}
+      </td>
+   );
+} // CelulaValor
+
+/**
+ * Selo visual do status de conciliação.
+ * @param {{ conciliado: boolean }} oPropriedades
+ */
+function SeloStatus({ conciliado }) {
+   if (conciliado) {
+      return (
+         <span className="selo selo-conciliado">
+            <CheckCircle2 size={11} />
+            Sim
+         </span>
+      );
+   }
+   return (
+      <span className="selo selo-nao-conciliado">
+         <Circle size={11} />
+         Não
+      </span>
+   );
+} // SeloStatus
 
 export function ConciliacaoBancariaPage() {
-  const { selectedBank, getBankInfo, clearSelection } = useBankContext();
-  const bankInfo = getBankInfo(selectedBank);
-  const bankName = bankInfo?.name || selectedBank || 'Banco';
+   const router = useRouter();
+   const { oContaSelecionada, limpaSelecao } = useBankContext();
+   const { notifica } = useNotificacoes();
+   const oConc = useConciliacao(oContaSelecionada, notifica);
+   const [sDatBloqueioEdicao, setDatBloqueioEdicao] = useState('');
+   const [bLancamentoAberto, setLancamentoAberto] = useState(false);
+   const [oMovimentoBase, setMovimentoBase] = useState(null);
 
-  const [selectedERP, setSelectedERP] = useState(new Set());
-  const [selectedBanco, setSelectedBanco] = useState(new Set());
-  const [lancamentos, setLancamentos] = useState([]);
-  const [movimentos, setMovimentos] = useState([]);
-  const [toasts, setToasts] = useState([]);
-  const [bCarregandoExtrato, setCarregandoExtrato] = useState(false);
-  const [bAutoConciliando, setAutoConciliando] = useState(false);
-  const [sDataInicio, setDataInicio] = useState('');
-  const [sDataFim, setDataFim] = useState('');
-  const [sErroExtrato, setErroExtrato] = useState(null);
+   useEffect(() => {
+      setDatBloqueioEdicao(oConc.datBloqueio || '');
+   }, [oConc.datBloqueio]);
 
-  const numConciliados = lancamentos.filter((l) => l.staConciliado).length;
-  const numPendentes = lancamentos.filter((l) => !l.staConciliado).length;
-  const calcValorSelecionadoERP = useCallback(() => {
-    let valEntrada = 0;
-    let valSaida = 0;
-    selectedERP.forEach((iIdx) => {
-      const l = lancamentos[iIdx];
-      if (l) {
-        valEntrada += l.valEntrada ?? 0;
-        valSaida += l.valSaida ?? 0;
-      }
-    });
-    return valEntrada - valSaida;
-  }, [selectedERP, lancamentos]);
+   const aLancVisiveis = useMemo(
+      () =>
+         filtraPorStatus(
+            oConc.aLancamentos,
+            oConc.oFiltrosGrade.bLancConciliados,
+            oConc.oFiltrosGrade.bLancNaoConciliados
+         ),
+      [oConc.aLancamentos, oConc.oFiltrosGrade]
+   );
 
-  const calcValorSelecionadoBanco = useCallback(() => {
-    let valEntrada = 0;
-    let valSaida = 0;
-    selectedBanco.forEach((iIdx) => {
-      const m = movimentos[iIdx];
-      if (m) {
-        valEntrada += m.valEntrada ?? 0;
-        valSaida += m.valSaida ?? 0;
-      }
-    });
-    return valEntrada - valSaida;
-  }, [selectedBanco, movimentos]);
-  const dadosResumo = useMemo(() => {
-    const valConciliadoERP = lancamentos
-      .filter((l) => l.staConciliado)
-      .reduce((n, l) => n + (l.valEntrada ?? 0) - (l.valSaida ?? 0), 0);
-    const valPendenteERP = lancamentos
-      .filter((l) => !l.staConciliado)
-      .reduce((n, l) => n + Math.abs((l.valEntrada ?? 0) - (l.valSaida ?? 0)), 0);
+   const aMovVisiveis = useMemo(
+      () =>
+         filtraPorStatus(
+            oConc.aMovimentos,
+            oConc.oFiltrosGrade.bMovConciliados,
+            oConc.oFiltrosGrade.bMovNaoConciliados
+         ),
+      [oConc.aMovimentos, oConc.oFiltrosGrade]
+   );
 
-    const valSelecionadoERP = calcValorSelecionadoERP();
-    const valSelecionadoBanco = calcValorSelecionadoBanco();
+   /** Volta à tela de seleção de banco/agência. */
+   function trocaConta() {
+      limpaSelecao();
+      router.push('/');
+   } // trocaConta
 
-    return {
-      valSelecionadoERP: valSelecionadoERP,
-      qtdSelecionadoERP: selectedERP.size,
-      valSelecionadoBanco: valSelecionadoBanco,
-      qtdSelecionadoBanco: selectedBanco.size,
-      valTotalConciliado: Math.abs(valConciliadoERP),
-      numLancConciliados: numConciliados,
-      valTotalPendente: valPendenteERP,
-      numLancPendentes: numPendentes,
-    };
-  }, [lancamentos, numConciliados, numPendentes, selectedERP, selectedBanco, movimentos]);
+   /**
+    * Abre a caixa de lançamento, aproveitando os dados da linha do banco
+    * quando houver um único movimento selecionado (item 6.1.3.8 — ação 1).
+    */
+   function abreNovoLancamento() {
+      const oMovimento = oConc.aMovSelecionados.length === 1 ? oConc.aMovSelecionados[0] : null;
+      setMovimentoBase(oMovimento);
+      setLancamentoAberto(true);
+   } // abreNovoLancamento
 
-  const adicionaToast = useCallback(
-    (tipToast, desMsg) => {
-      const idNovo = Date.now();
-      setToasts((prev) => [...prev, { id: idNovo, tipo: tipToast, mensagem: desMsg }]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== idNovo));
-      }, 3500);
-    },
-    []
-  );
-
-  const carregaExtrato = useCallback(async () => {
-    if (!selectedBank || !sDataInicio || !sDataFim) return;
-    setCarregandoExtrato(true);
-    setErroExtrato(null);
-    try {
-      const oResposta = await buscaExtratoBanco(selectedBank, sDataInicio, sDataFim);
-      setMovimentos(oResposta.movimentos);
-      if (oResposta.movimentos.length === 0) {
-        adicionaToast('info', `Nenhum movimento retornado do ${bankName} para o período.`);
-      } else {
-        adicionaToast('sucesso', `${oResposta.movimentos.length} movimento(s) importado(s) do ${bankName}.`);
-      }
-    } catch (oErro) {
-      const sMsg = oErro instanceof Error ? oErro.message : 'Erro ao buscar extrato';
-      setErroExtrato(sMsg);
-      adicionaToast('erro', sMsg);
-    } finally {
-      setCarregandoExtrato(false);
-    }
-  }, [selectedBank, sDataInicio, sDataFim, adicionaToast, bankName]);
-
-  useEffect(() => {
-    carregaExtrato();
-  }, [carregaExtrato]);
-
-  const onToggleSelectERP = useCallback((iIndex) => {
-    setSelectedERP((prev) => {
-      const next = new Set(prev);
-      if (next.has(iIndex)) next.delete(iIndex);
-      else next.add(iIndex);
-      return next;
-    });
-  }, []);
-
-  const onToggleAllERP = useCallback(() => {
-    setSelectedERP((prev) => {
-      if (prev.size === lancamentos.length) return new Set();
-      return new Set(lancamentos.map((_, i) => i));
-    });
-  }, [lancamentos]);
-
-  const onToggleSelectBanco = useCallback((iIndex) => {
-    setSelectedBanco((prev) => {
-      const next = new Set(prev);
-      if (next.has(iIndex)) next.delete(iIndex);
-      else next.add(iIndex);
-      return next;
-    });
-  }, []);
-
-  const onToggleAllBanco = useCallback(() => {
-    setSelectedBanco((prev) => {
-      if (prev.size === movimentos.length) return new Set();
-      return new Set(movimentos.map((_, i) => i));
-    });
-  }, [movimentos]);
-
-
-  const onConciliar = useCallback(() => {
-    if (selectedERP.size === 0 || selectedBanco.size === 0) {
-      adicionaToast('erro', 'Selecione lançamentos em ambos os extratos para conciliar.');
-      return;
-    }
-
-    const valDiferenca = calcValorSelecionadoERP() - calcValorSelecionadoBanco();
-
-    if (Math.abs(valDiferenca) > 0.01) {
-      adicionaToast(
-        'erro',
-        `Diferença de R$ ${Math.abs(valDiferenca).toFixed(2).replace('.', ',')} impede a conciliação.`
-      );
-      return;
-    }
-
-    const nQtd = selectedERP.size + selectedBanco.size;
-
-    setLancamentos((prev) =>
-      prev.map((l, i) =>
-        selectedERP.has(i) ? { ...l, staConciliado: true, tipSituacao: 'Conciliado' } : l
-      )
-    );
-    setMovimentos((prev) =>
-      prev.map((m, i) => (selectedBanco.has(i) ? { ...m, staConciliado: true } : m))
-    );
-
-    setSelectedERP(new Set());
-    setSelectedBanco(new Set());
-    adicionaToast('sucesso', `${nQtd} lançamento(s) conciliado(s) com sucesso!`);
-  }, [selectedERP, selectedBanco, lancamentos, movimentos, adicionaToast]);
-
-  const onDesfazerConciliacao = useCallback(() => {
-    const temConciliadoERP = Array.from(selectedERP).some((i) => lancamentos[i]?.staConciliado);
-    const temConciliadoBanco = Array.from(selectedBanco).some((i) => movimentos[i]?.staConciliado);
-
-    if (!temConciliadoERP && !temConciliadoBanco) {
-      adicionaToast('info', 'Selecione lançamentos já conciliados para desfazer.');
-      return;
-    }
-
-    setLancamentos((prev) =>
-      prev.map((l, i) =>
-        selectedERP.has(i) && l.staConciliado
-          ? { ...l, staConciliado: false, tipSituacao: l.valEntrada ? 'A Receber' : 'A Pagar' }
-          : l
-      )
-    );
-    setMovimentos((prev) =>
-      prev.map((m, i) =>
-        selectedBanco.has(i) && m.staConciliado ? { ...m, staConciliado: false } : m
-      )
-    );
-
-    setSelectedERP(new Set());
-    setSelectedBanco(new Set());
-    adicionaToast('info', 'Conciliação desfeita.');
-  }, [selectedERP, selectedBanco, lancamentos, movimentos, adicionaToast]);
-
-  const onAutoConciliar = useCallback(async () => {
-    setAutoConciliando(true);
-    try {
-      const oResposta = await executaAutoMatch(lancamentos, movimentos);
-
-      if (oResposta.grupos.length === 0) {
-        adicionaToast('info', 'Nenhum match por subconjunto de soma encontrado.');
-        return;
+   /**
+    * Exclui os registros selecionados nas duas grades.
+    * Percorre as listas e deixa o hook aplicar as regras de cada grade.
+    */
+   async function excluiSelecionados() {
+      if (oConc.aLancSelecionados.length === 0 && oConc.aMovSelecionados.length === 0) {
+         notifica('Selecione os registros que deseja excluir.', 'alerta');
+         return;
       }
 
-      const oSetERP = new Set();
-      const oSetBanco = new Set();
-      oResposta.grupos.forEach((g) => {
-        g.aIndicesERP.forEach((i) => oSetERP.add(i));
-        oSetBanco.add(g.iIndexBanco);
-      });
+      for (const oLancamento of oConc.aLancSelecionados) {
+         await oConc.excluiRegistro(oLancamento, 'lancamento');
+      }
+      for (const oMovimento of oConc.aMovSelecionados) {
+         await oConc.excluiRegistro(oMovimento, 'movimento');
+      }
+   } // excluiSelecionados
 
-      setLancamentos((prev) =>
-        prev.map((l, i) =>
-          oSetERP.has(i) ? { ...l, staConciliado: true, tipSituacao: 'Conciliado' } : l
-        )
-      );
-      setMovimentos((prev) =>
-        prev.map((m, i) => (oSetBanco.has(i) ? { ...m, staConciliado: true } : m))
-      );
+   return (
+      <AppShell
+         itemAtivo="conciliacao"
+         oConta={oContaSelecionada}
+         aoTrocarConta={trocaConta}
+         aoSair={trocaConta}
+      >
+         <div className="painel" style={{ marginBottom: 12 }}>
+            <header className="painel-cabecalho">
+               <Search size={15} />
+               Período e conta para conciliação
+            </header>
+            <div className="painel-corpo">
+               <div className="filtro-conciliacao">
+                  <label className="campo">
+                     <span className="campo-rotulo">Banco / Agência / C.C.</span>
+                     <input
+                        type="text"
+                        className="campo-controle"
+                        value={formataContaCorrente(oContaSelecionada)}
+                        readOnly
+                        title={oContaSelecionada?.desAgencia}
+                     />
+                  </label>
 
-      adicionaToast(
-        'sucesso',
-        `Auto conciliação: ${oResposta.numGrupos} grupo(s) conciliado(s) via matchReg.`
-      );
-    } catch (oErro) {
-      adicionaToast(
-        'erro',
-        oErro instanceof Error ? oErro.message : 'Erro na auto conciliação'
-      );
-    } finally {
-      setAutoConciliando(false);
-    }
-  }, [lancamentos, movimentos, adicionaToast]);
+                  <label className="campo">
+                     <span className="campo-rotulo">Data inicial</span>
+                     <input
+                        type="text"
+                        className="campo-controle"
+                        placeholder="DD/MM/AAAA"
+                        value={oConc.sDataInicio}
+                        onChange={(oEvento) => oConc.setDataInicio(oEvento.target.value)}
+                     />
+                  </label>
 
-  const bTemSelecao = selectedERP.size > 0 || selectedBanco.size > 0;
+                  <label className="campo">
+                     <span className="campo-rotulo">Data final</span>
+                     <input
+                        type="text"
+                        className="campo-controle"
+                        placeholder="DD/MM/AAAA"
+                        value={oConc.sDataFim}
+                        onChange={(oEvento) => oConc.setDataFim(oEvento.target.value)}
+                     />
+                  </label>
 
-  const onAdicionarLancamento = useCallback((novoLancamento) => {
-    setLancamentos((prev) => [...prev, novoLancamento]);
-  }, []);
+                  <div className="filtro-acao">
+                     <button
+                        type="button"
+                        className="btn btn-primario"
+                        onClick={oConc.buscaMovimentos}
+                        disabled={oConc.bCarregando}
+                     >
+                        <Search size={14} />
+                        Buscar
+                     </button>
+                     <button
+                        type="button"
+                        className="btn btn-secundario"
+                        onClick={oConc.importaExtrato}
+                        disabled={oConc.bImportando}
+                     >
+                        <Upload size={14} />
+                        {oConc.bImportando ? 'Importando...' : 'Importar Extrato'}
+                     </button>
+                  </div>
 
-  return (
-    <div className="app-layout">
-      <Sidebar />
+                  <div className="filtro-bloqueio">
+                     <span className="campo-rotulo">Bloqueio de período</span>
+                     <div className="filtro-bloqueio-linha">
+                        <input
+                           type="text"
+                           className="campo-controle"
+                           placeholder="DD/MM/AAAA"
+                           value={sDatBloqueioEdicao}
+                           onChange={(oEvento) => setDatBloqueioEdicao(oEvento.target.value)}
+                           style={{ width: 110 }}
+                        />
+                        <button
+                           type="button"
+                           className="btn-icone"
+                           title="Aplicar bloqueio"
+                           onClick={() => oConc.aplicaBloqueio(sDatBloqueioEdicao)}
+                        >
+                           <Lock size={14} />
+                        </button>
+                        <button
+                           type="button"
+                           className="btn-icone"
+                           title="Remover bloqueio"
+                           onClick={oConc.removeBloqueio}
+                        >
+                           <Unlock size={14} />
+                        </button>
+                     </div>
+                  </div>
+               </div>
 
-      <div className="app-main">
-        <TopBar />
+               <div className="linha-saldos">
+                  <div className="card-saldo">
+                     <div className="card-saldo-icone">
+                        <Download size={15} />
+                     </div>
+                     <div>
+                        <div className="card-saldo-rotulo">Saldo anterior</div>
+                        <div className="card-saldo-valor">{formataMoeda(oConc.oSaldos.valSaldoAnterior)}</div>
+                     </div>
+                  </div>
+                  <div className="card-saldo">
+                     <div className="card-saldo-icone">
+                        <CheckCircle2 size={15} />
+                     </div>
+                     <div>
+                        <div className="card-saldo-rotulo">Saldo final (sistema)</div>
+                        <div className="card-saldo-valor">{formataMoeda(oConc.oSaldos.valSaldoFinal)}</div>
+                     </div>
+                  </div>
+                  <div className="card-saldo">
+                     <div>
+                        <div className="card-saldo-rotulo">Diferença da seleção</div>
+                        <div
+                           className={`card-saldo-valor ${
+                              oConc.oTotais.valDiferenca === 0 ? '' : 'negativo'
+                           }`}
+                        >
+                           {formataMoeda(oConc.oTotais.valDiferenca)}
+                        </div>
+                     </div>
+                  </div>
+                  <div className="saldos-acoes">
+                     <button
+                        type="button"
+                        className="btn btn-sucesso btn-pequeno"
+                        onClick={oConc.concilia}
+                     >
+                        <CheckCircle2 size={13} />
+                        Conciliar
+                     </button>
+                     <button
+                        type="button"
+                        className="btn btn-neutro btn-pequeno"
+                        onClick={oConc.desfazConciliacao}
+                     >
+                        Desfazer
+                     </button>
+                     <button
+                        type="button"
+                        className="btn btn-primario btn-pequeno"
+                        onClick={oConc.conciliaAutomaticamente}
+                        disabled={oConc.bCarregando}
+                     >
+                        <Zap size={13} />
+                        Auto conciliar
+                     </button>
 
-        <main className="app-content">
-          <div className="page-header">
-            <div className="page-title-group">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => clearSelection()}
-                  style={{ padding: '4px 8px', height: 30 }}
-                  title="Voltar para seleção de banco"
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <h1>Conciliação Bancária</h1>
-                {bankInfo && (
-                  <span
-                    className="extrato-badge"
-                    style={{
-                      background: bankInfo.color + '18',
-                      color: bankInfo.color === '#ffef00' ? '#003882' : bankInfo.color,
-                      fontSize: 12,
-                      padding: '4px 12px',
-                    }}
-                  >
-                    {bankName}
+                     <span className="separador-acoes" aria-hidden="true" />
+
+                     <button
+                        type="button"
+                        className="btn btn-secundario btn-pequeno"
+                        onClick={abreNovoLancamento}
+                     >
+                        <PlusCircle size={13} />
+                        Novo Lançamento
+                     </button>
+                     <button
+                        type="button"
+                        className="btn btn-perigo btn-pequeno"
+                        onClick={excluiSelecionados}
+                     >
+                        <Trash2 size={13} />
+                        Excluir
+                     </button>
+
+                     <MenuExportar
+                        sCodConta={oContaSelecionada?.codConta}
+                        sDataInicio={oConc.sDataInicio}
+                        sDataFim={oConc.sDataFim}
+                        desabilitado={!oContaSelecionada}
+                        notifica={notifica}
+                     />
+
+                     <button
+                        type="button"
+                        className="btn btn-neutro btn-pequeno"
+                        onClick={() => router.push('/auditoria')}
+                        title="Consultar a trilha de auditoria do módulo"
+                     >
+                        <ShieldCheck size={13} />
+                        Auditoria
+                     </button>
+                  </div>
+               </div>
+            </div>
+         </div>
+
+         <div className="area-conciliacao">
+            {/* ---------- Movimentos no Sistema ---------- */}
+            <div className="painel">
+               <header
+                  className={`painel-cabecalho ${
+                     oConc.staSelecao === true
+                        ? 'cabecalho-conciliado'
+                        : oConc.staSelecao === false
+                          ? 'cabecalho-nao-conciliado'
+                          : ''
+                  }`}
+               >
+                  Movimentos no Sistema
+                  <span className="chip-contador" style={{ marginLeft: 'auto' }}>
+                     {aLancVisiveis.length} registro(s)
                   </span>
-                )}
-              </div>
-              <p>Concilie os lançamentos do ERP com os extratos do {bankName}.</p>
+               </header>
+
+               <div className="grade-filtros">
+                  <button
+                     type="button"
+                     className={`chip-toggle ${oConc.oFiltrosGrade.bLancConciliados ? 'ligado' : ''}`}
+                     onClick={() =>
+                        oConc.setFiltrosGrade((oAtual) => ({
+                           ...oAtual,
+                           bLancConciliados: !oAtual.bLancConciliados,
+                        }))
+                     }
+                  >
+                     Conciliados
+                  </button>
+                  <button
+                     type="button"
+                     className={`chip-toggle ${oConc.oFiltrosGrade.bLancNaoConciliados ? 'ligado' : ''}`}
+                     onClick={() =>
+                        oConc.setFiltrosGrade((oAtual) => ({
+                           ...oAtual,
+                           bLancNaoConciliados: !oAtual.bLancNaoConciliados,
+                        }))
+                     }
+                  >
+                     Não conciliados
+                  </button>
+               </div>
+
+               <div className="grade-wrapper">
+                  {oConc.bCarregando ? (
+                     <div className="grade-vazia">Carregando lançamentos...</div>
+                  ) : aLancVisiveis.length === 0 ? (
+                     <div className="grade-vazia">Nenhum lançamento no período informado.</div>
+                  ) : (
+                     <table className="grade">
+                        <thead>
+                           <tr>
+                              <th className="col-selecao">
+                                 <input
+                                    type="checkbox"
+                                    className="checkbox"
+                                    checked={
+                                       aLancVisiveis.length > 0 &&
+                                       aLancVisiveis.every((oItem) =>
+                                          oConc.aSelLancamentos.includes(oItem.codLancamento)
+                                       )
+                                    }
+                                    onChange={() => oConc.alternaSelecaoTotal(aLancVisiveis, 'lancamento')}
+                                    aria-label="Selecionar todos os lançamentos"
+                                 />
+                              </th>
+                              <th>Data</th>
+                              <th>Documento</th>
+                              <th className="col-historico">Histórico</th>
+                              <th className="col-valor">Valor</th>
+                              <th className="col-status">Conc.</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {aLancVisiveis.map((oLanc) => {
+                              const bSel = oConc.aSelLancamentos.includes(oLanc.codLancamento);
+                              return (
+                                 <tr
+                                    key={oLanc.codLancamento}
+                                    className={bSel ? 'selecionada' : ''}
+                                    onClick={() => oConc.alternaSelecao(oLanc, 'lancamento')}
+                                 >
+                                    <td className="col-selecao">
+                                       <input
+                                          type="checkbox"
+                                          className="checkbox"
+                                          checked={bSel}
+                                          onChange={() => oConc.alternaSelecao(oLanc, 'lancamento')}
+                                          onClick={(oEvento) => oEvento.stopPropagation()}
+                                       />
+                                    </td>
+                                    <td>{oLanc.datMovimento}</td>
+                                    <td>{oLanc.numDocumento}</td>
+                                    <td className="col-historico">{oLanc.desHistorico}</td>
+                                    <CelulaValor bEntrada={oLanc.bEntrada} valMovimento={oLanc.valMovimento} />
+                                    <td className="col-status">
+                                       <SeloStatus conciliado={oLanc.staConciliado} />
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  )}
+               </div>
+
+               <div className="grade-rodape">
+                  <div className="totais">
+                     <div className="totais-item">
+                        <span className="totais-rotulo">Selecionado (sistema)</span>
+                        <span className="totais-valor">{formataMoeda(oConc.oTotais.oSistema.valLiquido)}</span>
+                     </div>
+                     <div className="totais-item">
+                        <span className="totais-rotulo">Entradas a conciliar</span>
+                        <span className="totais-valor entrada">
+                           {formataMoeda(oConc.oTotaisPeriodo.valEntradasAConciliar)}
+                        </span>
+                     </div>
+                     <div className="totais-item">
+                        <span className="totais-rotulo">Saídas a conciliar</span>
+                        <span className="totais-valor saida">
+                           {formataMoeda(oConc.oTotaisPeriodo.valSaidasAConciliar)}
+                        </span>
+                     </div>
+                  </div>
+               </div>
             </div>
 
-            <div className="page-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', padding: '6px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#4b5563' }}>Período:</span>
-                <input
-                  type="text"
-                  value={sDataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
-                  placeholder="DD/MM/AAAA"
-                  style={{ width: 85, fontSize: 13, border: 'none', outline: 'none' }}
-                />
-                <span style={{ color: '#9ca3af', fontSize: 13 }}>até</span>
-                <input
-                  type="text"
-                  value={sDataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
-                  placeholder="DD/MM/AAAA"
-                  style={{ width: 85, fontSize: 13, border: 'none', outline: 'none' }}
-                />
-              </div>
+            {/* ---------- Movimentos no Banco ---------- */}
+            <div className="painel">
+               <header className="painel-cabecalho">
+                  Movimentos no Banco — {oContaSelecionada?.nomBanco}
+                  <span className="chip-contador" style={{ marginLeft: 'auto' }}>
+                     {aMovVisiveis.length} registro(s)
+                  </span>
+               </header>
 
-              <button
-                className="btn btn-primary"
-                onClick={carregaExtrato}
-                disabled={bCarregandoExtrato}
-              >
-                {bCarregandoExtrato ? (
-                  <Loader2 size={14} className="spin-icon" />
-                ) : (
-                  <Upload size={14} />
-                )}
-                Buscar Extrato
-              </button>
-              <button className="btn btn-outline">
-                <ArrowLeftRight size={14} />
-                Transferir
-              </button>
-              <button className="btn btn-outline">
-                <Download size={14} />
-                Exportar
-              </button>
-              <button className="btn btn-outline">
-                <Lock size={14} />
-                Bloquear Período
-              </button>
+               <div className="grade-filtros">
+                  <button
+                     type="button"
+                     className={`chip-toggle ${oConc.oFiltrosGrade.bMovConciliados ? 'ligado' : ''}`}
+                     onClick={() =>
+                        oConc.setFiltrosGrade((oAtual) => ({
+                           ...oAtual,
+                           bMovConciliados: !oAtual.bMovConciliados,
+                        }))
+                     }
+                  >
+                     Conciliados
+                  </button>
+                  <button
+                     type="button"
+                     className={`chip-toggle ${oConc.oFiltrosGrade.bMovNaoConciliados ? 'ligado' : ''}`}
+                     onClick={() =>
+                        oConc.setFiltrosGrade((oAtual) => ({
+                           ...oAtual,
+                           bMovNaoConciliados: !oAtual.bMovNaoConciliados,
+                        }))
+                     }
+                  >
+                     Não conciliados
+                  </button>
+               </div>
+
+               <div className="grade-wrapper">
+                  {aMovVisiveis.length === 0 ? (
+                     <div className="grade-vazia">
+                        Nenhum movimento importado. Use &quot;Importar Extrato&quot; para buscar o período.
+                     </div>
+                  ) : (
+                     <table className="grade">
+                        <thead>
+                           <tr>
+                              <th className="col-selecao">
+                                 <input
+                                    type="checkbox"
+                                    className="checkbox"
+                                    checked={
+                                       aMovVisiveis.length > 0 &&
+                                       aMovVisiveis.every((oItem) =>
+                                          oConc.aSelMovimentos.includes(oItem.codMovimento)
+                                       )
+                                    }
+                                    onChange={() => oConc.alternaSelecaoTotal(aMovVisiveis, 'movimento')}
+                                    aria-label="Selecionar todos os movimentos"
+                                 />
+                              </th>
+                              <th>Data</th>
+                              <th>Documento</th>
+                              <th className="col-historico">Histórico</th>
+                              <th className="col-valor">Valor</th>
+                              <th className="col-status">Conc.</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {aMovVisiveis.map((oMov) => {
+                              const bSel = oConc.aSelMovimentos.includes(oMov.codMovimento);
+                              return (
+                                 <tr
+                                    key={oMov.codMovimento}
+                                    className={bSel ? 'selecionada' : ''}
+                                    onClick={() => oConc.alternaSelecao(oMov, 'movimento')}
+                                 >
+                                    <td className="col-selecao">
+                                       <input
+                                          type="checkbox"
+                                          className="checkbox"
+                                          checked={bSel}
+                                          onChange={() => oConc.alternaSelecao(oMov, 'movimento')}
+                                          onClick={(oEvento) => oEvento.stopPropagation()}
+                                       />
+                                    </td>
+                                    <td>{oMov.datMovimento}</td>
+                                    <td>{oMov.numDocumento}</td>
+                                    <td className="col-historico">{oMov.desHistorico}</td>
+                                    <CelulaValor bEntrada={oMov.bEntrada} valMovimento={oMov.valMovimento} />
+                                    <td className="col-status">
+                                       <SeloStatus conciliado={oMov.staConciliado} />
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  )}
+               </div>
+
+               <div className="grade-rodape">
+                  <div className="totais">
+                     <div className="totais-item">
+                        <span className="totais-rotulo">Selecionado (banco)</span>
+                        <span className="totais-valor">{formataMoeda(oConc.oTotais.oBanco.valLiquido)}</span>
+                     </div>
+                     <div className="totais-item">
+                        <span className="totais-rotulo">Diferença</span>
+                        <span
+                           className={`totais-valor ${
+                              oConc.oTotais.valDiferenca === 0 ? 'diferenca-zero' : 'diferenca-aberta'
+                           }`}
+                        >
+                           {formataMoeda(oConc.oTotais.valDiferenca)}
+                        </span>
+                     </div>
+                  </div>
+               </div>
             </div>
-          </div>
+         </div>
 
-          {sErroExtrato && (
-            <div
-              style={{
-                background: '#fef2f2',
-                border: '1px solid #fca5a5',
-                borderRadius: 8,
-                padding: '10px 14px',
-                marginBottom: 16,
-                fontSize: 13,
-                color: '#b91c1c',
-              }}
-            >
-              {sErroExtrato}
-            </div>
-          )}
-
-          <CardsResumo dadosResumo={dadosResumo} />
-
-          <div className="painel-conciliacao">
-            <ExtratoERP
-              lancamentos={lancamentos}
-              selectedIds={selectedERP}
-              onToggleSelect={onToggleSelectERP}
-              onToggleAll={onToggleAllERP}
-              onAdicionarLancamento={onAdicionarLancamento}
-            />
-
-            <PainelConciliar
-              numConciliados={numConciliados}
-              numPendentes={numPendentes}
-              onConciliar={onConciliar}
-              onDesfazer={onDesfazerConciliacao}
-              onAutoConciliar={onAutoConciliar}
-              bTemSelecao={bTemSelecao}
-              bAutoConciliando={bAutoConciliando}
-            />
-
-            <ExtratoBanco
-              movimentos={movimentos}
-              selectedIds={selectedBanco}
-              onToggleSelect={onToggleSelectBanco}
-              onToggleAll={onToggleAllBanco}
-              bCarregando={bCarregandoExtrato}
-              bankName={bankName}
-            />
-          </div>
-        </main>
-      </div>
-
-      <div className="toast-container">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              background: '#fff',
-              border: `1px solid ${
-                toast.tipo === 'sucesso'
-                  ? '#bbf7d0'
-                  : toast.tipo === 'erro'
-                  ? '#fca5a5'
-                  : '#bfdbfe'
-              }`,
-              borderRadius: 8,
-              padding: '10px 16px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-              minWidth: 280,
-              maxWidth: 360,
-              fontSize: 13,
-              color:
-                toast.tipo === 'sucesso'
-                  ? '#15803d'
-                  : toast.tipo === 'erro'
-                  ? '#b91c1c'
-                  : '#1d4ed8',
-              animation: 'fadeInRight 0.2s ease',
+         <ModalNovoLancamento
+            aberto={bLancamentoAberto}
+            oMovimentoBase={oMovimentoBase}
+            sDataSugerida={oConc.sDataFim}
+            aoConfirmar={oConc.incluiLancamento}
+            aoFechar={() => {
+               setLancamentoAberto(false);
+               setMovimentoBase(null);
             }}
-          >
-            {toast.tipo === 'sucesso' ? (
-              <CheckCircle2 size={16} />
-            ) : (
-              <AlertCircle size={16} />
-            )}
-            {toast.mensagem}
-          </div>
-        ))}
-      </div>
-
-      <style>{`
-        @keyframes fadeInRight {
-          from { opacity: 0; transform: translateX(12px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        .spin-icon {
-          animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-}
+         />
+      </AppShell>
+   );
+} // ConciliacaoBancariaPage

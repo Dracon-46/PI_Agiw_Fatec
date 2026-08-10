@@ -1,63 +1,71 @@
-// POST /api/conciliacao/auto-match - Auto conciliação por subconjunto de soma
-// Ticket 37060
+// ============================================================================
+// api/conciliacao/auto-match - Conciliação automática
+// Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// Atende o botão "Conciliação automática" (item 6.1.3.3 do documento de visão):
+// localiza Movimento/Lançamento idêntico e devolve os grupos conciliáveis.
+// A gravação do status ocorre no endpoint "/gfn/lancamento_conb/conciliado".
+// ============================================================================
 
 import { NextResponse } from 'next/server';
-import {
-  executaConciliacao,
-  lancamentoParaCentavos,
-  movimentoBancoParaConciliacao,
-} from '../../../../lib/conciliacao/matchReg.js';
+import { executaConciliacaoAutomatica, JANELA_DIAS_PADRAO } from '../../../../services/autoMatchService.js';
 
-export async function POST(oReq) {
-  try {
-    const oCorpo = await oReq.json();
-    const { lancamentos, movimentos } = oCorpo;
+export const dynamic = 'force-dynamic';
 
-    if (!Array.isArray(lancamentos) || !Array.isArray(movimentos)) {
+/**
+ * POST /api/conciliacao/auto-match
+ * Corpo: { lancamentos: Array, movimentos: Array, janelaDias?: number }
+ * @param {Request} oRequisicao
+ * @returns {Promise<NextResponse>}
+ */
+export async function POST(oRequisicao) {
+   let oCorpo = null;
+
+   try {
+      oCorpo = await oRequisicao.json();
+   } catch {
       return NextResponse.json(
-        { erro: 'Corpo inválido. Envie lancamentos e movimentos.' },
-        { status: 400 }
+         { erro: 'Corpo da requisição inválido. Envie um JSON válido.' },
+         { status: 400 }
       );
-    }
+   }
 
-    const aIndicesERP = lancamentos
-      .map((l, i) => ({ l, i }))
-      .filter(({ l }) => !l.staConciliado);
+   const aLancamentos = oCorpo?.lancamentos;
+   const aMovimentos = oCorpo?.movimentos;
 
-    const aIndicesBanco = movimentos
-      .map((m, i) => ({ m, i }))
-      .filter(({ m }) => !m.staConciliado);
-
-    const aLancamentosCentavos = aIndicesERP.map(({ l }) =>
-      lancamentoParaCentavos(l.valEntrada, l.valSaida)
-    );
-
-    const aMovimentosConc = aIndicesBanco.map(({ m }) => movimentoBancoParaConciliacao(m));
-    const aResultados = executaConciliacao(aLancamentosCentavos, aMovimentosConc);
-    const aGrupos = [];
-
-    aResultados.forEach((oRes, iIdxBancoPool) => {
-      if (!oRes.bConciliado || oRes.aLancamentos.length === 0) return;
-      const iIndexBanco = aIndicesBanco[iIdxBancoPool].i;
-      const aIdxERP = oRes.aLancamentos.map(
-        (oLanc) => aIndicesERP[oLanc.nIndiceOriginal].i
+   // Validação antes do processamento, conforme padrão de transações
+   if (!Array.isArray(aLancamentos) || !Array.isArray(aMovimentos)) {
+      return NextResponse.json(
+         { erro: 'Informe as listas de lançamentos e de movimentos.' },
+         { status: 400 }
       );
-      aGrupos.push({ aIndicesERP: aIdxERP, iIndexBanco });
-    });
+   }
 
-    const nTotalItens = aGrupos.reduce(
-      (n, g) => n + g.aIndicesERP.length + 1,
-      0
-    );
+   if (aLancamentos.length === 0 || aMovimentos.length === 0) {
+      return NextResponse.json({
+         aGrupos: [],
+         iGrupos: 0,
+         iLancamentosConciliados: 0,
+         iMovimentosConciliados: 0,
+         mensagem: 'Não há lançamentos e movimentos pendentes para conciliar.',
+      });
+   }
 
-    return NextResponse.json({
-      grupos: aGrupos,
-      resultados: aResultados,
-      numGrupos: aGrupos.length,
-      numConciliados: nTotalItens,
-    });
-  } catch (err) {
-    const sMsg = err instanceof Error ? err.message : 'Erro desconhecido';
-    return NextResponse.json({ erro: sMsg }, { status: 500 });
-  }
-}
+   try {
+      const iJanelaDias = Number(oCorpo.janelaDias ?? JANELA_DIAS_PADRAO);
+      const oResultado = executaConciliacaoAutomatica(aLancamentos, aMovimentos, { iJanelaDias });
+
+      const sMensagem =
+         oResultado.iGrupos > 0
+            ? `${oResultado.iGrupos} correspondência(s) localizada(s).`
+            : 'Nenhuma correspondência automática foi encontrada no período.';
+
+      return NextResponse.json({ ...oResultado, mensagem: sMensagem });
+   } catch (oErro) {
+      console.error('[api/conciliacao/auto-match] Falha no processamento:', oErro);
+      return NextResponse.json(
+         { erro: 'Falha ao executar a conciliação automática.' },
+         { status: 500 }
+      );
+   }
+} // POST

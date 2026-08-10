@@ -4,6 +4,7 @@
 import { BradescoProvider } from './BradescoProvider.js';
 import { ItauProvider } from './ItauProvider.js';
 import { BancoBrasilProvider } from './BancoBrasilProvider.js';
+import { SafraProvider } from './SafraProvider.js';
 
 /**
  * Registry de providers disponíveis.
@@ -15,6 +16,7 @@ const PROVIDER_REGISTRY = {
   bradesco: BradescoProvider,
   itau: ItauProvider,
   bb: BancoBrasilProvider,
+  safra: SafraProvider,
 };
 
 /** Cache de instâncias (singleton por slug) */

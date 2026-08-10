@@ -1,0 +1,2 @@
+Coloque aqui os certificados do Bradesco (.crt/.key).
+Arquivos deste diretorio sao ignorados pelo Git.

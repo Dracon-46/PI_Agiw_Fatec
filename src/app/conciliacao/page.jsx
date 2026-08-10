@@ -8,19 +8,19 @@ import { useBankContext } from '../../contexts/BankContext.jsx';
 import { ConciliacaoBancariaPage } from '../../components/conciliacao/ConciliacaoBancariaPage.jsx';
 
 export default function ConciliacaoPage() {
-  const { selectedBank, loading } = useBankContext();
-  const router = useRouter();
+   const { oContaSelecionada, bCarregando } = useBankContext();
+   const router = useRouter();
 
-  // Se nenhum banco está selecionado, volta para seleção
-  useEffect(() => {
-    if (!loading && !selectedBank) {
-      router.push('/');
-    }
-  }, [selectedBank, loading, router]);
+   // Se nenhuma conta está selecionada, volta para seleção
+   useEffect(() => {
+      if (!bCarregando && !oContaSelecionada) {
+         router.push('/');
+      }
+   }, [oContaSelecionada, bCarregando, router]);
 
-  if (loading || !selectedBank) {
-    return null;
-  }
+   if (bCarregando || !oContaSelecionada) {
+      return null;
+   }
 
-  return <ConciliacaoBancariaPage />;
+   return <ConciliacaoBancariaPage />;
 }

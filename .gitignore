@@ -1,9 +1,22 @@
 .env
 node_modules/
 .next/
-certs/*.pem
-certs/*.crt
-certs/*.key
-certs/*.cer
-certs/*.pfx
+
+# ---------------------------------------------------------------------------
+# Certificados e chaves privadas — NUNCA versionar, em qualquer diretório
+# (as APIs bancárias exigem mTLS; o vazamento da chave compromete o acesso)
+# ---------------------------------------------------------------------------
+*.pem
+*.crt
+*.key
+*.cer
+*.pfx
+*.p12
+*.jks
 !certs/.gitkeep
+
+# ---------------------------------------------------------------------------
+# Credenciais soltas em documentação
+# ---------------------------------------------------------------------------
+docs/**/credenciais.txt
+docs/**/*Welcome*.zip

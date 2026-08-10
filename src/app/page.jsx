@@ -8,20 +8,30 @@ import { useBankContext } from '../contexts/BankContext.jsx';
 import { BankSelectorPage } from '../components/bank-selector/BankSelectorPage.jsx';
 
 export default function Page() {
-  const { selectedBank } = useBankContext();
-  const router = useRouter();
+   const { oContaSelecionada, bCarregando } = useBankContext();
+   const router = useRouter();
 
-  // Se já tem banco selecionado, redireciona para conciliação
-  useEffect(() => {
-    if (selectedBank) {
-      router.push('/conciliacao');
-    }
-  }, [selectedBank, router]);
+   // Se já tem conta selecionada, redireciona para conciliação
+   useEffect(() => {
+      if (!bCarregando && oContaSelecionada) {
+         router.push('/conciliacao');
+      }
+   }, [oContaSelecionada, bCarregando, router]);
 
-  // Mostra a tela de seleção se nenhum banco está ativo
-  if (selectedBank) {
-    return null; // Será redirecionado
-  }
+   if (bCarregando) {
+      return null;
+   }
 
-  return <BankSelectorPage />;
+   // Mostra a tela de seleção se nenhuma conta está ativa
+   if (oContaSelecionada) {
+      return null;
+   }
+
+   return (
+      <BankSelectorPage
+         aoSelecionar={() => {
+            router.push('/conciliacao');
+         }}
+      />
+   );
 }

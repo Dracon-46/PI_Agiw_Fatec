@@ -1,91 +1,160 @@
 'use client';
-// BankContext.jsx - Contexto React para gerenciar o banco ativo
-// Ticket 37060 - Refatoração Strategy/Factory
+// ============================================================================
+// BankContext.jsx - Contexto da conta corrente em conciliação
+// Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// Contas vêm do MySQL via API. Apenas a seleção atual fica no localStorage.
+// ============================================================================
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+   buscaContasCorrentes,
+   cadastraContaCorrenteApi,
+   removeContaCorrenteApi,
+} from '../services/conciliacaoService.js';
+
+const CHAVE_CONTA_SELECIONADA = 'agiw.conciliacao.contaSelecionada';
 
 const BankContext = createContext(null);
 
 /**
- * Provider de contexto que gerencia:
- * - Banco selecionado
- * - Lista de bancos disponíveis
- * - Troca de banco
+ * @param {{ children: React.ReactNode }} oPropriedades
  */
 export function BankContextProvider({ children }) {
-  const [selectedBank, setSelectedBank] = useState(null);
-  const [availableBanks, setAvailableBanks] = useState([]);
-  const [loading, setLoading] = useState(true);
+   const [aContas, setContas] = useState([]);
+   const [aProviders, setProviders] = useState([]);
+   const [sCodContaSelecionada, setCodContaSelecionada] = useState(null);
+   const [bCarregando, setCarregando] = useState(true);
+   const [sErro, setErro] = useState('');
 
-  // Carrega a lista de bancos disponíveis ao montar
-  useEffect(() => {
-    fetch('/api/bank/providers')
-      .then((res) => res.json())
-      .then((data) => {
-        setAvailableBanks(data.providers || []);
-        // Se já tem um banco na URL ou localStorage, usa ele
-        const stored = typeof window !== 'undefined' ? localStorage.getItem('selectedBank') : null;
-        if (stored && data.providers?.some((p) => p.slug === stored)) {
-          setSelectedBank(stored);
-        }
-      })
-      .catch((err) => {
-        console.error('[BankContext] Erro ao carregar providers:', err);
-        // Fallback com lista estática
-        setAvailableBanks([
-          { slug: 'bradesco', name: 'Bradesco', color: '#cc092f', configured: false },
-          { slug: 'itau', name: 'Itaú', color: '#003399', configured: false },
-          { slug: 'bb', name: 'Banco do Brasil', color: '#ffef00', configured: false },
-        ]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+   const recarregaContas = useCallback(async () => {
+      const oRetorno = await buscaContasCorrentes();
+      setContas(oRetorno.contas ?? []);
+      setProviders(oRetorno.providers ?? []);
+      return oRetorno.contas ?? [];
+   }, []);
 
-  const selectBank = useCallback((slug) => {
-    setSelectedBank(slug);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedBank', slug);
-    }
-  }, []);
+   useEffect(() => {
+      let bAtivo = true;
 
-  const clearSelection = useCallback(() => {
-    setSelectedBank(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('selectedBank');
-    }
-  }, []);
+      async function carregaContas() {
+         try {
+            const aLista = await recarregaContas();
+            if (!bAtivo) {
+               return;
+            }
 
-  const getBankInfo = useCallback(
-    (slug) => {
-      return availableBanks.find((b) => b.slug === slug) || null;
-    },
-    [availableBanks]
-  );
+            const sArmazenada = window.localStorage.getItem(CHAVE_CONTA_SELECIONADA);
+            const bValida = aLista.some((oConta) => oConta.codConta === sArmazenada);
+            if (sArmazenada && bValida) {
+               setCodContaSelecionada(sArmazenada);
+            } else if (sArmazenada && !bValida) {
+               window.localStorage.removeItem(CHAVE_CONTA_SELECIONADA);
+            }
+         } catch (oErro) {
+            if (bAtivo) {
+               console.error('[BankContext] Falha ao carregar contas:', oErro);
+               setErro(oErro.message);
+               setContas([]);
+            }
+         } finally {
+            if (bAtivo) {
+               setCarregando(false);
+            }
+         }
+      } // carregaContas
 
-  return (
-    <BankContext.Provider
-      value={{
-        selectedBank,
-        availableBanks,
-        loading,
-        selectBank,
-        clearSelection,
-        getBankInfo,
-      }}
-    >
-      {children}
-    </BankContext.Provider>
-  );
-}
+      carregaContas();
+      return () => {
+         bAtivo = false;
+      };
+   }, [recarregaContas]);
 
-/**
- * Hook para acessar o contexto do banco.
- * @returns {{ selectedBank: string|null, availableBanks: Array, loading: boolean, selectBank: function, clearSelection: function, getBankInfo: function }}
- */
+   const selecionaConta = useCallback((sCodConta) => {
+      setCodContaSelecionada(sCodConta);
+      window.localStorage.setItem(CHAVE_CONTA_SELECIONADA, sCodConta);
+   }, []);
+
+   const limpaSelecao = useCallback(() => {
+      setCodContaSelecionada(null);
+      window.localStorage.removeItem(CHAVE_CONTA_SELECIONADA);
+   }, []);
+
+   /**
+    * Cadastra conta no MySQL.
+    * @param {object} oDados
+    * @returns {Promise<{ ok: boolean, erro?: string, conta?: object }>}
+    */
+   const cadastraConta = useCallback(
+      async (oDados) => {
+         try {
+            const oRetorno = await cadastraContaCorrenteApi(oDados);
+            await recarregaContas();
+            return { ok: true, conta: oRetorno.conta };
+         } catch (oErro) {
+            return { ok: false, erro: oErro.message };
+         }
+      },
+      [recarregaContas]
+   );
+
+   const removeContaCadastrada = useCallback(
+      async (sCodConta) => {
+         try {
+            await removeContaCorrenteApi(sCodConta);
+            await recarregaContas();
+            if (sCodContaSelecionada === sCodConta) {
+               limpaSelecao();
+            }
+            return true;
+         } catch {
+            return false;
+         }
+      },
+      [recarregaContas, sCodContaSelecionada, limpaSelecao]
+   );
+
+   const oContaSelecionada = useMemo(
+      () => aContas.find((oConta) => oConta.codConta === sCodContaSelecionada) ?? null,
+      [aContas, sCodContaSelecionada]
+   );
+
+   const oValor = useMemo(
+      () => ({
+         aContas,
+         aProviders,
+         oContaSelecionada,
+         sCodContaSelecionada,
+         bCarregando,
+         sErro,
+         selecionaConta,
+         limpaSelecao,
+         cadastraConta,
+         removeContaCadastrada,
+         recarregaContas,
+      }),
+      [
+         aContas,
+         aProviders,
+         oContaSelecionada,
+         sCodContaSelecionada,
+         bCarregando,
+         sErro,
+         selecionaConta,
+         limpaSelecao,
+         cadastraConta,
+         removeContaCadastrada,
+         recarregaContas,
+      ]
+   );
+
+   return <BankContext.Provider value={oValor}>{children}</BankContext.Provider>;
+} // BankContextProvider
+
 export function useBankContext() {
-  const context = useContext(BankContext);
-  if (!context) {
-    throw new Error('useBankContext deve ser usado dentro de <BankContextProvider>');
-  }
-  return context;
-}
+   const oContexto = useContext(BankContext);
+   if (!oContexto) {
+      throw new Error('useBankContext deve ser utilizado dentro de <BankContextProvider>.');
+   }
+   return oContexto;
+} // useBankContext
