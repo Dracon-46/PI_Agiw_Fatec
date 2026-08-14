@@ -1,10 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Gera .next/standalone com o servidor e apenas as dependências usadas.
-  // É o que permite a imagem Docker final rodar sem node_modules completo,
-  // reduzindo o que sobe para a EC2 do laboratório da AWS.
-  output: 'standalone',
 };
+
+// "output: standalone" gera .next/standalone, usado pela imagem Docker. Só é
+// aplicado no build: ligado durante o "next dev" ele trava o servidor em
+// "Starting..." e nenhuma rota responde. O Dockerfile define BUILD_STANDALONE=1.
+if (process.env.BUILD_STANDALONE === '1') {
+  nextConfig.output = 'standalone';
+}
 
 module.exports = nextConfig;

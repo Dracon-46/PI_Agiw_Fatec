@@ -21,6 +21,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Liga o "output: standalone" apenas aqui. Deixá-lo sempre ativo no
+# next.config.js trava o "next dev" em "Starting..." na máquina do desenvolvedor.
+ENV BUILD_STANDALONE=1
 RUN npm run build
 
 # ---------- 3) Execução ----------
