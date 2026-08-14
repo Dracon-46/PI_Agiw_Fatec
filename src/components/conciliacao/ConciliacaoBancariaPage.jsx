@@ -7,12 +7,14 @@
 // movimentos do sistema e do banco, conciliação manual/automática e bloqueio.
 // ============================================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+   ArrowLeftRight,
    CheckCircle2,
    Circle,
    Download,
+   HandCoins,
    Lock,
    PlusCircle,
    Search,
@@ -26,12 +28,18 @@ import { AppShell } from '../layout/AppShell.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
 import { useNotificacoes } from '../comum/Notificacoes.jsx';
 import { useConciliacao } from '../../hooks/useConciliacao.js';
+import { CampoData } from '../comum/CampoData.jsx';
+import { MenuContexto } from '../comum/MenuContexto.jsx';
 import { ModalNovoLancamento } from './ModalNovoLancamento.jsx';
+import { ModalTransferencia } from './ModalTransferencia.jsx';
+import { ModalBaixarTitulo } from './ModalBaixarTitulo.jsx';
 import { MenuExportar } from './MenuExportar.jsx';
 import {
    formataContaCorrente,
+   formataDataBr,
    formataMoeda,
    formataValor,
+   somaDiasData,
 } from '../../utils/formatters.js';
 
 /**
@@ -85,12 +93,26 @@ function SeloStatus({ conciliado }) {
 
 export function ConciliacaoBancariaPage() {
    const router = useRouter();
-   const { oContaSelecionada, limpaSelecao } = useBankContext();
+   const { aContas, oContaSelecionada, limpaSelecao } = useBankContext();
    const { notifica } = useNotificacoes();
    const oConc = useConciliacao(oContaSelecionada, notifica);
    const [sDatBloqueioEdicao, setDatBloqueioEdicao] = useState('');
    const [bLancamentoAberto, setLancamentoAberto] = useState(false);
+   const [bTransferenciaAberta, setTransferenciaAberta] = useState(false);
+   const [bBaixaAberta, setBaixaAberta] = useState(false);
+   // O menu de exportação também é acionado pelo item "Exportar" da lateral
+   const [bExportarAberto, setExportarAberto] = useState(false);
    const [oMovimentoBase, setMovimentoBase] = useState(null);
+   // Linha e posição do clique com o botão direito (item 6.1.3.8)
+   const [oMenuContexto, setMenuContexto] = useState(null);
+   // Só o cliente conhece a data do dia; calcular no render quebraria a
+   // hidratação quando o servidor e o navegador virassem o dia em momentos
+   // diferentes (item 6.1.3.1: o bloqueio precisa ser anterior a hoje)
+   const [sDataOntem, setDataOntem] = useState('');
+
+   useEffect(() => {
+      setDataOntem(somaDiasData(formataDataBr(new Date()), -1));
+   }, []);
 
    useEffect(() => {
       setDatBloqueioEdicao(oConc.datBloqueio || '');
@@ -123,14 +145,139 @@ export function ConciliacaoBancariaPage() {
    } // trocaConta
 
    /**
+    * Escolhe qual movimento do banco alimenta as caixas de lançamento e de
+    * transferência: a linha clicada com o botão direito tem prioridade sobre
+    * a seleção, conforme o item 6.1.3.8 ("aproveitar as informações da linha
+    * que estiver posicionado o mouse").
+    * @returns {object|null}
+    */
+   function resolveMovimentoBase() {
+      if (oMenuContexto?.sGrade === 'movimento' && oMenuContexto.oRegistro) {
+         return oMenuContexto.oRegistro;
+      }
+      return oConc.aMovSelecionados.length === 1 ? oConc.aMovSelecionados[0] : null;
+   } // resolveMovimentoBase
+
+   /**
     * Abre a caixa de lançamento, aproveitando os dados da linha do banco
     * quando houver um único movimento selecionado (item 6.1.3.8 — ação 1).
     */
    function abreNovoLancamento() {
-      const oMovimento = oConc.aMovSelecionados.length === 1 ? oConc.aMovSelecionados[0] : null;
-      setMovimentoBase(oMovimento);
+      setMovimentoBase(resolveMovimentoBase());
       setLancamentoAberto(true);
    } // abreNovoLancamento
+
+   /** Abre a caixa de transferência entre contas (item 6.1.3.8 — ação 2). */
+   function abreTransferencia() {
+      setMovimentoBase(resolveMovimentoBase());
+      setTransferenciaAberta(true);
+   } // abreTransferencia
+
+   /** Abre a caixa de baixa de títulos (item 6.1.3.8 — ação 3). */
+   function abreBaixaTitulo() {
+      setMovimentoBase(resolveMovimentoBase());
+      setBaixaAberta(true);
+   } // abreBaixaTitulo
+
+   /**
+    * Abre o menu do botão direito sobre a linha apontada.
+    * @param {import('react').MouseEvent} oEvento
+    * @param {object|null} oRegistro Linha sob o cursor
+    * @param {'lancamento'|'movimento'} sGrade
+    */
+   function abreMenuContexto(oEvento, oRegistro, sGrade) {
+      oEvento.preventDefault();
+      setMenuContexto({ nX: oEvento.clientX, nY: oEvento.clientY, oRegistro, sGrade });
+   } // abreMenuContexto
+
+   /** Fecha o menu do botão direito. */
+   const fechaMenuContexto = useCallback(() => setMenuContexto(null), []);
+
+   /**
+    * Executa a ação escolhida no menu do botão direito.
+    * @param {string} sChave Identificador da ação
+    */
+   async function executaAcaoMenu(sChave) {
+      // A linha do menu precisa ser lida antes de fechar, porque as caixas
+      // abertas em seguida dependem dela
+      const oRegistro = oMenuContexto?.oRegistro ?? null;
+      const sGrade = oMenuContexto?.sGrade ?? 'lancamento';
+
+      if (sChave === 'lancamento') {
+         abreNovoLancamento();
+         return;
+      }
+      if (sChave === 'transferencia') {
+         abreTransferencia();
+         return;
+      }
+      if (sChave === 'baixa') {
+         abreBaixaTitulo();
+         return;
+      }
+      if (sChave === 'excluir' && oRegistro) {
+         await oConc.excluiRegistro(oRegistro, sGrade);
+      }
+   } // executaAcaoMenu
+
+   /**
+    * Executa a ação escolhida no menu lateral do módulo financeiro.
+    *
+    * O AppShell apenas dispara a chave do item; sem este tratador os botões
+    * da lateral ficavam inertes.
+    *
+    * @param {string} sChave Item escolhido
+    */
+   function trataMenuLateral(sChave) {
+      const oAcoes = {
+         baixar: abreBaixaTitulo,
+         conciliacao: oConc.buscaMovimentos,
+         excluir: excluiSelecionados,
+         estorno: oConc.desfazConciliacao,
+         transferir: abreTransferencia,
+         exportar: () => setExportarAberto(true),
+         ajuda: () =>
+            notifica(
+               'Selecione lançamentos e movimentos com a mesma situação; a conciliação exige diferença zero. ' +
+                  'O botão direito nas grades abre as ações de lançamento, transferência, baixa e exclusão.',
+               'info'
+            ),
+      };
+
+      oAcoes[sChave]?.();
+   } // trataMenuLateral
+
+   /**
+    * Monta os itens do menu conforme a linha apontada.
+    * @returns {Array<object>}
+    */
+   function montaItensMenu() {
+      const oRegistro = oMenuContexto?.oRegistro ?? null;
+      const bConciliado = Boolean(oRegistro?.staConciliado);
+
+      return [
+         { sChave: 'lancamento', sRotulo: 'Novo Lançamento', Icone: PlusCircle },
+         {
+            sChave: 'transferencia',
+            sRotulo: 'Nova Transferência entre Contas',
+            Icone: ArrowLeftRight,
+            bDesabilitado: aContas.length < 2,
+            sMotivo: 'Cadastre ao menos duas contas para transferir entre elas.',
+         },
+         { sChave: 'baixa', sRotulo: 'Baixar Título', Icone: HandCoins },
+         {
+            sChave: 'excluir',
+            sRotulo: 'Excluir Registro',
+            Icone: Trash2,
+            bPerigo: true,
+            bSeparadorAntes: true,
+            bDesabilitado: !oRegistro || bConciliado,
+            sMotivo: !oRegistro
+               ? 'Clique com o botão direito sobre um registro.'
+               : 'Registro conciliado não pode ser excluído. Estorne a conciliação antes.',
+         },
+      ];
+   } // montaItensMenu
 
    /**
     * Exclui os registros selecionados nas duas grades.
@@ -154,6 +301,7 @@ export function ConciliacaoBancariaPage() {
       <AppShell
          itemAtivo="conciliacao"
          oConta={oContaSelecionada}
+         aoSelecionarItem={trataMenuLateral}
          aoTrocarConta={trocaConta}
          aoSair={trocaConta}
       >
@@ -175,27 +323,23 @@ export function ConciliacaoBancariaPage() {
                      />
                   </label>
 
-                  <label className="campo">
-                     <span className="campo-rotulo">Data inicial</span>
-                     <input
-                        type="text"
-                        className="campo-controle"
-                        placeholder="DD/MM/AAAA"
-                        value={oConc.sDataInicio}
-                        onChange={(oEvento) => oConc.setDataInicio(oEvento.target.value)}
-                     />
-                  </label>
+                  {/* Sem limite cruzado entre as duas pontas: travar a data
+                      inicial no valor da final impediria avançar o período a
+                      partir do padrão configurado. A ordem das datas é
+                      conferida no botão Buscar. */}
+                  <CampoData
+                     rotulo="Data inicial"
+                     valor={oConc.sDataInicio}
+                     aoAlterar={oConc.setDataInicio}
+                     titulo="Início do período conciliado"
+                  />
 
-                  <label className="campo">
-                     <span className="campo-rotulo">Data final</span>
-                     <input
-                        type="text"
-                        className="campo-controle"
-                        placeholder="DD/MM/AAAA"
-                        value={oConc.sDataFim}
-                        onChange={(oEvento) => oConc.setDataFim(oEvento.target.value)}
-                     />
-                  </label>
+                  <CampoData
+                     rotulo="Data final"
+                     valor={oConc.sDataFim}
+                     aoAlterar={oConc.setDataFim}
+                     titulo="Fim do período conciliado"
+                  />
 
                   <div className="filtro-acao">
                      <button
@@ -219,15 +363,14 @@ export function ConciliacaoBancariaPage() {
                   </div>
 
                   <div className="filtro-bloqueio">
-                     <span className="campo-rotulo">Bloqueio de período</span>
+                     <span className="campo-rotulo">Conta bloqueada para lançamentos até</span>
                      <div className="filtro-bloqueio-linha">
-                        <input
-                           type="text"
-                           className="campo-controle"
-                           placeholder="DD/MM/AAAA"
-                           value={sDatBloqueioEdicao}
-                           onChange={(oEvento) => setDatBloqueioEdicao(oEvento.target.value)}
-                           style={{ width: 110 }}
+                        <CampoData
+                           valor={sDatBloqueioEdicao}
+                           aoAlterar={setDatBloqueioEdicao}
+                           datMaxima={sDataOntem}
+                           titulo="A data de bloqueio deve ser anterior à data do dia"
+                           classe="campo-data-compacto"
                         />
                         <button
                            type="button"
@@ -318,6 +461,29 @@ export function ConciliacaoBancariaPage() {
                      </button>
                      <button
                         type="button"
+                        className="btn btn-secundario btn-pequeno"
+                        onClick={abreTransferencia}
+                        disabled={aContas.length < 2}
+                        title={
+                           aContas.length < 2
+                              ? 'Cadastre ao menos duas contas para transferir entre elas.'
+                              : 'Gera o débito e o crédito da transferência'
+                        }
+                     >
+                        <ArrowLeftRight size={13} />
+                        Transferência
+                     </button>
+                     <button
+                        type="button"
+                        className="btn btn-secundario btn-pequeno"
+                        onClick={abreBaixaTitulo}
+                        title="Busca títulos a pagar e a receber em aberto"
+                     >
+                        <HandCoins size={13} />
+                        Baixar Título
+                     </button>
+                     <button
+                        type="button"
                         className="btn btn-perigo btn-pequeno"
                         onClick={excluiSelecionados}
                      >
@@ -329,7 +495,10 @@ export function ConciliacaoBancariaPage() {
                         sCodConta={oContaSelecionada?.codConta}
                         sDataInicio={oConc.sDataInicio}
                         sDataFim={oConc.sDataFim}
+                        oFiltrosGrade={oConc.oFiltrosGrade}
                         desabilitado={!oContaSelecionada}
+                        aberto={bExportarAberto}
+                        aoAlterarAberto={setExportarAberto}
                         notifica={notifica}
                      />
 
@@ -392,7 +561,11 @@ export function ConciliacaoBancariaPage() {
                   </button>
                </div>
 
-               <div className="grade-wrapper">
+               <div
+                  className="grade-wrapper"
+                  role="presentation"
+                  onContextMenu={(oEvento) => abreMenuContexto(oEvento, null, 'lancamento')}
+               >
                   {oConc.bCarregando ? (
                      <div className="grade-vazia">Carregando lançamentos...</div>
                   ) : aLancVisiveis.length === 0 ? (
@@ -430,6 +603,7 @@ export function ConciliacaoBancariaPage() {
                                     key={oLanc.codLancamento}
                                     className={bSel ? 'selecionada' : ''}
                                     onClick={() => oConc.alternaSelecao(oLanc, 'lancamento')}
+                                    onContextMenu={(oEvento) => abreMenuContexto(oEvento, oLanc, 'lancamento')}
                                  >
                                     <td className="col-selecao">
                                        <input
@@ -513,7 +687,11 @@ export function ConciliacaoBancariaPage() {
                   </button>
                </div>
 
-               <div className="grade-wrapper">
+               <div
+                  className="grade-wrapper"
+                  role="presentation"
+                  onContextMenu={(oEvento) => abreMenuContexto(oEvento, null, 'movimento')}
+               >
                   {aMovVisiveis.length === 0 ? (
                      <div className="grade-vazia">
                         Nenhum movimento importado. Use &quot;Importar Extrato&quot; para buscar o período.
@@ -551,6 +729,7 @@ export function ConciliacaoBancariaPage() {
                                     key={oMov.codMovimento}
                                     className={bSel ? 'selecionada' : ''}
                                     onClick={() => oConc.alternaSelecao(oMov, 'movimento')}
+                                    onContextMenu={(oEvento) => abreMenuContexto(oEvento, oMov, 'movimento')}
                                  >
                                     <td className="col-selecao">
                                        <input
@@ -606,6 +785,38 @@ export function ConciliacaoBancariaPage() {
                setLancamentoAberto(false);
                setMovimentoBase(null);
             }}
+         />
+
+         <ModalTransferencia
+            aberto={bTransferenciaAberta}
+            aContas={aContas}
+            oContaAtual={oContaSelecionada}
+            oMovimentoBase={oMovimentoBase}
+            sDataSugerida={oConc.sDataFim}
+            aoConfirmar={oConc.criaTransferencia}
+            aoFechar={() => {
+               setTransferenciaAberta(false);
+               setMovimentoBase(null);
+            }}
+         />
+
+         <ModalBaixarTitulo
+            aberto={bBaixaAberta}
+            sCodConta={oContaSelecionada?.codConta}
+            sDataMovimento={oMovimentoBase?.datMovimento || oConc.sDataFim}
+            oResumoSelecao={oConc.oTotais.oSistema}
+            aoConfirmar={oConc.baixaTitulos}
+            aoFechar={() => {
+               setBaixaAberta(false);
+               setMovimentoBase(null);
+            }}
+         />
+
+         <MenuContexto
+            oPosicao={oMenuContexto}
+            aItens={montaItensMenu()}
+            aoEscolher={executaAcaoMenu}
+            aoFechar={fechaMenuContexto}
          />
       </AppShell>
    );

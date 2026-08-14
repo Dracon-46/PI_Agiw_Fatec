@@ -1541,3 +1541,137 @@ textarea {
       grid-template-columns: minmax(0, 1fr);
    }
 }
+
+/* ============================================================================
+   Campo de data com calendário (CampoData)
+   ========================================================================== */
+
+.campo-data-controle {
+   position: relative;
+   display: block;
+}
+
+.campo-data-controle .campo-controle {
+   width: 100%;
+   padding-right: 26px;
+}
+
+/* O ícone nativo do seletor fica invisível por cima do nosso, mantendo o
+   clique em qualquer ponto do campo abrindo o calendário do navegador */
+.campo-data-controle .campo-controle::-webkit-calendar-picker-indicator {
+   position: absolute;
+   inset: 0;
+   width: 100%;
+   height: 100%;
+   margin: 0;
+   padding: 0;
+   opacity: 0;
+   cursor: pointer;
+}
+
+.campo-data-icone {
+   position: absolute;
+   top: 50%;
+   right: 8px;
+   transform: translateY(-50%);
+   color: var(--cor-texto-suave);
+   pointer-events: none;
+}
+
+.campo-data-controle .campo-controle:focus + .campo-data-icone {
+   color: var(--agiw-primary);
+}
+
+.campo-data-controle .campo-controle:disabled + .campo-data-icone {
+   opacity: 0.5;
+}
+
+/* ============================================================================
+   Menu de exportação (item 6.2 do documento de visão)
+   ========================================================================== */
+
+.menu-exportar {
+   position: relative;
+   display: inline-flex;
+}
+
+.menu-exportar-lista {
+   /* Posição fixa (com coordenadas calculadas no componente) porque o painel
+      que envolve o menu usa overflow: hidden — com "absolute" o dropdown era
+      recortado pela borda do painel e não aparecia na tela */
+   position: fixed;
+   z-index: 950;
+   min-width: 268px;
+   padding: 4px;
+   background: var(--cor-superficie);
+   border: 1px solid var(--cor-borda);
+   border-radius: var(--raio-md);
+   box-shadow: var(--sombra-lg);
+}
+
+.menu-exportar-grupo {
+   padding: 6px 10px 4px;
+   font-size: 10px;
+   font-weight: 700;
+   letter-spacing: 0.04em;
+   text-transform: uppercase;
+   color: var(--cor-texto-suave);
+}
+
+.menu-exportar-texto {
+   display: flex;
+   flex-direction: column;
+   line-height: 1.35;
+}
+
+.menu-exportar-texto small {
+   font-size: 10px;
+   color: var(--cor-texto-secundario);
+}
+
+.menu-exportar-item-ativo {
+   background: var(--agiw-primary-light);
+   color: var(--agiw-primary-hover);
+   font-weight: 600;
+}
+
+.separador-acoes {
+   width: 1px;
+   align-self: stretch;
+   min-height: 22px;
+   margin: 0 2px;
+   background: var(--cor-borda);
+}
+
+/* Variante compacta usada na caixa de bloqueio de período */
+.campo-data.campo-data-compacto {
+   width: 140px;
+   flex: 0 0 auto;
+}
+
+/* ============================================================================
+   Campos editáveis dentro das grades (baixa de título)
+   ========================================================================== */
+
+.campo-controle.campo-grade {
+   width: 92px;
+   padding: 3px 6px;
+   font-size: 11px;
+}
+
+.campo-data.campo-data-grade {
+   width: 132px;
+   gap: 0;
+}
+
+.campo-data.campo-data-grade .campo-controle {
+   padding: 3px 22px 3px 6px;
+   font-size: 11px;
+}
+
+/* Aviso de atenção — completa a escala alerta-info / erro / sucesso */
+.alerta.alerta-atencao {
+   background: var(--cor-alerta-bg);
+   border-color: var(--cor-alerta-borda);
+   color: var(--cor-alerta);
+}

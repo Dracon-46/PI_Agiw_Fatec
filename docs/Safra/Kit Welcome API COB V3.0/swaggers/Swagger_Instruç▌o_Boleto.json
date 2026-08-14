@@ -1,0 +1,464 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Safra.COB.Instrucao.Boleto",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.safranegocios.com.br/gateway/cobrancas/v1"
+    }
+  ],
+  "paths": {
+    "/RealizarInstrucaoBoleto": {
+      "put": {
+        "tags": [
+          "InstrucaoBoleto"
+        ],
+        "parameters": [
+          {
+            "name": "Safra-Correlation-ID",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstrucaoBoletoEntrada"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstrucaoBoletoEntrada"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstrucaoBoletoEntrada"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstrucaoBoletoEntrada"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrucaoBoletoSaidaSingleResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrucaoBoletoSaidaSingleResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrucaoBoletoSaidaSingleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlteracaoAbatimento": {
+        "type": "object",
+        "properties": {
+          "novoValorAbatimento": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlteracaoData": {
+        "type": "object",
+        "properties": {
+          "novaDataVencimento": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlteracaoValor": {
+        "type": "object",
+        "properties": {
+          "novoValorNominal": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaixarAutomaticamenteApos": {
+        "type": "object",
+        "properties": {
+          "numeroDiasBaixa": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConcederDesconto": {
+        "type": "object",
+        "properties": {
+          "tipoDesconto": {
+            "$ref": "#/components/schemas/TipoValor"
+          },
+          "dadosDesconto": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DadosDesconto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConcederDescontoPorDiasCorridos": {
+        "type": "object",
+        "properties": {
+          "tipoDescontoPorDiasCorridos": {
+            "$ref": "#/components/schemas/TipoValor"
+          },
+          "valorDescontoPorDiasCorridos": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "percentualDescontoPorDiasCorridos": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosDesconto": {
+        "type": "object",
+        "properties": {
+          "valorDesconto": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "percentualDesconto": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dataDesconto": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosInstrucao": {
+        "type": "object",
+        "properties": {
+          "indicadorNovaDataVencimento": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "alteracaoData": {
+            "$ref": "#/components/schemas/AlteracaoData"
+          },
+          "indicadorNovoValorNominal": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "alteracaoValor": {
+            "$ref": "#/components/schemas/AlteracaoValor"
+          },
+          "indicadorConcederDesconto": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "concederDesconto": {
+            "$ref": "#/components/schemas/ConcederDesconto"
+          },
+          "indicadorConcederDescontoPorDiasCorridos": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "concederDescontoPorDiasCorridos": {
+            "$ref": "#/components/schemas/ConcederDescontoPorDiasCorridos"
+          },
+          "indicadorProtestar": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "protesto": {
+            "$ref": "#/components/schemas/Protesto"
+          },
+          "indicadorProtestarSemMaisConsulta": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorSustacaoProtesto": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorCancelarProtesto": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorDispensarAbatimento": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorAlterarAbatimento": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "alteracaoAbatimento": {
+            "$ref": "#/components/schemas/AlteracaoAbatimento"
+          },
+          "indicadorCobrarJuros": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "juros": {
+            "$ref": "#/components/schemas/Juros"
+          },
+          "indicadorDispensarJuros": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorCobrarMulta": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "multa": {
+            "$ref": "#/components/schemas/Multa"
+          },
+          "indicadorDispensarMulta": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorNegativar": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorNaoNegativarautomaticamente": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorExcluirNegativacao": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorCancelarDesconto": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorAlegacaoSacadoNaoProcede": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorNaoAceitaDescontoAbatimento": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorNaoProrrogacao": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "indicadorBaixarAutomaticamenteApos": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          },
+          "baixarAutomaticamenteApos": {
+            "$ref": "#/components/schemas/BaixarAutomaticamenteApos"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosInstrucaoSaidaSaida": {
+        "type": "object",
+        "properties": {
+          "numeroDoBoleto": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seuNumero": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataAlt": {
+            "type": "string",
+            "nullable": true
+          },
+          "horarioAlt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstrucaoBoletoEntrada": {
+        "required": [
+          "agencia",
+          "conta",
+          "numeroDoBoleto",
+          "seuNumero"
+        ],
+        "type": "object",
+        "properties": {
+          "agencia": {
+            "maximum": 99999,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int64"
+          },
+          "conta": {
+            "pattern": "^\\d\\d{1,9}$",
+            "type": "integer",
+            "format": "int64"
+          },
+          "numeroDoBoleto": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seuNumero": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "dadosInstrucao": {
+            "$ref": "#/components/schemas/DadosInstrucao"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstrucaoBoletoSaida": {
+        "type": "object",
+        "properties": {
+          "dadosInstrucao": {
+            "$ref": "#/components/schemas/DadosInstrucaoSaidaSaida"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstrucaoBoletoSaidaSingleResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InstrucaoBoletoSaida"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstrucaoBoletoSaidaSingleResponseErro400": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Juros": {
+        "type": "object",
+        "properties": {
+          "tipoJuros": {
+            "$ref": "#/components/schemas/TipoValor"
+          },
+          "valorJuros": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "taxaJuros": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MessageItem": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Multa": {
+        "type": "object",
+        "properties": {
+          "taxaMulta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Protesto": {
+        "type": "object",
+        "properties": {
+          "quantidadeDiasProtesto": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TipoIndicador": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "TipoValor": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "apiKey",
+        "name": "Authorization",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}

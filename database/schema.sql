@@ -92,10 +92,16 @@ CREATE TABLE IF NOT EXISTS lancamento_sistema (
   b_entrada        TINYINT(1)     NOT NULL,
   tip_origem       VARCHAR(60)    NOT NULL DEFAULT 'Conciliação',
   sta_conciliado   TINYINT(1)     NOT NULL DEFAULT 0,
+  -- Identificador comum às duas pernas de uma transferência entre contas
+  -- (item 6.1.3.8 — ação 2): o débito e o crédito compartilham o mesmo código.
+  cod_transferencia VARCHAR(80)   NULL,
+  -- Título que originou o lançamento na baixa (item 6.1.3.8 — ação 3)
+  cod_titulo       VARCHAR(80)    NULL,
   dat_importacao   DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id_lancamento),
   UNIQUE KEY uk_lanc_cod (id_conta, cod_lancamento),
   KEY ix_lanc_periodo (id_conta, dat_movimento),
+  KEY ix_lanc_transferencia (cod_transferencia),
   CONSTRAINT fk_lanc_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -127,8 +133,10 @@ CREATE TABLE IF NOT EXISTS titulo_aberto (
   id_titulo      BIGINT         NOT NULL AUTO_INCREMENT,
   id_conta       INT            NULL,
   cod_titulo     VARCHAR(80)    NOT NULL,
+  dat_emissao    DATE           NULL,
   dat_vencimento DATE           NOT NULL,
   nom_emitente   VARCHAR(160)   NOT NULL,
+  des_historico  VARCHAR(500)   NULL,
   val_titulo     DECIMAL(18,2)  NOT NULL,
   val_multa      DECIMAL(18,2)  NOT NULL DEFAULT 0,
   val_juros      DECIMAL(18,2)  NOT NULL DEFAULT 0,
@@ -138,8 +146,16 @@ CREATE TABLE IF NOT EXISTS titulo_aberto (
   num_parcela    VARCHAR(10)    NULL,
   tip_movimento  ENUM('Entrada','Saída') NOT NULL,
   tip_origem     VARCHAR(60)    NOT NULL,
+  -- Situação da baixa (item 6.1.3.8 — ação 3). Um título baixado sai da
+  -- relação de títulos em aberto e passa a ter lançamento no extrato Satis.
+  sta_baixado    TINYINT(1)     NOT NULL DEFAULT 0,
+  dat_baixa      DATE           NULL,
+  val_pago       DECIMAL(18,2)  NULL,
+  val_tarifa     DECIMAL(18,2)  NOT NULL DEFAULT 0,
+  cod_lancamento_baixa VARCHAR(80) NULL,
   PRIMARY KEY (id_titulo),
   UNIQUE KEY uk_titulo_cod (cod_titulo),
+  KEY ix_titulo_aberto (id_conta, sta_baixado, dat_vencimento),
   CONSTRAINT fk_titulo_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

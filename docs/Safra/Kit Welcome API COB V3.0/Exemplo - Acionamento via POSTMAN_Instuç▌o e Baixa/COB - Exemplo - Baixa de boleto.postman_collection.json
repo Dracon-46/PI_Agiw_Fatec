@@ -1,0 +1,63 @@
+{
+	"info": {
+		"_postman_id": "af7909e3-2111-4cdc-a0b8-4105184b544b",
+		"name": "COB - Exemplo - Baixa de boleto",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "46973918",
+		"_collection_link": " "
+	},
+	"item": [
+		{
+			"name": "BAIXAR BOLETO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosBaixa\": {\r\n        \"indicadorBaixaBoleto\": \"S\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-hml.safranegocios.com.br/gateway/cobrancas-baixa/v1/realizarBaixaBoleto",
+					"protocol": "https",
+					"host": [
+						"localhost"
+					],
+					"port": "5001",
+					"path": [
+						"cob",
+						"operacoes-execucoes",
+						"servicos-operacionais",
+						"cobrancas",
+						"v1",
+						"realizarBaixaBoleto"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

@@ -9,8 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:init": "node scripts/init-db.mjs",
-    "db:seed": "node scripts/seed-erp.mjs",
-    "db:seed:limpar": "node scripts/seed-erp.mjs --limpar",
+    "db:seed": "node scripts/seed-demo.mjs",
+    "db:seed:limpar": "node scripts/seed-demo.mjs --limpar",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:safra": "node scripts/diag-safra.mjs"
   },

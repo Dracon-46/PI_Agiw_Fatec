@@ -1,0 +1,47 @@
+{
+    "agencia": "12400",
+    "conta": "8554440",
+    "documento": {
+      "numero": 969696965,
+      "numeroCliente": "7765496",
+      "especie": "09",
+      "dataVencimento": "2020-04-15",
+      "valor": 690.00,
+      "diasDevolucao" : 3,
+      "codigoMoeda": 0,
+      "quantidadeDiasProtesto": 0,
+      "desconto": {
+      	"data" : "2020-04-15",
+        "valor": "30.00",
+        "tipoDesconto" : 1
+      },
+      "valorAbatimento" : 300.00,
+      "multa": {
+      	"dataJuros": "2020-04-10",
+        "taxaJuros": 0.03,
+        "dataMulta": "2020-05-30",
+        "taxaMulta": 0.01
+      },
+      "campoLivre": "",
+      "fidc": "0",
+      "danfe": "",
+      "pagador": {
+        "nome": "Teste Sumare",
+        "tipoPessoa": "F",
+        "numeroDocumento": "78556802257",
+        "endereco": {
+          "logradouro": "Rua Guaranesia, 500",
+          "bairro": "Vila Maria",
+          "cidade": "AGULHA",
+          "uf": "SP",
+          "cep": "02112002"
+        }
+      },
+      "mensagens": [
+        {
+          "posicao": "1",
+          "descricao": "Multa apos o vencimento: RS0,05."
+        }
+      ]
+    }
+  }

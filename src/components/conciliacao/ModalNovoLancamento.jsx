@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { CircleDollarSign, PlusCircle, Power } from 'lucide-react';
 import { Modal } from '../comum/Modal.jsx';
+import { CampoData } from '../comum/CampoData.jsx';
 import { converteTextoParaValor, formataMoeda, formataValor } from '../../utils/formatters.js';
 
 /** Origens que o usuário pode atribuir ao lançamento */
@@ -150,29 +151,19 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
 
          <div className="grupo-campos">
             <div className="linha-campos col-3">
-               <label className="campo">
-                  <span className="campo-rotulo">
-                     <span className="obrigatorio">*</span>Data do movimento
-                  </span>
-                  <input
-                     type="text"
-                     className="campo-controle"
-                     placeholder="DD/MM/AAAA"
-                     value={oFormulario.datMovimento}
-                     onChange={(oEvento) => alteraCampo('datMovimento', oEvento.target.value)}
-                  />
-               </label>
+               <CampoData
+                  rotulo="Data do movimento"
+                  obrigatorio
+                  valor={oFormulario.datMovimento}
+                  aoAlterar={(sData) => alteraCampo('datMovimento', sData)}
+               />
 
-               <label className="campo">
-                  <span className="campo-rotulo">Data de compensação</span>
-                  <input
-                     type="text"
-                     className="campo-controle"
-                     placeholder="DD/MM/AAAA"
-                     value={oFormulario.datCompensacao}
-                     onChange={(oEvento) => alteraCampo('datCompensacao', oEvento.target.value)}
-                  />
-               </label>
+               <CampoData
+                  rotulo="Data de compensação"
+                  valor={oFormulario.datCompensacao}
+                  aoAlterar={(sData) => alteraCampo('datCompensacao', sData)}
+                  datMinima={oFormulario.datMovimento}
+               />
 
                <label className="campo">
                   <span className="campo-rotulo">Número do documento</span>

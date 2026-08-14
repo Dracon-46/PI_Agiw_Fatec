@@ -190,20 +190,111 @@ export async function enviaArquivoExtrato(sCodConta, oArquivo) {
 } // enviaArquivoExtrato
 
 /**
- * Monta a URL de download de um relatório.
+ * Grava (ou remove) o bloqueio de período da conta — item 6.1.3.1.
  * @param {string} sCodConta
- * @param {string} sDataInicio
- * @param {string} sDataFim
- * @param {'xlsx'|'csv'|'pdf'} sFormato
+ * @param {string} sDatBloqueio Data em DD/MM/AAAA; vazio remove o bloqueio
+ * @returns {Promise<{ ok: boolean, datUltimoBloqueio: string, mensagem: string }>}
+ */
+export async function gravaBloqueioApi(sCodConta, sDatBloqueio) {
+   return requisitaJson('/api/conciliacao/bloqueio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conta: sCodConta, datBloqueio: sDatBloqueio }),
+   });
+} // gravaBloqueioApi
+
+/**
+ * Exclui um movimento do extrato bancário — item 6.1.3.8, ação 4.
+ * @param {string} sCodConta
+ * @param {string} sCodMovimento
+ * @returns {Promise<{ ok: boolean, mensagem: string }>}
+ */
+export async function excluiMovimentoApi(sCodConta, sCodMovimento) {
+   const oParams = new URLSearchParams({ conta: sCodConta, movimento: sCodMovimento });
+   return requisitaJson(`/api/conciliacao/movimentos?${oParams}`, { method: 'DELETE' });
+} // excluiMovimentoApi
+
+/**
+ * Gera uma transferência entre contas — item 6.1.3.8, ação 2.
+ * @param {object} oTransferencia
+ * @returns {Promise<{ codTransferencia: string, lancamentoSaida: object, lancamentoEntrada: object, mensagem: string }>}
+ */
+export async function criaTransferenciaApi(oTransferencia) {
+   return requisitaJson('/api/conciliacao/transferencia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(oTransferencia),
+   });
+} // criaTransferenciaApi
+
+/**
+ * Lista os títulos em aberto até a data informada — item 6.1.3.8, ação 3.
+ * @param {string} sCodConta
+ * @param {string} sDataLimite Vencimento máximo (DD/MM/AAAA)
+ * @param {'Entrada'|'Saída'|''} [sTipo] Restringe o sentido
+ * @returns {Promise<{ titulos: Array, resumo: object }>}
+ */
+export async function buscaTitulosAbertos(sCodConta, sDataLimite, sTipo = '') {
+   const oParams = new URLSearchParams({ conta: sCodConta, dataLimite: sDataLimite });
+   if (sTipo) {
+      oParams.set('tipo', sTipo);
+   }
+   return requisitaJson(`/api/conciliacao/titulos?${oParams}`);
+} // buscaTitulosAbertos
+
+/**
+ * Realiza a baixa de um ou mais títulos — item 6.1.3.8, ação 3.
+ * @param {string} sCodConta
+ * @param {Array<object>} aBaixas Documentos com data e valores informados
+ * @returns {Promise<{ lancamentos: Array, resumo: object, mensagem: string }>}
+ */
+export async function baixaTitulosApi(sCodConta, aBaixas) {
+   return requisitaJson('/api/conciliacao/titulos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conta: sCodConta, baixas: aBaixas }),
+   });
+} // baixaTitulosApi
+
+/**
+ * Monta a URL de download de um relatório.
+ *
+ * Além do período, leva o escopo (extrato do sistema, do banco ou ambos) e os
+ * chips de situação das grades, para que o arquivo reproduza exatamente o que
+ * está sendo exibido na tela (item 6.2).
+ *
+ * @param {object} oOpcoes
+ * @param {string} oOpcoes.sCodConta
+ * @param {string} oOpcoes.sDataInicio
+ * @param {string} oOpcoes.sDataFim
+ * @param {'xlsx'|'csv'|'pdf'} oOpcoes.sFormato
+ * @param {'ambos'|'sistema'|'banco'} [oOpcoes.sEscopo]
+ * @param {object} [oOpcoes.oFiltrosGrade] Chips ligados/desligados das grades
  * @returns {string}
  */
-export function montaUrlRelatorio(sCodConta, sDataInicio, sDataFim, sFormato) {
+export function montaUrlRelatorio({
+   sCodConta,
+   sDataInicio,
+   sDataFim,
+   sFormato,
+   sEscopo = 'ambos',
+   oFiltrosGrade,
+}) {
    const oParams = new URLSearchParams({
       conta: sCodConta,
       dataInicio: sDataInicio,
       dataFim: sDataFim,
       formato: sFormato,
+      escopo: sEscopo,
    });
+
+   if (oFiltrosGrade) {
+      oParams.set('lancConciliados', oFiltrosGrade.bLancConciliados ? '1' : '0');
+      oParams.set('lancNaoConciliados', oFiltrosGrade.bLancNaoConciliados ? '1' : '0');
+      oParams.set('movConciliados', oFiltrosGrade.bMovConciliados ? '1' : '0');
+      oParams.set('movNaoConciliados', oFiltrosGrade.bMovNaoConciliados ? '1' : '0');
+   }
+
    return `/api/relatorios/conciliacao?${oParams}`;
 } // montaUrlRelatorio
 

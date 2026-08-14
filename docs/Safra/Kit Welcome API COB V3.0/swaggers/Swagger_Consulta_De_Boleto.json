@@ -1,0 +1,446 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Safra.COB.Consulta.Boleto",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "http://ws-hml.safra.com.br/cob/operacoes-execucoes/servicos-operacionais/cobrancas-consulta/v1"
+    }
+  ],
+  "paths": {
+    "/consultarBoleto": {
+      "get": {
+        "tags": [
+          "ConsultaBoleto"
+        ],
+        "parameters": [
+          {
+            "name": "Safra-Correlation-ID",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agencia",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maximum": 99999,
+              "minimum": 0,
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "conta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d\\d{1,9}$",
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "numeroDoBoleto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d{1,15}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "seuNumero",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaBoletoSaidaSingleResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaBoletoSaidaSingleResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaBoletoSaidaSingleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CodigoCopiaECola": {
+        "type": "object",
+        "properties": {
+          "copiaECola": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsultaBoletoSaida": {
+        "type": "object",
+        "properties": {
+          "dadosConsulta": {
+            "$ref": "#/components/schemas/DadosConsulta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsultaBoletoSaidaSingleResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConsultaBoletoSaida"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosBoleto": {
+        "type": "object",
+        "properties": {
+          "envioEletronico": {
+            "type": "string",
+            "nullable": true
+          },
+          "celularEnvio": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailEnvio": {
+            "type": "string",
+            "nullable": true
+          },
+          "especie": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoCobranca": {
+            "type": "string",
+            "nullable": true
+          },
+          "valorBoleto": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataVencimento": {
+            "type": "string",
+            "nullable": true
+          },
+          "numeroDocumento": {
+            "type": "string",
+            "nullable": true
+          },
+          "situacao": {
+            "type": "string",
+            "nullable": true
+          },
+          "nossoNumero": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "formaRecebimento": {
+            "type": "string",
+            "nullable": true
+          },
+          "agenciaCobranca": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataEmissao": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataOperacao": {
+            "type": "string",
+            "nullable": true
+          },
+          "valorAbatimento": {
+            "type": "number",
+            "format": "double"
+          },
+          "dataJuros": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipojuros": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxaJuros": {
+            "type": "number",
+            "format": "double"
+          },
+          "dataMulta": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoMulta": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxaMulta": {
+            "type": "number",
+            "format": "double"
+          },
+          "protesto": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoDesconto": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataDesconto1": {
+            "type": "string",
+            "nullable": true
+          },
+          "valorDesconto1": {
+            "type": "number",
+            "format": "double"
+          },
+          "dataDesconto2": {
+            "type": "string",
+            "nullable": true
+          },
+          "valorDesconto2": {
+            "type": "number",
+            "format": "double"
+          },
+          "dataDesconto3": {
+            "type": "string",
+            "nullable": true
+          },
+          "valorDesconto3": {
+            "type": "number",
+            "format": "double"
+          },
+          "baixa": {
+            "type": "string",
+            "nullable": true
+          },
+          "codigoDeBarras": {
+            "type": "string",
+            "nullable": true
+          },
+          "identificadorDDA": {
+            "type": "string",
+            "nullable": true
+          },
+          "iup": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosConsulta": {
+        "type": "object",
+        "properties": {
+          "dadosPagador": {
+            "$ref": "#/components/schemas/DadosPagador"
+          },
+          "dadosBoleto": {
+            "$ref": "#/components/schemas/DadosBoleto"
+          },
+          "dadosSacadorAvalista": {
+            "$ref": "#/components/schemas/DadosSacadorAvalista"
+          },
+          "dadosLiquidacaoBaixado": {
+            "$ref": "#/components/schemas/DadosLiquidacaoBaixado"
+          },
+          "codigoCopiaECola": {
+            "$ref": "#/components/schemas/CodigoCopiaECola"
+          },
+          "mensagemBeneficiario": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MensagemBeneficiario"
+            },
+            "nullable": true
+          },
+          "instrucoesOcorrencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstrucoesOcorrencias"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosLiquidacaoBaixado": {
+        "type": "object",
+        "properties": {
+          "dataLiquidacaoBaixa": {
+            "type": "string",
+            "nullable": true
+          },
+          "cpfCnpjPortador": {
+            "type": "string",
+            "nullable": true
+          },
+          "nomePortador": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosPagador": {
+        "type": "object",
+        "properties": {
+          "nomeCompleto": {
+            "type": "string",
+            "nullable": true
+          },
+          "cpfCnpj": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoPessoa": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "celular": {
+            "type": "string",
+            "nullable": true
+          },
+          "endereco": {
+            "type": "string",
+            "nullable": true
+          },
+          "cidade": {
+            "type": "string",
+            "nullable": true
+          },
+          "estado": {
+            "type": "string",
+            "nullable": true
+          },
+          "cep": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosSacadorAvalista": {
+        "type": "object",
+        "properties": {
+          "tipoPessoaSacadorAvalista": {
+            "type": "string",
+            "nullable": true
+          },
+          "cpfCnpjSacadorAvalista": {
+            "type": "string",
+            "nullable": true
+          },
+          "nomeSacadorAvalista": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstrucoesOcorrencias": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string",
+            "nullable": true
+          },
+          "responsavel": {
+            "type": "string",
+            "nullable": true
+          },
+          "descricaoInstrucao": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MensagemBeneficiario": {
+        "type": "object",
+        "properties": {
+          "tipoMensagem": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mensagem": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MessageItem": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "apiKey",
+        "name": "Authorization",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+	"info": {
+		"_postman_id": "3dde1180-0d1f-4b43-ad0d-642e5d1b7111",
+		"name": "COB - Exemplo - Consulta de boleto",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "46973918",
+		"_collection_link": " "
+	},
+	"item": [
+		{
+			"name": "CONSULTA BOLETO",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0ZGM1NTk1M2Y3MTY0NDZmYjM0MjcyMzE2MmM5ZjliZSIsInVzZXJfbmFtZSI6IkFERUdBIENFIiwiY2xpZW50X2lkIjoiNjhhODY3MmJiZDUyZmM4OWMyMjk2ZDE5Iiwic2hvcnRuYW1lIjoiQURFR0EgQ0VOVFIgMTY0IiwibmJmIjoxNzU1ODY4NjYzLCJleHAiOjE3NTU4Njk5MDMsImlhdCI6MTc1NTg2ODcwMywiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.oF8fqvDflnJjStP4vTYn1oon0b0-5w46Hk1nY-zo1G8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-hml.safranegocios.com.br/gateway/cobrancas-consulta/v1/consultarBoleto?agencia=9700&conta=5834606&numeroDoBoleto=583460611&seuNumero=99999999",
+					"protocol": "https",
+					"host": [
+						"api-hml",
+						"safranegocios",
+						"com",
+						"br"
+					],
+					"path": [
+						"gateway",
+						"cobrancas-consulta",
+						"v1",
+						"consultarBoleto"
+					],
+					"query": [
+						{
+							"key": "agencia",
+							"value": "9700"
+						},
+						{
+							"key": "conta",
+							"value": "5834606"
+						},
+						{
+							"key": "numeroDoBoleto",
+							"value": "583460611"
+						},
+						{
+							"key": "seuNumero",
+							"value": "99999999"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

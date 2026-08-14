@@ -1,0 +1,612 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Cobranças</title>
+    <style type="text/css">
+      body {
+      	font-family: Trebuchet MS, sans-serif;
+      	font-size: 15px;
+      	color: #444;
+      	margin-right: 24px;
+      }
+      
+      h1	{
+      	font-size: 25px;
+      }
+      h2	{
+      	font-size: 20px;
+      }
+      h3	{
+      	font-size: 16px;
+      	font-weight: bold;
+      }
+      hr	{
+      	height: 1px;
+      	border: 0;
+      	color: #ddd;
+      	background-color: #ddd;
+      }
+      
+      .app-desc {
+        clear: both;
+        margin-left: 20px;
+      }
+      .param-name {
+        width: 100%;
+      }
+      .license-info {
+        margin-left: 20px;
+      }
+      
+      .license-url {
+        margin-left: 20px;
+      }
+      
+      .model {
+        margin: 0 0 0px 20px;
+      }
+      
+      .method {
+        margin-left: 20px;
+      }
+      
+      .method-notes	{
+      	margin: 10px 0 20px 0;
+      	font-size: 90%;
+      	color: #555;
+      }
+      
+      pre {
+        padding: 10px;
+        margin-bottom: 2px;
+      }
+      
+      .http-method {
+       text-transform: uppercase;
+      }
+      
+      pre.get {
+        background-color: #0f6ab4;
+      }
+      
+      pre.post {
+        background-color: #10a54a;
+      }
+      
+      pre.put {
+        background-color: #c5862b;
+      }
+      
+      pre.delete {
+        background-color: #a41e22;
+      }
+      
+      .huge	{
+      	color: #fff;
+      }
+      
+      pre.example {
+        background-color: #f3f3f3;
+        padding: 10px;
+        border: 1px solid #ddd;
+      }
+      
+      code {
+        white-space: pre;
+      }
+      
+      .nickname {
+        font-weight: bold;
+      }
+      
+      .method-path {
+        font-size: 1.5em;
+        background-color: #0f6ab4;
+      }
+      
+      .up {
+        float:right;
+      }
+      
+      .parameter {
+        width: 500px;
+      }
+      
+      .param {
+        width: 500px;
+        padding: 10px 0 0 20px;
+        font-weight: bold;
+      }
+      
+      .param-desc {
+        width: 700px;
+        padding: 0 0 0 20px;
+        color: #777;
+      }
+      
+      .param-type {
+        font-style: italic;
+      }
+      
+      .param-enum-header {
+      width: 700px;
+      padding: 0 0 0 60px;
+      color: #777;
+      font-weight: bold;
+      }
+      
+      .param-enum {
+      width: 700px;
+      padding: 0 0 0 80px;
+      color: #777;
+      font-style: italic;
+      }
+      
+      .field-label {
+        padding: 0;
+        margin: 0;
+        clear: both;
+      }
+      
+      .field-items	{
+      	padding: 0 0 15px 0;
+      	margin-bottom: 15px;
+      }
+      
+      .return-type {
+        clear: both;
+        padding-bottom: 10px;
+      }
+      
+      .param-header {
+        font-weight: bold;
+      }
+      
+      .method-tags {
+        text-align: right;
+      }
+      
+      .method-tag {
+        background: none repeat scroll 0% 0% #24A600;
+        border-radius: 3px;
+        padding: 2px 10px;
+        margin: 2px;
+        color: #FFF;
+        display: inline-block;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+  <h1>Cobranças</h1>
+    <div class="app-desc">APIs para o domínio externo de Cobranças</div>
+    <div class="app-desc">More information: <a href="https://helloreverb.com">https://helloreverb.com</a></div>
+    <div class="app-desc">Contact Info: <a href="mesa.implantacao@safra.com.br">mesa.implantacao@safra.com.br</a></div>
+    <div class="app-desc">Version: v2.2</div>
+    <div class="app-desc">BasePath:/gateway/cobrancas/v1</div>
+    <div class="license-info">Banco Safra</div>
+    <div class="license-url">http://apache.org/licenses/LICENSE-2.0.html</div>
+  <h2>Access</h2>
+
+  <h2><a name="__Methods">Methods</a></h2>
+  [ Jump to <a href="#__Models">Models</a> ]
+
+  <h3>Table of Contents </h3>
+  <div class="method-summary"></div>
+  <h4><a href="#Boletos">Boletos</a></h4>
+  <ul>
+  <li><a href="#gET"><code><span class="http-method">get</span> /boletos</code></a></li>
+  <li><a href="#pOST"><code><span class="http-method">post</span> /boletos</code></a></li>
+  </ul>
+
+  <h1><a name="Boletos">Boletos</a></h1>
+  <div class="method"><a name="gET"></a>
+    <div class="method-path">
+    <a class="up" href="#__Methods">Up</a>
+    <pre class="get"><code class="huge"><span class="http-method">get</span> /boletos</code></pre></div>
+    <div class="method-summary">Consulta de boletos (<span class="nickname">gET</span>)</div>
+    <div class="method-notes">Realiza a consulta de boletos</div>
+
+
+
+
+    <h3 class="field-label">Request headers</h3>
+    <div class="field-items">
+    </div>  <!-- field-items -->
+
+    <h3 class="field-label">Query parameters</h3>
+    <div class="field-items">
+      <div class="param">agencia (required)</div>
+      
+            <div class="param-desc"><span class="param-type">Query Parameter</span> &mdash;  </div>      <div class="param">conta (required)</div>
+      
+            <div class="param-desc"><span class="param-type">Query Parameter</span> &mdash;  </div>      <div class="param">numero (required)</div>
+      
+            <div class="param-desc"><span class="param-type">Query Parameter</span> &mdash;  </div>      <div class="param">numeroCliente (required)</div>
+      
+            <div class="param-desc"><span class="param-type">Query Parameter</span> &mdash;  </div>    </div>  <!-- field-items -->
+
+
+    <h3 class="field-label">Return type</h3>
+    <div class="return-type">
+      <a href="#inline_response_200">inline_response_200</a>
+      
+    </div>
+
+    <!--Todo: process Response Object and its headers, schema, examples -->
+
+    <h3 class="field-label">Example data</h3>
+    <div class="example-data-content-type">Content-Type: application/json</div>
+    <pre class="example"><code>{
+  "data" : {
+    "registradoCip" : true,
+    "numero" : 7765499,
+    "numeroCliente" : "7765468",
+    "codigoBarras" : "codigoBarras"
+  }
+}</code></pre>
+
+    <h3 class="field-label">Produces</h3>
+    This API call produces the following media types according to the <span class="header">Accept</span> request header;
+    the media type will be conveyed by the <span class="header">Content-Type</span> response header.
+    <ul>
+      <li><code>application/json</code></li>
+    </ul>
+
+    <h3 class="field-label">Responses</h3>
+    <h4 class="field-label">200</h4>
+    Status 200
+        <a href="#inline_response_200">inline_response_200</a>
+    <h4 class="field-label">400</h4>
+    Status 400
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">404</h4>
+    Status 404
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">422</h4>
+    Status 422
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">500</h4>
+    Status 500
+        <a href="#erro5xx">erro5xx</a>
+    <h4 class="field-label">503</h4>
+    Status 503
+        <a href="#erro5xx">erro5xx</a>
+  </div> <!-- method -->
+  <hr/>
+  <div class="method"><a name="pOST"></a>
+    <div class="method-path">
+    <a class="up" href="#__Methods">Up</a>
+    <pre class="post"><code class="huge"><span class="http-method">post</span> /boletos</code></pre></div>
+    <div class="method-summary">Registro de boletos (<span class="nickname">pOST</span>)</div>
+    <div class="method-notes">Realiza a geração e o registro do boleto na CIP</div>
+
+
+    <h3 class="field-label">Consumes</h3>
+    This API call consumes the following media types via the <span class="header">Content-Type</span> request header:
+    <ul>
+      <li><code>application/json</code></li>
+    </ul>
+
+    <h3 class="field-label">Request body</h3>
+    <div class="field-items">
+      <div class="param">body <a href="#registro-boleto-request">registro-boleto-request</a> (required)</div>
+      
+            <div class="param-desc"><span class="param-type">Body Parameter</span> &mdash; Informações necessárias para geração do boleto. </div>
+                </div>  <!-- field-items -->
+
+    <h3 class="field-label">Request headers</h3>
+    <div class="field-items">
+    </div>  <!-- field-items -->
+
+
+
+    <h3 class="field-label">Return type</h3>
+    <div class="return-type">
+      <a href="#inline_response_200_1">inline_response_200_1</a>
+      
+    </div>
+
+    <!--Todo: process Response Object and its headers, schema, examples -->
+
+    <h3 class="field-label">Example data</h3>
+    <div class="example-data-content-type">Content-Type: application/json</div>
+    <pre class="example"><code>{
+  "data" : {
+    "indicadorBaseCentral" : "",
+    "numero" : 7765468,
+    "numeroCliente" : "7765499",
+    "codigoBarras" : ""
+  }
+}</code></pre>
+
+    <h3 class="field-label">Produces</h3>
+    This API call produces the following media types according to the <span class="header">Accept</span> request header;
+    the media type will be conveyed by the <span class="header">Content-Type</span> response header.
+    <ul>
+      <li><code>application/json</code></li>
+    </ul>
+
+    <h3 class="field-label">Responses</h3>
+    <h4 class="field-label">200</h4>
+    Status 200
+        <a href="#inline_response_200_1">inline_response_200_1</a>
+    <h4 class="field-label">400</h4>
+    Status 400
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">404</h4>
+    Status 404
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">422</h4>
+    Status 422
+        <a href="#erro4xx">erro4xx</a>
+    <h4 class="field-label">500</h4>
+    Status 500
+        <a href="#erro5xx">erro5xx</a>
+    <h3 class="field-label">Example data</h3>
+    <div class="example-data-content-type">Content-Type: example-1</div>
+    <pre class="example"><code></code></pre>
+    <h4 class="field-label">503</h4>
+    Status 503
+        <a href="#erro5xx">erro5xx</a>
+  </div> <!-- method -->
+  <hr/>
+
+  <h2><a name="__Models">Models</a></h2>
+  [ Jump to <a href="#__Methods">Methods</a> ]
+
+  <h3>Table of Contents</h3>
+  <ol>
+    <li><a href="#boleto"><code>boleto</code></a></li>
+    <li><a href="#consulta_boleto"><code>consulta_boleto</code></a></li>
+    <li><a href="#erro4xx"><code>erro4xx</code></a></li>
+    <li><a href="#erro5xx"><code>erro5xx</code></a></li>
+    <li><a href="#inline_response_200"><code>inline_response_200</code></a></li>
+    <li><a href="#inline_response_200_1"><code>inline_response_200_1</code></a></li>
+    <li><a href="#mensagem"><code>mensagem</code></a></li>
+    <li><a href="#pessoa"><code>pessoa</code></a></li>
+    <li><a href="#pessoa_endereco"><code>pessoa_endereco</code></a></li>
+    <li><a href="#registro-boleto-request"><code>registro-boleto-request</code></a></li>
+    <li><a href="#registroboletorequest_documento"><code>registroboletorequest_documento</code></a></li>
+    <li><a href="#registroboletorequest_documento_desconto"><code>registroboletorequest_documento_desconto</code></a></li>
+    <li><a href="#registroboletorequest_documento_multa"><code>registroboletorequest_documento_multa</code></a></li>
+    <li><a href="#registroboletorequest_documento_pagamentoParcial"><code>registroboletorequest_documento_pagamentoParcial</code></a></li>
+  </ol>
+
+  <div class="model">
+    <h3><a name="boleto"><code>boleto</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Informações de retorno para uma geração de boleto.</div>
+    <div class="field-items">
+      <div class="param">numero </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Numero gerado para boleto </div>
+          <div class="param-desc"><span class="param-type">example: 7765468</span></div>
+<div class="param">numeroCliente </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Numero de controle do cliente </div>
+          <div class="param-desc"><span class="param-type">example: 7765499</span></div>
+<div class="param">codigoBarras </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Código de barras do boleto </div>
+<div class="param">indicadorBaseCentral (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Indicador de base central do boleto </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="consulta_boleto"><code>consulta_boleto</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Informações de retorno para uma consulta de boleto.</div>
+    <div class="field-items">
+      <div class="param">numeroCliente </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Número do Cliente </div>
+          <div class="param-desc"><span class="param-type">example: 7765468</span></div>
+<div class="param">numero </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Numero do lado do Safra </div>
+          <div class="param-desc"><span class="param-type">example: 7765499</span></div>
+<div class="param">codigoBarras </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Código de barras do Boleto </div>
+<div class="param">registradoCip (optional)</div><div class="param-desc"><span class="param-type"><a href="#boolean">Boolean</a></span> Indicador se o boleto foi registrado na CIP </div>
+          <div class="param-desc"><span class="param-type">example: true</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="erro4xx"><code>erro4xx</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Campos de retorno para erros do tipo 4xx.</div>
+    <div class="field-items">
+      <div class="param">code (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span>  </div>
+          <div class="param-desc"><span class="param-type">example: business-validation</span></div>
+<div class="param">message (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span>  </div>
+          <div class="param-desc"><span class="param-type">example: NOSSO NUMERO JA EXISTENTE EM NOSSA BASE</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="erro5xx"><code>erro5xx</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Campos de retorno para erros do tipo 5xx.</div>
+    <div class="field-items">
+      <div class="param">code (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span>  </div>
+          <div class="param-desc"><span class="param-type">example: service-error</span></div>
+<div class="param">message (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span>  </div>
+          <div class="param-desc"><span class="param-type">example: OCORREU UM ERRO NA CHAMADA AO SERVIÇO</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="inline_response_200"><code>inline_response_200</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">data (optional)</div><div class="param-desc"><span class="param-type"><a href="#consulta_boleto">consulta_boleto</a></span>  </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="inline_response_200_1"><code>inline_response_200_1</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">data (optional)</div><div class="param-desc"><span class="param-type"><a href="#boleto">boleto</a></span>  </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="mensagem"><code>mensagem</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Mensagens informadas na entrada de um boleto</div>
+    <div class="field-items">
+      <div class="param">posicao (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Posição da mensagem no boleto - 1 no recibo e 2 na ficha </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">1</div><div class="param-enum">2</div>
+          <div class="param-desc"><span class="param-type">example: 1</span></div>
+<div class="param">descricao (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Descrição da mensagem que aparece no boleto </div>
+          <div class="param-desc"><span class="param-type">example: Multa após o vencimento: R$0,05.</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="pessoa"><code>pessoa</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Informações referentes ao pagador e sacador avalista do boleto.</div>
+    <div class="field-items">
+      <div class="param">nome (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Nome do sacador avalista </div>
+<div class="param">tipoPessoa (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Tipo da pessoa associada (J ou F) </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">F</div><div class="param-enum">J</div>
+          <div class="param-desc"><span class="param-type">example: F</span></div>
+<div class="param">numeroDocumento (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Número do documento de identificação do sacador avalista </div>
+          <div class="param-desc"><span class="param-type">example: 78556802257</span></div>
+<div class="param">email (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Email da pessoa associada </div>
+          <div class="param-desc"><span class="param-type">example: teste123@email.com</span></div>
+<div class="param">endereco (optional)</div><div class="param-desc"><span class="param-type"><a href="#pessoa_endereco">pessoa_endereco</a></span>  </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="pessoa_endereco"><code>pessoa_endereco</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">logradouro (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Logradouro da pessoa associada </div>
+<div class="param">bairro (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Bairro da pessoa associada </div>
+<div class="param">cidade (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Cidade da pessoa associada </div>
+          <div class="param-desc"><span class="param-type">example: AGULHA</span></div>
+<div class="param">uf (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> UF da pessoa associada </div>
+          <div class="param-desc"><span class="param-type">example: SP</span></div>
+<div class="param">cep (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> CEP da pessoa associada </div>
+          <div class="param-desc"><span class="param-type">example: 02112002</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="registro-boleto-request"><code>registro-boleto-request</code></a> <a class="up" href="#__Models">Up</a></h3>
+    <div class='model-description'>Informações de entrada para geração de um boleto</div>
+    <div class="field-items">
+      <div class="param">agencia </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Numero de agência do cliente </div>
+          <div class="param-desc"><span class="param-type">example: 200</span></div>
+<div class="param">conta </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Numero de conta do cliente </div>
+          <div class="param-desc"><span class="param-type">example: 1234567</span></div>
+<div class="param">fidc (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Taxa FIDC associada ao boleto </div>
+          <div class="param-desc"><span class="param-type">example: 123.123456</span></div>
+<div class="param">danfe (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> DANFE associada ao boleto </div>
+          <div class="param-desc"><span class="param-type">example: 12345678654</span></div>
+<div class="param">documento (optional)</div><div class="param-desc"><span class="param-type"><a href="#registroboletorequest_documento">registroboletorequest_documento</a></span>  </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="registroboletorequest_documento"><code>registroboletorequest_documento</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">numero </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Número associado ao banco </div>
+          <div class="param-desc"><span class="param-type">example: 123456789</span></div>
+<div class="param">numeroCliente </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Número associado ao cliente </div>
+          <div class="param-desc"><span class="param-type">example: 0000004021</span></div>
+<div class="param">diasDevolucao (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Quantidade de dias para devolução </div>
+          <div class="param-desc"><span class="param-type">example: 3</span></div>
+<div class="param">especie </div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Especie utilizada para cobrança do boleto 01 – Duplicata mercantil 02 – Nota promissória 03 – Nota de seguro 05 – Recibo 09 – Duplicata de serviço </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">01</div><div class="param-enum">02</div><div class="param-enum">03</div><div class="param-enum">05</div><div class="param-enum">9</div>
+          <div class="param-desc"><span class="param-type">example: 9</span></div>
+<div class="param">dataVencimento </div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> Data de vencimento do boleto format: date</div>
+          <div class="param-desc"><span class="param-type">example: Wed Apr 15 00:00:00 GMT 2020</span></div>
+<div class="param">valor </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor inserido no boleto </div>
+          <div class="param-desc"><span class="param-type">example: 510</span></div>
+<div class="param">codigoMoeda </div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Código da moeda utilizada no registro do boleto </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">0</div>
+          <div class="param-desc"><span class="param-type">example: 0</span></div>
+<div class="param">quantidadeDiasProtesto (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Quantidade de dias de protesto no registro do boleto </div>
+          <div class="param-desc"><span class="param-type">example: 123</span></div>
+<div class="param">campoLivre (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> Campo livre para informações do boleto </div>
+          <div class="param-desc"><span class="param-type">example: texto livre</span></div>
+<div class="param">valorAbatimento (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor do abatimento associado ao boleto </div>
+          <div class="param-desc"><span class="param-type">example: 10</span></div>
+<div class="param">desconto (optional)</div><div class="param-desc"><span class="param-type"><a href="#registroboletorequest_documento_desconto">registroboletorequest_documento_desconto</a></span>  </div>
+<div class="param">multa (optional)</div><div class="param-desc"><span class="param-type"><a href="#registroboletorequest_documento_multa">registroboletorequest_documento_multa</a></span>  </div>
+<div class="param">pagamentoParcial (optional)</div><div class="param-desc"><span class="param-type"><a href="#registroboletorequest_documento_pagamentoParcial">registroboletorequest_documento_pagamentoParcial</a></span>  </div>
+<div class="param">pagador </div><div class="param-desc"><span class="param-type"><a href="#pessoa">pessoa</a></span>  </div>
+<div class="param">beneficiario (optional)</div><div class="param-desc"><span class="param-type"><a href="#pessoa">pessoa</a></span>  </div>
+<div class="param">mensagens (optional)</div><div class="param-desc"><span class="param-type"><a href="#mensagem">array[mensagem]</a></span> Mensagens exibidas no Boleto </div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="registroboletorequest_documento_desconto"><code>registroboletorequest_documento_desconto</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">data (optional)</div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> Data limite para desconto principal.  A data do desconto deve ser sempre menor que a data de vencimento do título. format: date</div>
+          <div class="param-desc"><span class="param-type">example: Mon Nov 18 00:00:00 GMT 2019</span></div>
+<div class="param">valor (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor do desconto principal. O valor do desconto deve ser menor que o valor do título. </div>
+          <div class="param-desc"><span class="param-type">example: 30</span></div>
+<div class="param">data2 (optional)</div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> Data 2 para desconto no boleto. A data de deconto 2 deve sempre ser maior que a data do desconto 1 e não deve ser preenchida caso não exista o desconto 1. format: date</div>
+          <div class="param-desc"><span class="param-type">example: Wed Nov 20 00:00:00 GMT 2019</span></div>
+<div class="param">valor2 (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor correspondente a data 2 de desconto. O valor do desconto 2 deve ser menor que o valor de desconto 1 e só deve ser preenchido caso exista um desconto 1. </div>
+          <div class="param-desc"><span class="param-type">example: 15</span></div>
+<div class="param">data3 (optional)</div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> Data 3 para desconto no boleto. A data de deconto 3 deve sempre ser maior que a data do desconto 2 e não deve ser preenchida caso não exista o desconto 1 e desconto 2. format: date</div>
+          <div class="param-desc"><span class="param-type">example: Fri Nov 22 00:00:00 GMT 2019</span></div>
+<div class="param">valor3 (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor correspondente a data 3 de desconto.O valor do desconto 3 deve ser menor que o valor de desconto 2 e só deve ser preenchido caso exista um desconto 1 e desconto 2. </div>
+          <div class="param-desc"><span class="param-type">example: 10</span></div>
+<div class="param">tipoDesconto (optional)</div><div class="param-desc"><span class="param-type"><a href="#string">String</a></span> &lt;p&gt;Tipo de desconto para boleto. O domínio para o tipo de desconto é:
+1 – Desconto em Valor
+2 – Desconto em Percentual
+3 – Desconto em Valor por Antecipação Dia Corrido
+5 – Desconto em Percentual por Antecipação Dia Corrido&lt;/p&gt;
+&lt;p&gt;Para domínios &#x27;1&#x27; e &#x27;2&#x27; é obrigatório informar a data
+Para domínios &#x27;3&#x27; e &#x27;5&#x27; não é obrigatório informar data&lt;/p&gt;
+ </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">1</div><div class="param-enum">2</div><div class="param-enum">3</div><div class="param-enum">5</div>
+          <div class="param-desc"><span class="param-type">example: 1</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="registroboletorequest_documento_multa"><code>registroboletorequest_documento_multa</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">dataMulta (optional)</div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> &lt;p&gt;Data de ínicio para pagamento de multa. A data de multa deve ser sempre maior que a data de vencimento do título.
+Caso seja preenchida uma taxaMulta, e a data de multa se enquadre em uma das situações abaixo, a mesma vai assumir a data do próximo dia corrido da data de vencimento.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Data de multa não preenchida&lt;/li&gt;
+&lt;li&gt;Data de multa inválida&lt;/li&gt;
+&lt;li&gt;Data de multa válida,  mas anterior ou igual à data de vencimento&lt;/li&gt;
+&lt;/ul&gt;
+ format: date</div>
+          <div class="param-desc"><span class="param-type">example: Sat May 30 00:00:00 GMT 2020</span></div>
+<div class="param">taxaJuros (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Taxa de juros do boleto </div>
+          <div class="param-desc"><span class="param-type">example: 0.03</span></div>
+<div class="param">taxaMulta (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Taxa de multa do boleto format: date</div>
+<div class="param">dataJuros (optional)</div><div class="param-desc"><span class="param-type"><a href="#date">date</a></span> &lt;p&gt;Data de ínicio para pagamento de juros. A data de juros deve ser sempre maior que a data de vencimento do título.
+Caso seja preenchida uma taxaJuros, e a data de juros se enquadre em uma das situações abaixo, a mesma vai assumir a data do próximo dia corrido da data de vencimento.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Data de juros não preenchida&lt;/li&gt;
+&lt;li&gt;Data de juros inválida&lt;/li&gt;
+&lt;li&gt;Data de juros válida,  mas anterior ou igual à data de vencimento&lt;/li&gt;
+&lt;/ul&gt;
+ format: date</div>
+          <div class="param-desc"><span class="param-type">example: Mon Dec 30 00:00:00 GMT 2019</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  <div class="model">
+    <h3><a name="registroboletorequest_documento_pagamentoParcial"><code>registroboletorequest_documento_pagamentoParcial</code></a> <a class="up" href="#__Models">Up</a></h3>
+    
+    <div class="field-items">
+      <div class="param">valorMaximo (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor máximo de pagamento para pagamentos parciais. Preencher com valor de até o dobro o valor do título ou percentual até 199,00%. </div>
+          <div class="param-desc"><span class="param-type">example: 400</span></div>
+<div class="param">valorMinimo (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Valor mínimo de pagamento para pagamentos parciais. Valor/percentual deve ser menor que o valor do título/100% e maior que R$0,01 ou 0,01%. </div>
+          <div class="param-desc"><span class="param-type">example: 100</span></div>
+<div class="param">tipoPagamento (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> &lt;p&gt;Tipo de pagamento utilizado no pagamento parcial. Deve ser utilizado um dos domínios abaixo:&lt;/p&gt;
+&lt;p&gt;&#x27;01&#x27; – Aceita qualquer valor
+&#x27;02&#x27; – Aceita valor divergente
+&#x27;03&#x27; – Não Aceita valor divergente&lt;/p&gt;
+ </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">1</div><div class="param-enum">2</div><div class="param-enum">3</div>
+          <div class="param-desc"><span class="param-type">example: 1</span></div>
+<div class="param">tipoValor (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> &lt;p&gt;Tipo de valor do pagamento parcial. Deve ser utilizado o domínio abaixo:&lt;/p&gt;
+&lt;p&gt;&#x27;1&#x27; - Percentual %
+&#x27;2&#x27; - Valor&lt;/p&gt;
+ </div>
+        <div class="param-enum-header">Enum:</div>
+        <div class="param-enum">1</div><div class="param-enum">2</div>
+          <div class="param-desc"><span class="param-type">example: 1</span></div>
+<div class="param">quantidadeParcelas (optional)</div><div class="param-desc"><span class="param-type"><a href="#BigDecimal">BigDecimal</a></span> Quantidade de Parcelas para pagamento. </div>
+          <div class="param-desc"><span class="param-type">example: 1</span></div>
+    </div>  <!-- field-items -->
+  </div>
+  </body>
+</html>

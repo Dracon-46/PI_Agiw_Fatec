@@ -19,9 +19,15 @@ import {
 } from '../../../../lib/repositories/movimentoRepository.js';
 import { ACAO_EXPORTACAO, registraAuditoria } from '../../../../lib/repositories/auditoriaRepository.js';
 import {
+   ESCOPOS_VALIDOS,
+   ESCOPO_AMBOS,
+   ESCOPO_BANCO,
+   ESCOPO_SISTEMA,
    FORMATO_CSV,
    FORMATO_PDF,
    FORMATO_XLSX,
+   descreveFiltroStatus,
+   filtraPorStatus,
    geraCsv,
    geraExcel,
    geraHtmlImpressao,
@@ -33,15 +39,45 @@ export const dynamic = 'force-dynamic';
 /** Formatos aceitos pelo parâmetro "formato" */
 const FORMATOS_VALIDOS = [FORMATO_XLSX, FORMATO_CSV, FORMATO_PDF];
 
+/** Rótulos de escopo exibidos no cabeçalho do relatório */
+const ROTULOS_ESCOPO = {
+   [ESCOPO_AMBOS]: 'extrato do sistema (Satis) e extrato do banco',
+   [ESCOPO_SISTEMA]: 'somente o extrato do sistema (Satis)',
+   [ESCOPO_BANCO]: 'somente o extrato do banco',
+};
+
+/** Sufixo do nome do arquivo por escopo */
+const SUFIXO_ESCOPO = {
+   [ESCOPO_AMBOS]: '',
+   [ESCOPO_SISTEMA]: '-satis',
+   [ESCOPO_BANCO]: '-banco',
+};
+
+/**
+ * Lê um parâmetro booleano da query string.
+ * Ausente significa "ligado", que é o estado inicial dos chips das grades.
+ * @param {URLSearchParams} oParams
+ * @param {string} sChave
+ * @returns {boolean}
+ */
+function leBooleano(oParams, sChave) {
+   const sValor = oParams.get(sChave);
+   return sValor === null ? true : sValor === '1' || sValor === 'true';
+} // leBooleano
+
 /**
  * Monta o nome do arquivo exportado.
  * @param {object} oConta
  * @param {string} sExtensao
+ * @param {string} sEscopo
  * @returns {string}
  */
-function montaNomeArquivo(oConta, sExtensao) {
+function montaNomeArquivo(oConta, sExtensao, sEscopo) {
    const sData = formataDataBr(new Date()).replace(/\//g, '-');
-   return `conciliacao-${oConta.codBanco}-${oConta.codAgencia}-${oConta.numContaCorrente}-${sData}.${sExtensao}`;
+   return (
+      `conciliacao${SUFIXO_ESCOPO[sEscopo] ?? ''}-${oConta.codBanco}-${oConta.codAgencia}-` +
+      `${oConta.numContaCorrente}-${sData}.${sExtensao}`
+   );
 } // montaNomeArquivo
 
 /**
@@ -55,7 +91,15 @@ export async function GET(oRequisicao) {
    const sDataInicio = oParams.get('dataInicio') ?? '';
    const sDataFim = oParams.get('dataFim') ?? '';
    const sFormato = (oParams.get('formato') ?? FORMATO_XLSX).toLowerCase();
+   const sEscopo = (oParams.get('escopo') ?? ESCOPO_AMBOS).toLowerCase();
    const bRecortaPeriodo = oParams.get('recortaPeriodo') === '1';
+
+   // Chips de situação das grades (item 6.1.3.4): o relatório imprime os
+   // registros exibidos, então o mesmo recorte precisa chegar até aqui
+   const bLancConciliados = leBooleano(oParams, 'lancConciliados');
+   const bLancNaoConciliados = leBooleano(oParams, 'lancNaoConciliados');
+   const bMovConciliados = leBooleano(oParams, 'movConciliados');
+   const bMovNaoConciliados = leBooleano(oParams, 'movNaoConciliados');
 
    // Validações antes de montar o relatório
    if (!sCodConta) {
@@ -64,6 +108,12 @@ export async function GET(oRequisicao) {
    if (!FORMATOS_VALIDOS.includes(sFormato)) {
       return NextResponse.json(
          { erro: `Formato inválido. Use ${FORMATOS_VALIDOS.join(', ')}.` },
+         { status: 400 }
+      );
+   }
+   if (!ESCOPOS_VALIDOS.includes(sEscopo)) {
+      return NextResponse.json(
+         { erro: `Escopo inválido. Use ${ESCOPOS_VALIDOS.join(', ')}.` },
          { status: 400 }
       );
    }
@@ -82,24 +132,42 @@ export async function GET(oRequisicao) {
          ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
          : await listaMovimentosConta(oConta.idConta);
 
+      const aLancFiltrados = filtraPorStatus(aLancamentos, bLancConciliados, bLancNaoConciliados);
+      const aMovFiltrados = filtraPorStatus(aMovimentos, bMovConciliados, bMovNaoConciliados);
+
+      // Cada lado tem o seu par de chips; a descrição junta os dois quando o
+      // escopo é "ambos" e mostra só o pertinente quando é um extrato isolado
+      const sDescricaoStatus =
+         sEscopo === ESCOPO_SISTEMA
+            ? descreveFiltroStatus({ bConciliados: bLancConciliados, bNaoConciliados: bLancNaoConciliados })
+            : sEscopo === ESCOPO_BANCO
+              ? descreveFiltroStatus({ bConciliados: bMovConciliados, bNaoConciliados: bMovNaoConciliados })
+              : `sistema — ${descreveFiltroStatus({ bConciliados: bLancConciliados, bNaoConciliados: bLancNaoConciliados })}; ` +
+                `banco — ${descreveFiltroStatus({ bConciliados: bMovConciliados, bNaoConciliados: bMovNaoConciliados })}`;
+
       const oDados = {
          oConta,
+         sEscopo,
          sDataInicio,
          sDataFim,
-         aLancamentos,
-         aMovimentos,
+         aLancamentos: aLancFiltrados,
+         aMovimentos: aMovFiltrados,
          nSaldoAnterior,
          sDataEmissao: formataDataBr(new Date()),
+         oFiltros: {
+            sDescricaoEscopo: ROTULOS_ESCOPO[sEscopo],
+            sDescricaoStatus,
+         },
       };
 
       await registraAuditoria({
          idConta: oConta.idConta,
          tipAcao: ACAO_EXPORTACAO,
          desEntidade: 'relatorio',
-         codEntidade: sFormato.toUpperCase(),
+         codEntidade: `${sFormato.toUpperCase()}/${sEscopo}`,
          desDetalhe:
-            `Relatório de conciliação exportado em ${sFormato.toUpperCase()} ` +
-            `(${aLancamentos.length} lançamento(s) e ${aMovimentos.length} movimento(s)).`,
+            `Relatório de conciliação exportado em ${sFormato.toUpperCase()} (${ROTULOS_ESCOPO[sEscopo]}): ` +
+            `${aLancFiltrados.length} lançamento(s) e ${aMovFiltrados.length} movimento(s).`,
       });
 
       // ---------- Excel ----------
@@ -108,7 +176,7 @@ export async function GET(oRequisicao) {
          return new Response(oBuffer, {
             headers: {
                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-               'Content-Disposition': `attachment; filename="${montaNomeArquivo(oConta, 'xlsx')}"`,
+               'Content-Disposition': `attachment; filename="${montaNomeArquivo(oConta, 'xlsx', sEscopo)}"`,
                'Cache-Control': 'no-store',
             },
          });
@@ -119,7 +187,7 @@ export async function GET(oRequisicao) {
          return new Response(geraCsv(oDados), {
             headers: {
                'Content-Type': 'text/csv; charset=utf-8',
-               'Content-Disposition': `attachment; filename="${montaNomeArquivo(oConta, 'csv')}"`,
+               'Content-Disposition': `attachment; filename="${montaNomeArquivo(oConta, 'csv', sEscopo)}"`,
                'Cache-Control': 'no-store',
             },
          });

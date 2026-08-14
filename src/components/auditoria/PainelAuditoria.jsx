@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { FileClock, FileUp, Loader2, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { AppShell } from '../layout/AppShell.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
+import { CampoData } from '../comum/CampoData.jsx';
 import { useNotificacoes } from '../comum/Notificacoes.jsx';
 import { buscaAuditoria } from '../../services/conciliacaoService.js';
 import { formataMoeda } from '../../utils/formatters.js';
@@ -129,27 +130,11 @@ export function PainelAuditoria() {
                      </select>
                   </label>
 
-                  <label className="campo">
-                     <span className="campo-rotulo">Data inicial</span>
-                     <input
-                        type="text"
-                        className="campo-controle"
-                        placeholder="DD/MM/AAAA"
-                        value={sDataInicio}
-                        onChange={(oEvento) => setDataInicio(oEvento.target.value)}
-                     />
-                  </label>
+                  {/* Sem limite cruzado: a consulta aceita qualquer intervalo
+                      e travar uma ponta na outra atrapalha mudar o período */}
+                  <CampoData rotulo="Data inicial" valor={sDataInicio} aoAlterar={setDataInicio} />
 
-                  <label className="campo">
-                     <span className="campo-rotulo">Data final</span>
-                     <input
-                        type="text"
-                        className="campo-controle"
-                        placeholder="DD/MM/AAAA"
-                        value={sDataFim}
-                        onChange={(oEvento) => setDataFim(oEvento.target.value)}
-                     />
-                  </label>
+                  <CampoData rotulo="Data final" valor={sDataFim} aoAlterar={setDataFim} />
 
                   <div className="filtro-acao">
                      <button type="button" className="btn btn-primario" onClick={carrega} disabled={bCarregando}>

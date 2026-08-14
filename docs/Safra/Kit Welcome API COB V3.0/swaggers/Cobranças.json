@@ -1,0 +1,791 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Cobranças",
+    "description": "APIs para o domínio externo de Cobranças",
+    "version": "v2.2",
+    "license": {
+      "name": "Banco Safra"
+    },
+    "contact": {
+      "name": "Central de Suporte Pessoa Jurídica",
+      "email": "mesa.implantacao@safra.com.br"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.safranegocios.com.br/gateway/cobrancas/v1"
+    }
+  ],
+  "tags": [
+    {
+      "name": "boletos",
+      "description": "Geração e consulta de boletos"
+    }
+  ],
+  "paths": {
+    "/boletos": {
+      "get": {
+        "tags": [
+          "boletos"
+        ],
+        "description": "Realiza a consulta de boletos",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Safra-Correlation-ID",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "ID de correlação (uuid)"
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Token gerado no servidor oAuth 2.0"
+          },
+          {
+            "name": "Content-Location",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agencia",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "conta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "numero",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "numeroCliente",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/consulta_boleto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro5xx"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro5xx"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "GET",
+        "summary": "Consulta de boletos"
+      },
+      "post": {
+        "tags": [
+          "boletos"
+        ],
+        "description": "Realiza a geração e o registro do boleto na CIP",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Safra-Correlation-ID",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "ID de correlação (uuid)"
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Token gerado no servidor oAuth 2.0"
+          },
+          {
+            "name": "Content-Location",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/registro-boleto-request"
+              }
+            }
+          },
+          "required": true,
+          "description": "Informações necessárias para geração do boleto."
+        },
+        "responses": {
+          "200": {
+            "description": "Status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/boleto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro4xx"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro5xx"
+                },
+                "examples": {
+                  "example-1": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/erro5xx"
+                }
+              }
+            }
+          }
+        },
+        "x-codegen-request-body-name": "body",
+        "operationId": "POST",
+        "summary": "Registro de boletos"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "registro-boleto-request": {
+        "type": "object",
+        "x-examples": {
+          "example-request": {
+            "agencia": 200,
+            "conta": 1234567,
+            "fidc": 123.123456,
+            "danfe": "12345678654",
+            "documento": {
+              "numero": "123456789",
+              "numeroCliente": "0000004021",
+              "diasDevolucao": 3,
+              "especie": "00",
+              "dataVencimento": "2020-04-15",
+              "valor": 510,
+              "codigoMoeda": 9,
+              "quantidadeDiasProtesto": 123,
+              "identificacaoAceite": "N",
+              "campoLivre": "texto livre",
+              "desconto": {
+                "data": "2019-11-18",
+                "valor": 30,
+                "data2": "2019-11-20",
+                "valor2": 15,
+                "data3": "2019-11-22",
+                "valor3": 10,
+                "valorAbatimento": 10,
+                "tipoDesconto": "1"
+              },
+              "multa": {
+                "dataMulta": "2020-05-30",
+                "dataJuros": "2020-05-30",
+                "taxaJuros": 0.03,
+                "taxaMulta": 0.01
+              },
+              "pagamentoParcial": {
+                "pagamentoParcial": true,
+                "valorMaximo": 400,
+                "valorMinimo": 100,
+                "dataInicioJuros": "2019-12-30",
+                "canalPagamento": "1",
+                "especieDocumento": "1"
+              },
+              "pagador": {
+                "nome": "Teste Sumare",
+                "tipoPessoa": "F",
+                "numeroDocumento": "78556802257",
+                "endereco": {
+                  "logradouro": "Rua Guaranésia, 500",
+                  "bairro": "Vila Maria",
+                  "cidade": "AGULHA",
+                  "uf": "SP",
+                  "cep": "02112002"
+                }
+              },
+              "beneficiario": {
+                "nome": "INSTITUTO SUMARÉ DE EDUCAÇÃO S",
+                "tipoPessoa": "J",
+                "email": "",
+                "numeroDocumento": 2745324000184,
+                "endereco": {
+                  "logradouro": "Rua Capote Valente, 1121",
+                  "bairro": "Sumaré",
+                  "cidade": "Sao Paulo",
+                  "uf": "SP",
+                  "cep": 5409003
+                }
+              },
+              "mensagens": [
+                {
+                  "posicao": "1",
+                  "descricao": "Multa após o vencimento: R$0,05."
+                }
+              ]
+            }
+          }
+        },
+        "description": "Informações de entrada para geração de um boleto",
+        "x-tags": [
+          "safra",
+          "boletos",
+          "api"
+        ],
+        "properties": {
+          "agencia": {
+            "type": "number",
+            "description": "Numero de agência do cliente",
+            "example": 200
+          },
+          "conta": {
+            "type": "number",
+            "description": "Numero de conta do cliente",
+            "example": 1234567
+          },
+          "fidc": {
+            "type": "number",
+            "description": "Taxa FIDC associada ao boleto",
+            "example": 123.123456
+          },
+          "danfe": {
+            "type": "string",
+            "description": "DANFE associada ao boleto",
+            "example": "12345678654"
+          },
+          "documento": {
+            "type": "object",
+            "properties": {
+              "numero": {
+                "type": "number",
+                "description": "Número associado ao banco",
+                "example": "123456789"
+              },
+              "numeroCliente": {
+                "type": "string",
+                "description": "Número associado ao cliente",
+                "example": "0000004021"
+              },
+              "diasDevolucao": {
+                "type": "number",
+                "description": "Quantidade de dias para devolução",
+                "example": 3
+              },
+              "especie": {
+                "type": "string",
+                "description": "Especie utilizada para cobrança do boleto 01 – Duplicata mercantil 02 – Nota promissória 03 – Nota de seguro 05 – Recibo 09 – Duplicata de serviço",
+                "example": 9,
+                "enum": [
+                  "01",
+                  "02",
+                  "03",
+                  "05",
+                  9
+                ]
+              },
+              "dataVencimento": {
+                "type": "string",
+                "description": "Data de vencimento do boleto",
+                "format": "date",
+                "example": "2020-04-15"
+              },
+              "valor": {
+                "type": "number",
+                "description": "Valor inserido no boleto",
+                "example": 510
+              },
+              "codigoMoeda": {
+                "type": "number",
+                "description": "Código da moeda utilizada no registro do boleto",
+                "example": 0,
+                "enum": [
+                  0
+                ]
+              },
+              "quantidadeDiasProtesto": {
+                "type": "number",
+                "description": "Quantidade de dias de protesto no registro do boleto",
+                "example": 123
+              },
+              "campoLivre": {
+                "type": "string",
+                "description": "Campo livre para informações do boleto",
+                "example": "texto livre"
+              },
+              "valorAbatimento": {
+                "type": "number",
+                "description": "Valor do abatimento associado ao boleto",
+                "example": 10
+              },
+              "desconto": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "Data limite para desconto principal.  A data do desconto deve ser sempre menor que a data de vencimento do título.",
+                    "format": "date",
+                    "example": "2019-11-18"
+                  },
+                  "valor": {
+                    "type": "number",
+                    "description": "Valor do desconto principal. O valor do desconto deve ser menor que o valor do título.",
+                    "example": 30
+                  },
+                  "data2": {
+                    "type": "string",
+                    "description": "Data 2 para desconto no boleto. A data de deconto 2 deve sempre ser maior que a data do desconto 1 e não deve ser preenchida caso não exista o desconto 1.",
+                    "format": "date",
+                    "example": "2019-11-20"
+                  },
+                  "valor2": {
+                    "type": "number",
+                    "description": "Valor correspondente a data 2 de desconto. O valor do desconto 2 deve ser menor que o valor de desconto 1 e só deve ser preenchido caso exista um desconto 1.",
+                    "example": 15
+                  },
+                  "data3": {
+                    "type": "string",
+                    "description": "Data 3 para desconto no boleto. A data de deconto 3 deve sempre ser maior que a data do desconto 2 e não deve ser preenchida caso não exista o desconto 1 e desconto 2.",
+                    "format": "date",
+                    "example": "2019-11-22"
+                  },
+                  "valor3": {
+                    "type": "number",
+                    "description": "Valor correspondente a data 3 de desconto.O valor do desconto 3 deve ser menor que o valor de desconto 2 e só deve ser preenchido caso exista um desconto 1 e desconto 2.",
+                    "example": 10
+                  },
+                  "tipoDesconto": {
+                    "type": "string",
+                    "description": "Tipo de desconto para boleto. O domínio para o tipo de desconto é:\n1 – Desconto em Valor\n2 – Desconto em Percentual\n3 – Desconto em Valor por Antecipação Dia Corrido\n5 – Desconto em Percentual por Antecipação Dia Corrido\n\nPara domínios '1' e '2' é obrigatório informar a data\nPara domínios '3' e '5' não é obrigatório informar data",
+                    "example": "1",
+                    "enum": [
+                      "1",
+                      "2",
+                      "3",
+                      "5"
+                    ]
+                  }
+                }
+              },
+              "multa": {
+                "type": "object",
+                "properties": {
+                  "dataMulta": {
+                    "type": "string",
+                    "description": "Data de ínicio para pagamento de multa. A data de multa deve ser sempre maior que a data de vencimento do título.\nCaso seja preenchida uma taxaMulta, e a data de multa se enquadre em uma das situações abaixo, a mesma vai assumir a data do próximo dia corrido da data de vencimento.\n\n- Data de multa não preenchida\n- Data de multa inválida\n- Data de multa válida,  mas anterior ou igual à data de vencimento",
+                    "format": "date",
+                    "example": "2020-05-30"
+                  },
+                  "taxaJuros": {
+                    "type": "number",
+                    "description": "Taxa de juros do boleto",
+                    "example": 0.03
+                  },
+                  "taxaMulta": {
+                    "type": "number",
+                    "description": "Taxa de multa do boleto",
+                    "format": "date"
+                  },
+                  "dataJuros": {
+                    "type": "string",
+                    "description": "Data de ínicio para pagamento de juros. A data de juros deve ser sempre maior que a data de vencimento do título.\nCaso seja preenchida uma taxaJuros, e a data de juros se enquadre em uma das situações abaixo, a mesma vai assumir a data do próximo dia corrido da data de vencimento.\n\n- Data de juros não preenchida\n- Data de juros inválida\n- Data de juros válida,  mas anterior ou igual à data de vencimento",
+                    "format": "date",
+                    "example": "2019-12-30"
+                  }
+                }
+              },
+              "pagamentoParcial": {
+                "type": "object",
+                "properties": {
+                  "valorMaximo": {
+                    "type": "number",
+                    "description": "Valor máximo de pagamento para pagamentos parciais. Preencher com valor de até o dobro o valor do título ou percentual até 199,00%.",
+                    "example": 400
+                  },
+                  "valorMinimo": {
+                    "type": "number",
+                    "description": "Valor mínimo de pagamento para pagamentos parciais. Valor/percentual deve ser menor que o valor do título/100% e maior que R$0,01 ou 0,01%.",
+                    "example": 100
+                  },
+                  "tipoPagamento": {
+                    "type": "number",
+                    "description": "Tipo de pagamento utilizado no pagamento parcial. Deve ser utilizado um dos domínios abaixo:\n\n'01' – Aceita qualquer valor\n'02' – Aceita valor divergente\n'03' – Não Aceita valor divergente",
+                    "enum": [
+                      1,
+                      2,
+                      3
+                    ],
+                    "example": 1
+                  },
+                  "tipoValor": {
+                    "type": "number",
+                    "description": "Tipo de valor do pagamento parcial. Deve ser utilizado o domínio abaixo:\n\n'1' - Percentual %\n'2' - Valor",
+                    "enum": [
+                      1,
+                      2
+                    ],
+                    "example": 1
+                  },
+                  "quantidadeParcelas": {
+                    "type": "number",
+                    "example": 1,
+                    "description": "Quantidade de Parcelas para pagamento."
+                  }
+                }
+              },
+              "pagador": {
+                "$ref": "#/components/schemas/pessoa"
+              },
+              "beneficiario": {
+                "$ref": "#/components/schemas/pessoa"
+              },
+              "mensagens": {
+                "type": "array",
+                "description": "Mensagens exibidas no Boleto",
+                "items": {
+                  "$ref": "#/components/schemas/mensagem"
+                }
+              }
+            },
+            "required": [
+              "numero",
+              "numeroCliente",
+              "especie",
+              "dataVencimento",
+              "valor",
+              "codigoMoeda",
+              "pagador"
+            ]
+          }
+        },
+        "required": [
+          "agencia",
+          "conta"
+        ]
+      },
+      "boleto": {
+        "type": "object",
+        "description": "Informações de retorno para uma geração de boleto.",
+        "properties": {
+          "numero": {
+            "type": "number",
+            "description": "Numero gerado para boleto",
+            "example": 7765468
+          },
+          "numeroCliente": {
+            "type": "string",
+            "description": "Numero de controle do cliente",
+            "example": 7765499
+          },
+          "codigoBarras": {
+            "type": "string",
+            "description": "Código de barras do boleto",
+            "example": ""
+          },
+          "indicadorBaseCentral": {
+            "type": "string",
+            "description": "Indicador de base central do boleto",
+            "example": ""
+          }
+        },
+        "required": [
+          "numero",
+          "numeroCliente",
+          "codigoBarras"
+        ]
+      },
+      "pessoa": {
+        "type": "object",
+        "description": "Informações referentes ao pagador e sacador avalista do boleto.",
+        "properties": {
+          "nome": {
+            "type": "number",
+            "description": "Nome do sacador avalista",
+            "example": "Empresa LTDA"
+          },
+          "tipoPessoa": {
+            "type": "string",
+            "description": "Tipo da pessoa associada (J ou F)",
+            "example": "F",
+            "enum": [
+              "F",
+              "J"
+            ]
+          },
+          "numeroDocumento": {
+            "type": "string",
+            "description": "Número do documento de identificação do sacador avalista",
+            "example": "78556802257"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email da pessoa associada",
+            "example": "teste123@email.com"
+          },
+          "endereco": {
+            "type": "object",
+            "properties": {
+              "logradouro": {
+                "type": "number",
+                "description": "Logradouro da pessoa associada"
+              },
+              "bairro": {
+                "type": "number",
+                "description": "Bairro da pessoa associada"
+              },
+              "cidade": {
+                "type": "string",
+                "description": "Cidade da pessoa associada",
+                "example": "AGULHA"
+              },
+              "uf": {
+                "type": "string",
+                "description": "UF da pessoa associada",
+                "example": "SP"
+              },
+              "cep": {
+                "type": "string",
+                "description": "CEP da pessoa associada",
+                "example": "02112002"
+              }
+            }
+          }
+        }
+      },
+      "mensagem": {
+        "type": "object",
+        "properties": {
+          "posicao": {
+            "type": "string",
+            "description": "Posição da mensagem no boleto - 1 no recibo e 2 na ficha",
+            "example": "1",
+            "enum": [
+              "1",
+              "2"
+            ]
+          },
+          "descricao": {
+            "type": "string",
+            "description": "Descrição da mensagem que aparece no boleto",
+            "example": "Multa após o vencimento: R$0,05."
+          }
+        },
+        "description": "Mensagens informadas na entrada de um boleto"
+      },
+      "consulta_boleto": {
+        "type": "object",
+        "description": "Informações de retorno para uma consulta de boleto.",
+        "properties": {
+          "numeroCliente": {
+            "type": "string",
+            "description": "Número do Cliente",
+            "example": "7765468"
+          },
+          "numero": {
+            "type": "number",
+            "description": "Numero do lado do Safra",
+            "example": 7765499
+          },
+          "codigoBarras": {
+            "type": "string",
+            "description": "Código de barras do Boleto"
+          },
+          "registradoCip": {
+            "type": "boolean",
+            "description": "Indicador se o boleto foi registrado na CIP",
+            "example": true
+          }
+        },
+        "required": [
+          "numeroCliente",
+          "numero",
+          "codigoBarras"
+        ]
+      },
+      "erro4xx": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "business-validation"
+          },
+          "message": {
+            "type": "string",
+            "example": "NOSSO NUMERO JA EXISTENTE EM NOSSA BASE"
+          }
+        },
+        "x-examples": {
+          "example-4xx": {
+            "code": "business-validation",
+            "message": "VALOR INVÁLIDO"
+          }
+        },
+        "description": "Campos de retorno para erros do tipo 4xx."
+      },
+      "erro5xx": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "service-error"
+          },
+          "message": {
+            "type": "string",
+            "example": "OCORREU UM ERRO NA CHAMADA AO SERVIÇO"
+          }
+        },
+        "x-examples": {
+          "example-500": {
+            "code": "api-error",
+            "message": "OCORREU UM ERRO DURANTE O PROCESSAMENTO"
+          }
+        },
+        "description": "Campos de retorno para erros do tipo 5xx."
+      }
+    }
+  }
+}

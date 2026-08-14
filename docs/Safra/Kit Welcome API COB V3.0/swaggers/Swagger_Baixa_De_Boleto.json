@@ -1,0 +1,212 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Safra.COB.Baixa.Boleto",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.safranegocios.com.br/gateway/cobrancas/v1"
+    }
+  ],
+  "paths": {
+    "/realizarBaixaBoleto": {
+      "post": {
+        "tags": [
+          "BaixaBoleto"
+        ],
+        "parameters": [
+          {
+            "name": "Safra-Correlation-ID",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaixaBoletoEntrada"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaixaBoletoEntrada"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaixaBoletoEntrada"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaixaBoletoEntrada"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaixaBoletoSaidaSingleResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaixaBoletoSaidaSingleResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaixaBoletoSaidaSingleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BaixaBoletoEntrada": {
+        "required": [
+          "agencia",
+          "conta",
+          "numeroDoBoleto",
+          "seuNumero"
+        ],
+        "type": "object",
+        "properties": {
+          "agencia": {
+            "maximum": 99999,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int64"
+          },
+          "conta": {
+            "pattern": "^\\d\\d{1,9}$",
+            "type": "integer",
+            "format": "int64"
+          },
+          "numeroDoBoleto": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seuNumero": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "dadosBaixa": {
+            "$ref": "#/components/schemas/DadosBaixa"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaixaBoletoSaida": {
+        "type": "object",
+        "properties": {
+          "dadosBaixa": {
+            "$ref": "#/components/schemas/DadosBaixaSaida"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaixaBoletoSaidaSingleResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BaixaBoletoSaida"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosBaixa": {
+        "type": "object",
+        "properties": {
+          "indicadorBaixaBoleto": {
+            "$ref": "#/components/schemas/TipoIndicador"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DadosBaixaSaida": {
+        "type": "object",
+        "properties": {
+          "numeroDoBoleto": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seuNumero": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataBaix": {
+            "type": "string",
+            "nullable": true
+          },
+          "horarioBaix": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MessageItem": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TipoIndicador": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "apiKey",
+        "name": "Authorization",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}

@@ -12,7 +12,6 @@ import {
    calculaSaldoAnterior,
    excluiLancamento,
    insereLancamento,
-   listaLancamentosConta,
    listaLancamentosPeriodo,
 } from '../../../../lib/repositories/lancamentoRepository.js';
 import {
@@ -24,6 +23,10 @@ import {
    listaMovimentosConta,
    listaMovimentosPeriodo,
 } from '../../../../lib/repositories/movimentoRepository.js';
+import {
+   listaTitulosAbertos,
+   reabreTituloPorLancamento,
+} from '../../../../lib/repositories/tituloRepository.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,22 +64,29 @@ export async function GET(oRequisicao) {
          );
       }
 
-      const aLancamentos = bRecortaPeriodo
-         ? await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-         : await listaLancamentosConta(oConta.idConta);
+      // Os lançamentos do sistema SEMPRE respeitam o período (item 6.1.3.2:
+      // o botão Buscar "traz os lançamentos e movimentos já registrados no
+      // Satis" do período informado). Aqui a base é nossa e as datas são
+      // confiáveis, então o recorte é legítimo.
+      const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
       const nSaldoAnterior = await calculaSaldoAnterior(oConta.idConta, sDataInicio);
 
-      // Repovoa a grade do banco com o extrato importado. Sem recorte, todo o
-      // extrato da conta é devolvido — os bancos não respeitam necessariamente
-      // o período solicitado e filtrar aqui esconderia movimentos importados.
+      // A grade do banco continua trazendo todo o extrato importado por
+      // padrão: as instituições devolvem o extrato pelo próprio critério — o
+      // sandbox do Bradesco, por exemplo, ignora as datas enviadas e responde
+      // sempre out/2024 a jan/2025. Recortar aqui esconderia movimentos que
+      // foram efetivamente importados. Use recortaPeriodo=1 para forçar.
       const aMovimentos = bRecortaPeriodo
          ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
          : await listaMovimentosConta(oConta.idConta);
 
+      // Títulos abertos até o fim do período: alimentam a ação "Baixar Título"
+      const aTitulos = await listaTitulosAbertos(oConta.idConta, { sDataLimiteBr: sDataFim });
+
       return NextResponse.json({
          lancamentos: aLancamentos,
          movimentos: aMovimentos,
-         titulos: [],
+         titulos: aTitulos,
          conta: oConta,
          saldos: {
             valSaldoAnterior: nSaldoAnterior,
@@ -211,15 +221,33 @@ export async function DELETE(oRequisicao) {
          return NextResponse.json({ erro: oResultado.sMotivo }, { status: 409 });
       }
 
+      // Excluir a baixa devolve o título à relação de títulos em aberto,
+      // caso contrário ele desapareceria do Contas a Pagar/Receber sem ter
+      // sido efetivamente quitado
+      let iTitulosReabertos = 0;
+      if (oResultado.codTitulo) {
+         iTitulosReabertos = await reabreTituloPorLancamento(sCodLancamento);
+      }
+
+      const sDetalhe = oResultado.codTransferencia
+         ? `Transferência ${oResultado.codTransferencia} excluída: ${oResultado.iPernasExcluidas} lançamento(s) removido(s) nas duas contas.`
+         : `Lançamento ${sCodLancamento} excluído da conciliação.` +
+           (iTitulosReabertos > 0 ? ` Título ${oResultado.codTitulo} devolvido para "em aberto".` : '');
+
       await registraAuditoria({
          idConta: oConta.idConta,
          tipAcao: ACAO_LANCAMENTO_EXCLUIDO,
-         desEntidade: 'lancamento',
-         codEntidade: sCodLancamento,
-         desDetalhe: `Lançamento ${sCodLancamento} excluído da conciliação.`,
+         desEntidade: oResultado.codTransferencia ? 'transferencia' : 'lancamento',
+         codEntidade: oResultado.codTransferencia ?? sCodLancamento,
+         desDetalhe: sDetalhe,
       });
 
-      return NextResponse.json({ ok: true, mensagem: `Lançamento ${sCodLancamento} excluído.` });
+      return NextResponse.json({
+         ok: true,
+         codTransferencia: oResultado.codTransferencia ?? null,
+         iTitulosReabertos,
+         mensagem: sDetalhe,
+      });
    } catch (oErro) {
       console.error('[api/conciliacao/lancamentos] Falha ao excluir:', oErro);
       return NextResponse.json({ erro: oErro.message }, { status: 500 });

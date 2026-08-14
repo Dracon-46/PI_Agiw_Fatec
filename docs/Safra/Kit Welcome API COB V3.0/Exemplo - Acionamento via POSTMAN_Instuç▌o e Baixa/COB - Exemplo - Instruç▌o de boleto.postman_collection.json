@@ -1,0 +1,714 @@
+{
+	"info": {
+		"_postman_id": "3cfcbe98-92f1-4889-b7b5-28a63123fcb5",
+		"name": "COB - Exemplo - Instrução de boleto",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "46973918",
+		"_collection_link": " "
+	},
+	"item": [
+		{
+			"name": "NOVA DATA VENCIMENTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"numeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorNovaDataVencimento\": \"S\",\r\n        \"alteracaoData\": {\r\n            \"novaDataVencimento\": \"2026-08-13\"\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "NOVO VALOR NOMINAL",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"numeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorNovoValorNominal\": \"S\",\r\n        \"alteracaoValor\": {\r\n            \"novoValorNominal\": 100.50\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "CONCEDER DESCONTO EM PORCENTAGEM",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorConcederDesconto\": \"S\",\r\n        \"ConcederDesconto\": {\r\n            \"tipoDesconto\": \"P\",\r\n            \"dadosDesconto\": [\r\n                {\r\n                    \"percentualDesconto\": 1.01,\r\n                    \"dataDesconto\": \"2026-04-01\"\r\n                },\r\n                {\r\n                    \"percentualDesconto\": 2.02,\r\n                    \"dataDesconto\": \"2026-04-02\"\r\n                },\r\n                {\r\n                    \"percentualDesconto\": 3.03,\r\n                    \"dataDesconto\": \"2026-04-03\"\r\n                }\r\n            ]\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "DESCONTO POR DIAS CORRIDOS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960058188,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorDispensarJuros\": \"S\"\r\n    }\r\n        \"indicadorConcederDescontoPorDiasCorridos\": \"S\",\r\n        \"ConcederDescontoPorDiasCorridos\": {\r\n            \"tipoDescontoPorDiasCorridos\": \"V\",\r\n            \"ValorDescontoPorDiasCorridos\": 10.1,\r\n            \"PercentualDescontoPorDiasCorridos\": 0.0\r\n        }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "CANCELAR DESCONTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCancelarDesconto\": \"S\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "CONCEDER ABATIMENTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "CANCELAR ABATIMENTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "CANCELAR MULTA",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorDispensarMulta\": \"S\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "COBRAR MULTA",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "COBRAR JUROS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "DISPENSAR JUROS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "PROTESTAR SEM MAIS CONSULTAS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "NAO PROTESTAR AUTOMATICAMENTE",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "PROTESTAR XX DIAS DO VENCIMENTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "SUSTAR PROTESTO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "NEGATIVAR",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "EXCLUIR NEGATIVAR",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "NAO NEGATIVAR AUTOMÁTICO",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		},
+		{
+			"name": "BAIXAR APOS XX DIAS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Safra-Correlation-ID",
+						"value": "1",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlNzgwZDA4YWFiNTE0OGFlYmMwNmQyYjk5MzdkZmY5NCIsInVzZXJfbmFtZSI6IlRSQU5TIDE1IiwiY2xpZW50X2lkIjoiNjA3MDRlYmUyOWYyNzcwMDBmZTk2YjVjIiwic2hvcnRuYW1lIjoiVFJBTlMgMTUwIiwibmJmIjoxNzU0NTkzNzQxLCJleHAiOjE3NTQ1OTQ5ODEsImlhdCI6MTc1NDU5Mzc4MSwiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.KyirbxetsCWTHG9bk3OVNn2pTOnKlI8lfxRsL1eq_p8",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"agencia\": 9700,\r\n    \"conta\": 5816276,\r\n    \"NumeroDoBoleto\": 960055337,\r\n    \"seuNumero\": \"75955121\",\r\n    \"dadosInstrucao\": {\r\n        \"indicadorCobrarMulta\": \"S\",\r\n        \"multa\": {\r\n            \"taxaMulta\": 1.11\r\n        }\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "https://api-hml.safranegocios.com.br/gateway/cobrancas-instrucao/v1/realizarInstrucaoBoleto"
+			},
+			"response": []
+		}
+	]
+}

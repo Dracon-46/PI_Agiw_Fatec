@@ -8,6 +8,23 @@ import { dataBrParaMysql, dataMysqlParaBr, query } from '../db.js';
 /** Origem atribuída aos lançamentos criados dentro da própria conciliação */
 export const ORIGEM_CONCILIACAO = 'Conciliação';
 
+/** Origem dos lançamentos gerados por transferência entre contas */
+export const ORIGEM_TRANSFERENCIA = 'Transferência';
+
+/** Origem dos lançamentos gerados pela baixa de um título */
+export const ORIGEM_BAIXA_TITULO = 'Baixa de Título';
+
+/**
+ * Origens nascidas dentro do módulo de conciliação.
+ *
+ * O item 6.1.3.8 — ação 4 permite excluir apenas o lançamento "com origem na
+ * própria conciliação". Além do lançamento avulso, isso abrange a transferência
+ * entre contas e a baixa de título: as três são criadas nesta tela. Já os
+ * lançamentos vindos do Contas a Pagar/Receber pertencem ao Satis e não podem
+ * ser removidos por aqui.
+ */
+export const ORIGENS_EXCLUIVEIS = [ORIGEM_CONCILIACAO, ORIGEM_TRANSFERENCIA, ORIGEM_BAIXA_TITULO];
+
 /**
  * Gera o código de um novo lançamento originado na conciliação.
  * @param {number} iIdConta
@@ -41,7 +58,9 @@ export async function listaLancamentosPeriodo(iIdConta, sDataInicioBr, sDataFimB
               l.val_movimento AS valMovimento,
               l.b_entrada AS bEntrada,
               l.tip_origem AS tipOrigem,
-              l.sta_conciliado AS staConciliado
+              l.sta_conciliado AS staConciliado,
+              l.cod_transferencia AS codTransferencia,
+              l.cod_titulo AS codTitulo
          FROM lancamento_sistema l
          INNER JOIN conta_corrente c ON c.id_conta = l.id_conta
         WHERE l.id_conta = :idConta
@@ -85,7 +104,9 @@ export async function listaLancamentosConta(iIdConta) {
               l.val_movimento AS valMovimento,
               l.b_entrada AS bEntrada,
               l.tip_origem AS tipOrigem,
-              l.sta_conciliado AS staConciliado
+              l.sta_conciliado AS staConciliado,
+              l.cod_transferencia AS codTransferencia,
+              l.cod_titulo AS codTitulo
          FROM lancamento_sistema l
          INNER JOIN conta_corrente c ON c.id_conta = l.id_conta
         WHERE l.id_conta = :idConta
@@ -155,10 +176,12 @@ export async function insereLancamento(iIdConta, oLancamento) {
    await query(
       `INSERT INTO lancamento_sistema
          (id_conta, cod_lancamento, dat_movimento, dat_compensacao, num_documento,
-          des_historico, val_movimento, b_entrada, tip_origem, sta_conciliado)
+          des_historico, val_movimento, b_entrada, tip_origem, sta_conciliado,
+          cod_transferencia, cod_titulo)
        VALUES
          (:idConta, :codLancamento, :datMovimento, :datCompensacao, :numDocumento,
-          :desHistorico, :valMovimento, :bEntrada, :tipOrigem, :staConciliado)
+          :desHistorico, :valMovimento, :bEntrada, :tipOrigem, :staConciliado,
+          :codTransferencia, :codTitulo)
        ON DUPLICATE KEY UPDATE
          dat_movimento = VALUES(dat_movimento),
          dat_compensacao = VALUES(dat_compensacao),
@@ -166,7 +189,9 @@ export async function insereLancamento(iIdConta, oLancamento) {
          des_historico = VALUES(des_historico),
          val_movimento = VALUES(val_movimento),
          b_entrada = VALUES(b_entrada),
-         tip_origem = VALUES(tip_origem)`,
+         tip_origem = VALUES(tip_origem),
+         cod_transferencia = VALUES(cod_transferencia),
+         cod_titulo = VALUES(cod_titulo)`,
       {
          idConta: iIdConta,
          codLancamento: sCodigo,
@@ -178,6 +203,8 @@ export async function insereLancamento(iIdConta, oLancamento) {
          bEntrada: oLancamento.bEntrada ? 1 : 0,
          tipOrigem: oLancamento.tipOrigem || ORIGEM_CONCILIACAO,
          staConciliado: oLancamento.staConciliado ? 1 : 0,
+         codTransferencia: oLancamento.codTransferencia || null,
+         codTitulo: oLancamento.codTitulo || null,
       }
    );
 
@@ -191,6 +218,8 @@ export async function insereLancamento(iIdConta, oLancamento) {
       bEntrada: Boolean(oLancamento.bEntrada),
       tipOrigem: oLancamento.tipOrigem || ORIGEM_CONCILIACAO,
       staConciliado: Boolean(oLancamento.staConciliado),
+      codTransferencia: oLancamento.codTransferencia || null,
+      codTitulo: oLancamento.codTitulo || null,
    };
 } // insereLancamento
 
@@ -206,7 +235,10 @@ export async function insereLancamento(iIdConta, oLancamento) {
  */
 export async function excluiLancamento(iIdConta, sCodLancamento) {
    const aLinhas = await query(
-      `SELECT sta_conciliado AS staConciliado, tip_origem AS tipOrigem
+      `SELECT sta_conciliado AS staConciliado,
+              tip_origem AS tipOrigem,
+              cod_transferencia AS codTransferencia,
+              cod_titulo AS codTitulo
          FROM lancamento_sistema
         WHERE id_conta = :idConta AND cod_lancamento = :codLancamento`,
       { idConta: iIdConta, codLancamento: sCodLancamento }
@@ -222,10 +254,42 @@ export async function excluiLancamento(iIdConta, sCodLancamento) {
          sMotivo: 'Lançamento conciliado não pode ser excluído. Estorne a conciliação antes.',
       };
    }
-   if (oLancamento.tipOrigem !== ORIGEM_CONCILIACAO) {
+   if (!ORIGENS_EXCLUIVEIS.includes(oLancamento.tipOrigem)) {
       return {
          bExcluido: false,
          sMotivo: `Somente lançamentos originados na conciliação podem ser excluídos (origem atual: ${oLancamento.tipOrigem}).`,
+      };
+   }
+
+   // A transferência entre contas é um par indivisível: excluir só uma perna
+   // deixaria o caixa da outra conta com um movimento sem contrapartida.
+   if (oLancamento.codTransferencia) {
+      const aPernas = await query(
+         `SELECT cod_lancamento AS codLancamento, sta_conciliado AS staConciliado
+            FROM lancamento_sistema
+           WHERE cod_transferencia = :codTransferencia`,
+         { codTransferencia: oLancamento.codTransferencia }
+      );
+
+      const oConciliada = aPernas.find((oPerna) => oPerna.staConciliado);
+      if (oConciliada) {
+         return {
+            bExcluido: false,
+            sMotivo:
+               `A contrapartida desta transferência (${oConciliada.codLancamento}) está conciliada. ` +
+               'Estorne a conciliação das duas contas antes de excluir.',
+         };
+      }
+
+      await query(`DELETE FROM lancamento_sistema WHERE cod_transferencia = :codTransferencia`, {
+         codTransferencia: oLancamento.codTransferencia,
+      });
+
+      return {
+         bExcluido: true,
+         sMotivo: '',
+         iPernasExcluidas: aPernas.length,
+         codTransferencia: oLancamento.codTransferencia,
       };
    }
 
@@ -234,8 +298,74 @@ export async function excluiLancamento(iIdConta, sCodLancamento) {
       { idConta: iIdConta, codLancamento: sCodLancamento }
    );
 
-   return { bExcluido: true, sMotivo: '' };
+   return { bExcluido: true, sMotivo: '', codTitulo: oLancamento.codTitulo ?? null };
 } // excluiLancamento
+
+/**
+ * Gera o código que identifica as duas pernas de uma transferência.
+ * A sequência é global: o mesmo código aparece nas duas contas envolvidas.
+ * @returns {Promise<string>} Código no formato "TR-000001"
+ */
+export async function geraProximoCodigoTransferencia() {
+   const aLinhas = await query(
+      `SELECT COUNT(DISTINCT cod_transferencia) AS total
+         FROM lancamento_sistema
+        WHERE cod_transferencia IS NOT NULL`
+   );
+   const iSequencia = Number(aLinhas[0]?.total ?? 0) + 1;
+   return `TR-${String(iSequencia).padStart(6, '0')}`;
+} // geraProximoCodigoTransferencia
+
+/**
+ * Registra uma transferência entre contas, gerando simultaneamente o
+ * lançamento de saída (débito) e o de entrada (crédito).
+ *
+ * Item 6.1.3.8 — ação 2 do documento de visão: "Abrir caixa para informar o
+ * banco/agência(conta) de contrapartida do movimento e gerar tanto o
+ * lançamento de débito como o de crédito."
+ *
+ * @param {object} oTransferencia
+ * @param {number} oTransferencia.iIdContaSaida Conta debitada
+ * @param {number} oTransferencia.iIdContaEntrada Conta creditada
+ * @param {string} oTransferencia.sDatMovimento Data (DD/MM/AAAA)
+ * @param {string} [oTransferencia.sNumDocumento]
+ * @param {string} oTransferencia.sDesHistorico
+ * @param {number} oTransferencia.nValor Valor absoluto transferido
+ * @param {string} [oTransferencia.sDesContaSaida] Identificação legível
+ * @param {string} [oTransferencia.sDesContaEntrada] Identificação legível
+ * @returns {Promise<{ sCodTransferencia: string, oSaida: object, oEntrada: object }>}
+ */
+export async function insereTransferencia(oTransferencia) {
+   const sCodTransferencia = await geraProximoCodigoTransferencia();
+
+   const oBase = {
+      datMovimento: oTransferencia.sDatMovimento,
+      datCompensacao: oTransferencia.sDatMovimento,
+      numDocumento: oTransferencia.sNumDocumento || '',
+      valMovimento: Math.abs(Number(oTransferencia.nValor)),
+      tipOrigem: ORIGEM_TRANSFERENCIA,
+      codTransferencia: sCodTransferencia,
+   };
+
+   // Cada perna cita a conta oposta, para que a grade explique o movimento
+   const oSaida = await insereLancamento(oTransferencia.iIdContaSaida, {
+      ...oBase,
+      desHistorico:
+         `${oTransferencia.sDesHistorico} — transferência para ` +
+         `${oTransferencia.sDesContaEntrada || 'conta de destino'}`,
+      bEntrada: false,
+   });
+
+   const oEntrada = await insereLancamento(oTransferencia.iIdContaEntrada, {
+      ...oBase,
+      desHistorico:
+         `${oTransferencia.sDesHistorico} — transferência de ` +
+         `${oTransferencia.sDesContaSaida || 'conta de origem'}`,
+      bEntrada: true,
+   });
+
+   return { sCodTransferencia, oSaida, oEntrada };
+} // insereTransferencia
 
 /**
  * Grava o status de conciliação de um conjunto de lançamentos.

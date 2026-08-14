@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Landmark, Plus } from 'lucide-react';
 import { Modal } from './Modal.jsx';
+import { CampoData } from './CampoData.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
 import { bancosDisponiveis } from '../../utils/mockData.js';
 
@@ -170,16 +171,12 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
                />
             </label>
 
-            <label className="campo">
-               <span className="campo-rotulo">Data do último bloqueio</span>
-               <input
-                  type="text"
-                  className="campo-controle"
-                  placeholder="DD/MM/AAAA — início do período = dia seguinte"
-                  value={oForm.datUltimoBloqueio}
-                  onChange={(oEvento) => alteraCampo('datUltimoBloqueio', oEvento.target.value)}
-               />
-            </label>
+            <CampoData
+               rotulo="Data do último bloqueio"
+               valor={oForm.datUltimoBloqueio}
+               aoAlterar={(sData) => alteraCampo('datUltimoBloqueio', sData)}
+               titulo="O período da tela de conciliação começa no dia seguinte a esta data"
+            />
          </div>
       </Modal>
    );

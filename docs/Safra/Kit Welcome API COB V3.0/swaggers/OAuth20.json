@@ -1,0 +1,142 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "API OAuth 2.0",
+    "version": "v2.1",
+    "contact": {
+      "name": "Central de Suporte Pessoa Jurídica",
+      "email": "mesa.implantacao@safra.com.br"
+    },
+    "license": {
+      "name": "Banco Safra"
+    },
+    "description": "API responsável pela geração de token no servidor OAuth 2.0  "
+  },
+  "servers": [
+    {
+      "url": "https://api.safranegocios.com.br/gateway/oauth2"
+    }
+  ],
+  "paths": {
+    "/token": {
+      "post": {
+        "tags": [
+          "Token"
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "description": "Identificador do cliente",
+                    "example": "5db2e7e4482c81000e4b3680"
+                  },
+                  "username": {
+                    "type": "string",
+                    "description": "Nome de usuário do cliente",
+                    "example": "user_test"
+                  },
+                  "refresh_token": {
+                    "type": "string",
+                    "description": "Hash para atualizar o token com mais 6 minutos",
+                    "example": "f170e245-1070-4316-9750-a27c0a2f3082"
+                  },
+                  "grant_type": {
+                    "type": "string",
+                    "description": "Tipo de autenticação",
+                    "example": "password"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Senha do cliente",
+                    "example": "4234ff32423"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "username",
+                  "grant_type",
+                  "password"
+                ]
+              },
+              "encoding": {
+                "client_id": {
+                  "style": "form"
+                },
+                "username": {
+                  "style": "form"
+                },
+                "password": {
+                  "style": "form"
+                },
+                "refresh_token": {
+                  "style": "form"
+                },
+                "grant_type": {
+                  "style": "form"
+                }
+              }
+            }
+          },
+          "description": "Informações de entrada para geração do token."
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/token"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Geração de Token",
+        "description": "Endpoint responsável por gerar um token de autenticação a partir das credenciais do parceiro.",
+        "operationId": "POST"
+      },
+      "parameters": []
+    }
+  },
+  "components": {
+    "schemas": {
+      "token": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Token para acessar rotas do Gateway",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxNWI5ZWM2MTg0NTA0Nzc5YWRjMzk5MWI4ODdmMGNhNSIsInVzZXJfaWQiOiI1ZGIyZTg2ZDQ4MmM4MTAwMGU0YjM2ODEiLCJ1c2VyX25hbWUiOiJESUFSSU8gUCIsImNsaWVudF9pZCI6IjVkYjJlN2U0NDgyYzgxMDAwZTRiMzY4MCIsInNob3J0bmFtZSI6IkRJQVJJTyBQT1BVTEFSIiwibmJmIjoxNTcyMjkzOTA3LCJleHAiOjE1NzIzMTU1MDcsImlhdCI6MTU3MjI5MzkwNywiaXNzIjoiU2FmcmFJc3N1ZXIiLCJhdWQiOiJTYWZyYUF1ZGllbmNlIn0.fzqzVq_B3TtLmS1j3kcczQCF6CqUn1h0Qikf85UbEdM"
+          },
+          "token_type": {
+            "type": "string",
+            "description": "Tipo de token utilizado",
+            "example": "Bearer"
+          },
+          "expires_in": {
+            "type": "number",
+            "description": "Tempo de validade do token em segundos",
+            "example": 3600
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Token para refresh da validade",
+            "format": "Ztq6BFIubimiE/GDQYMhyCQi5zS9IpEo/VyzgV+Cizw="
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token"
+        ],
+        "description": "Informações relacionadas ao token de acesso.",
+        "title": "Token"
+      }
+    }
+  }
+}

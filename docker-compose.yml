@@ -1,0 +1,70 @@
+# =============================================================================
+# docker-compose.yml - Aplicação + MySQL
+# Projeto Banco - Ticket 37060 | Agiw Sistemas
+#
+# Sobe o módulo completo em um comando, tanto na máquina do desenvolvedor
+# quanto na EC2 do laboratório da AWS:
+#
+#   docker compose up -d --build
+#   docker compose exec app node scripts/init-db.mjs
+#   docker compose exec app node scripts/seed-demo.mjs
+#
+# As credenciais vêm do .env do diretório (não versionado). Em produção,
+# prefira um MySQL gerenciado (RDS) e remova o serviço "mysql" daqui.
+# =============================================================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: conciliacao-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-conciliacao}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-conciliacao_agiw}
+    # A porta só é publicada para depuração local; em servidor, comente
+    ports:
+      - '3306:3306'
+    volumes:
+      - dados-mysql:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-p${MYSQL_PASSWORD:-conciliacao}']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    container_name: conciliacao-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # Dentro da rede do compose o host do banco é o nome do serviço
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-conciliacao}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-conciliacao_agiw}
+      BANK_PROVIDER: ${BANK_PROVIDER:-bradesco}
+      SAFRA_API_URL: ${SAFRA_API_URL:-}
+      SAFRA_CLIENT_ID: ${SAFRA_CLIENT_ID:-}
+      SAFRA_USERNAME: ${SAFRA_USERNAME:-}
+      SAFRA_PASSWORD: ${SAFRA_PASSWORD:-}
+      SAFRA_AGENCIA: ${SAFRA_AGENCIA:-}
+      SAFRA_CONTA: ${SAFRA_CONTA:-}
+      SAFRA_EXTRATO_PATH: ${SAFRA_EXTRATO_PATH:-}
+      BRADESCO_CLIENT_ID: ${BRADESCO_CLIENT_ID:-}
+      BRADESCO_CLIENT_SECRET: ${BRADESCO_CLIENT_SECRET:-}
+      BRADESCO_BASE_URL: ${BRADESCO_BASE_URL:-}
+      BRADESCO_API_URL: ${BRADESCO_API_URL:-}
+      BRADESCO_CERT_PATH: ${BRADESCO_CERT_PATH:-}
+      BRADESCO_KEY_PATH: ${BRADESCO_KEY_PATH:-}
+    ports:
+      - '3000:3000'
+    volumes:
+      # Certificados mTLS entram por volume, nunca dentro da imagem
+      - ./certs:/app/certs:ro
+
+volumes:
+  dados-mysql:

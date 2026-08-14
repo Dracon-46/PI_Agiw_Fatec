@@ -20,6 +20,57 @@ export const FORMATO_XLSX = 'xlsx';
 export const FORMATO_CSV = 'csv';
 export const FORMATO_PDF = 'pdf';
 
+/**
+ * Escopos de exportação — item 6.2: "exportar os extratos (bancário ou Satis)".
+ */
+export const ESCOPO_AMBOS = 'ambos';
+export const ESCOPO_SISTEMA = 'sistema';
+export const ESCOPO_BANCO = 'banco';
+
+/** Escopos aceitos pelo parâmetro "escopo" */
+export const ESCOPOS_VALIDOS = [ESCOPO_AMBOS, ESCOPO_SISTEMA, ESCOPO_BANCO];
+
+/**
+ * Monta os blocos que serão impressos, conforme o escopo escolhido.
+ *
+ * Cada bloco vira uma aba no Excel, uma seção no CSV e uma tabela no PDF,
+ * sempre com saldo inicial, movimentos e saldo final (item 6.2).
+ *
+ * @param {object} oDados
+ * @param {string} oDados.sEscopo Um dos ESCOPOS_VALIDOS
+ * @param {object} oDados.oConta
+ * @param {Array<object>} oDados.aLancamentos
+ * @param {Array<object>} oDados.aMovimentos
+ * @param {number} oDados.nSaldoAnterior Saldo do sistema no início do período
+ * @returns {Array<{ sTitulo: string, sAba: string, aItens: Array<object>, nSaldoAnterior: number }>}
+ */
+export function montaBlocos(oDados) {
+   const sEscopo = ESCOPOS_VALIDOS.includes(oDados.sEscopo) ? oDados.sEscopo : ESCOPO_AMBOS;
+   const aBlocos = [];
+
+   if (sEscopo === ESCOPO_AMBOS || sEscopo === ESCOPO_SISTEMA) {
+      aBlocos.push({
+         sTitulo: 'Extrato do Sistema (Satis)',
+         sAba: 'Extrato do Sistema',
+         aItens: oDados.aLancamentos ?? [],
+         nSaldoAnterior: oDados.nSaldoAnterior ?? 0,
+      });
+   }
+
+   if (sEscopo === ESCOPO_AMBOS || sEscopo === ESCOPO_BANCO) {
+      aBlocos.push({
+         sTitulo: `Extrato do Banco (${oDados.oConta?.nomBanco ?? 'instituição'})`,
+         sAba: 'Extrato do Banco',
+         // O extrato bancário parte do saldo informado pela própria instituição;
+         // sem esse dado na base, o bloco começa em zero e soma o período
+         aItens: oDados.aMovimentos ?? [],
+         nSaldoAnterior: 0,
+      });
+   }
+
+   return aBlocos;
+} // montaBlocos
+
 /** Cor de destaque usada nos cabeçalhos (padrão de interface: #3B82F6) */
 const COR_DESTAQUE = 'FF3B82F6';
 
@@ -31,9 +82,10 @@ const MASCARA_MOEDA = '#,##0.00';
  * @param {object} oConta Conta corrente conciliada
  * @param {string} sDataInicio Data inicial do período
  * @param {string} sDataFim Data final do período
+ * @param {{ sDescricaoEscopo: string, sDescricaoStatus: string }} [oFiltros] Filtros das grades
  * @returns {string[]} Linhas descritivas
  */
-export function montaCabecalhoFiltros(oConta, sDataInicio, sDataFim) {
+export function montaCabecalhoFiltros(oConta, sDataInicio, sDataFim, oFiltros) {
    const aLinhas = [
       'Agiw Sistemas — Conciliação Bancária (Ticket 37060)',
       `Banco: ${oConta.codBanco} - ${oConta.nomBanco}`,
@@ -55,8 +107,47 @@ export function montaCabecalhoFiltros(oConta, sDataInicio, sDataFim) {
       `Conta bloqueada para lançamentos até: ${oConta.datUltimoBloqueio || 'sem bloqueio'}`
    );
 
+   // Os filtros das grades também são filtros do relatório e precisam aparecer
+   // no cabeçalho, conforme o padrão de relatórios da Agiw
+   if (oFiltros) {
+      aLinhas.push(`Conteúdo exportado: ${oFiltros.sDescricaoEscopo}`);
+      aLinhas.push(`Situação incluída: ${oFiltros.sDescricaoStatus}`);
+   }
+
    return aLinhas;
 } // montaCabecalhoFiltros
+
+/**
+ * Descreve, em texto, os filtros de situação aplicados às grades.
+ * @param {object} oFiltros
+ * @param {boolean} oFiltros.bConciliados
+ * @param {boolean} oFiltros.bNaoConciliados
+ * @returns {string}
+ */
+export function descreveFiltroStatus({ bConciliados, bNaoConciliados }) {
+   if (bConciliados && bNaoConciliados) {
+      return 'conciliados e não conciliados';
+   }
+   if (bConciliados) {
+      return 'somente conciliados';
+   }
+   if (bNaoConciliados) {
+      return 'somente não conciliados';
+   }
+   return 'nenhuma situação selecionada';
+} // descreveFiltroStatus
+
+/**
+ * Aplica à lista o mesmo recorte de situação usado nos chips das grades
+ * (item 6.1.3.4), para que o relatório imprima "os registros exibidos".
+ * @param {Array<object>} aItens
+ * @param {boolean} bConciliados
+ * @param {boolean} bNaoConciliados
+ * @returns {Array<object>}
+ */
+export function filtraPorStatus(aItens, bConciliados, bNaoConciliados) {
+   return (aItens ?? []).filter((oItem) => (oItem.staConciliado ? bConciliados : bNaoConciliados));
+} // filtraPorStatus
 
 /**
  * Calcula os totalizadores exigidos no relatório.
@@ -213,10 +304,16 @@ export async function geraExcel(oDados) {
    oLivro.creator = 'Agiw Sistemas — Conciliação Bancária';
    oLivro.created = new Date();
 
-   const aCabecalho = montaCabecalhoFiltros(oDados.oConta, oDados.sDataInicio, oDados.sDataFim);
+   const aCabecalho = montaCabecalhoFiltros(
+      oDados.oConta,
+      oDados.sDataInicio,
+      oDados.sDataFim,
+      oDados.oFiltros
+   );
 
-   adicionaAba(oLivro, 'Extrato do Sistema', aCabecalho, oDados.aLancamentos, oDados.nSaldoAnterior);
-   adicionaAba(oLivro, 'Extrato do Banco', aCabecalho, oDados.aMovimentos, 0);
+   for (const oBloco of montaBlocos(oDados)) {
+      adicionaAba(oLivro, oBloco.sAba, aCabecalho, oBloco.aItens, oBloco.nSaldoAnterior);
+   }
 
    const oBuffer = await oLivro.xlsx.writeBuffer();
    return Buffer.from(oBuffer);
@@ -247,26 +344,26 @@ function protegeCampoCsv(oValor) {
 export function geraCsv(oDados) {
    const aLinhas = [];
 
-   for (const sLinha of montaCabecalhoFiltros(oDados.oConta, oDados.sDataInicio, oDados.sDataFim)) {
+   for (const sLinha of montaCabecalhoFiltros(
+      oDados.oConta,
+      oDados.sDataInicio,
+      oDados.sDataFim,
+      oDados.oFiltros
+   )) {
       aLinhas.push(protegeCampoCsv(sLinha));
    }
 
-   const aBlocos = [
-      { sTitulo: 'EXTRATO DO SISTEMA', aItens: oDados.aLancamentos, nSaldo: oDados.nSaldoAnterior },
-      { sTitulo: 'EXTRATO DO BANCO', aItens: oDados.aMovimentos, nSaldo: 0 },
-   ];
-
-   for (const oBloco of aBlocos) {
+   for (const oBloco of montaBlocos(oDados)) {
       aLinhas.push('');
-      aLinhas.push(oBloco.sTitulo);
-      aLinhas.push(`Saldo anterior;${protegeCampoCsv(oBloco.nSaldo)}`);
+      aLinhas.push(protegeCampoCsv(oBloco.sTitulo.toUpperCase()));
+      aLinhas.push(`Saldo anterior;${protegeCampoCsv(oBloco.nSaldoAnterior)}`);
       aLinhas.push(COLUNAS.join(';'));
 
       for (const oItem of oBloco.aItens) {
          aLinhas.push(montaLinha(oItem).map(protegeCampoCsv).join(';'));
       }
 
-      const oTotais = calculaTotais(oBloco.aItens, oBloco.nSaldo);
+      const oTotais = calculaTotais(oBloco.aItens, oBloco.nSaldoAnterior);
       aLinhas.push(`Total de entradas;;;;${protegeCampoCsv(oTotais.valEntradas)}`);
       aLinhas.push(`Total de saídas;;;;;${protegeCampoCsv(oTotais.valSaidas)}`);
       aLinhas.push(`Saldo final;;;;${protegeCampoCsv(oTotais.valSaldoFinal)}`);
@@ -357,7 +454,15 @@ function montaTabelaHtml(sTitulo, aItens, nSaldoAnterior) {
  * @returns {string} Documento HTML completo
  */
 export function geraHtmlImpressao(oDados) {
-   const aCabecalho = montaCabecalhoFiltros(oDados.oConta, oDados.sDataInicio, oDados.sDataFim);
+   const aCabecalho = montaCabecalhoFiltros(
+      oDados.oConta,
+      oDados.sDataInicio,
+      oDados.sDataFim,
+      oDados.oFiltros
+   );
+   const sTabelas = montaBlocos(oDados)
+      .map((oBloco) => montaTabelaHtml(oBloco.sTitulo, oBloco.aItens, oBloco.nSaldoAnterior))
+      .join('\n');
 
    return `<!doctype html>
 <html lang="pt-BR">
@@ -398,8 +503,7 @@ export function geraHtmlImpressao(oDados) {
    Use <strong>Ctrl+P</strong> e escolha <strong>&quot;Salvar como PDF&quot;</strong> para gerar o arquivo.
 </div>
 
-${montaTabelaHtml('Extrato do Sistema (Satis)', oDados.aLancamentos, oDados.nSaldoAnterior)}
-${montaTabelaHtml(`Extrato do Banco (${escapaHtml(oDados.oConta.nomBanco)})`, oDados.aMovimentos, 0)}
+${sTabelas}
 
 <footer>
    Agiw Sistemas — Módulo Conciliação Bancária | Ticket 37060.

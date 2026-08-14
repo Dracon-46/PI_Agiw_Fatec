@@ -10,15 +10,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+   baixaTitulosApi,
    buscaLancamentosSistema,
+   criaTransferenciaApi,
    excluiLancamentoApi,
+   excluiMovimentoApi,
    executaConciliacaoAutomatica,
+   gravaBloqueioApi,
    gravaConciliacaoApi,
    importaExtratoBanco,
    incluiLancamentoApi,
 } from '../services/conciliacaoService.js';
 import { calculaDiferenca } from '../utils/subsetSum.js';
 import { comparaDatas, formataDataBr, somaDiasData } from '../utils/formatters.js';
+import {
+   PERIODO_PADRAO_FIM,
+   PERIODO_PADRAO_INICIO,
+   temPeriodoPadraoFixo,
+} from '../utils/configPeriodo.js';
 import { ORIGEM_CONCILIACAO } from '../utils/mockData.js';
 
 /** Situações possíveis da seleção corrente nas grades */
@@ -30,10 +39,19 @@ export const SELECAO_NAO_CONCILIADA = false;
  * Calcula o período inicial da tela: data inicial é a data de bloqueio + 1
  * e a data final é a data do dia - 1 (item 6.1.3.2 do documento de visão).
  * Sem bloqueio cadastrado, usa os últimos 30 dias para não abrir a tela vazia.
+ *
+ * Quando há um período fixo configurado no .env, ele tem precedência: os
+ * ambientes de homologação só respondem para janelas específicas de datas, e
+ * abrir a tela na data corrente deixaria as grades vazias sem erro aparente.
+ *
  * @param {string} sDatUltimoBloqueio Data do último bloqueio (DD/MM/AAAA)
  * @returns {{ sDataInicio: string, sDataFim: string }}
  */
 export function calculaPeriodoInicial(sDatUltimoBloqueio) {
+   if (temPeriodoPadraoFixo()) {
+      return { sDataInicio: PERIODO_PADRAO_INICIO, sDataFim: PERIODO_PADRAO_FIM };
+   }
+
    const sDataFim = somaDiasData(formataDataBr(new Date()), -1);
    const sDataInicio = sDatUltimoBloqueio
       ? somaDiasData(sDatUltimoBloqueio, 1)
@@ -177,6 +195,9 @@ export function useConciliacao(oConta, notifica) {
          setMovimentos(oRetorno.movimentos ?? []);
          setTitulos(oRetorno.titulos ?? []);
          setSaldos(oRetorno.saldos ?? { valSaldoAnterior: 0, valSaldoFinal: 0 });
+         // O bloqueio pode ter sido alterado em outra sessão; a busca é o
+         // momento natural de trazer o valor corrente da base
+         setDatBloqueio(oRetorno.conta?.datUltimoBloqueio ?? '');
          limpaSelecao();
 
          const iTotal = (oRetorno.lancamentos?.length ?? 0) + (oRetorno.movimentos?.length ?? 0);
@@ -502,12 +523,21 @@ export function useConciliacao(oConta, notifica) {
 
    /**
     * Grava a data de bloqueio da conta (item 6.1.3.1).
-    * A data informada deve ser anterior à data do dia.
+    *
+    * A data informada deve ser anterior à data do dia. A gravação é
+    * persistida em conta_corrente: antes o bloqueio existia só no estado da
+    * tela e se perdia ao recarregar, deixando passar lançamentos em período
+    * já fechado.
+    *
     * @param {string} sNovaData Data de bloqueio (DD/MM/AAAA)
-    * @returns {boolean} true quando o bloqueio é aplicado
+    * @returns {Promise<boolean>} true quando o bloqueio é aplicado
     */
    const aplicaBloqueio = useCallback(
-      (sNovaData) => {
+      async (sNovaData) => {
+         if (!oConta) {
+            notifica('Selecione a conta corrente antes de bloquear o período.', 'alerta');
+            return false;
+         }
          if (!sNovaData) {
             notifica('Informe a data de bloqueio.', 'alerta');
             return false;
@@ -517,18 +547,35 @@ export function useConciliacao(oConta, notifica) {
             return false;
          }
 
-         setDatBloqueio(sNovaData);
-         notifica(`Conta bloqueada para lançamentos até ${sNovaData}.`, 'sucesso');
-         return true;
+         try {
+            const oRetorno = await gravaBloqueioApi(oConta.codConta, sNovaData);
+            setDatBloqueio(oRetorno.datUltimoBloqueio);
+            notifica(oRetorno.mensagem, 'sucesso');
+            return true;
+         } catch (oErro) {
+            notifica(oErro.message, 'erro');
+            return false;
+         }
       },
-      [notifica]
+      [oConta, notifica]
    );
 
    /** Remove o bloqueio da conta (item 6.1.3.1). */
-   const removeBloqueio = useCallback(() => {
-      setDatBloqueio('');
-      notifica('Bloqueio removido. A conta aceita lançamentos em todo o período.', 'sucesso');
-   }, [notifica]);
+   const removeBloqueio = useCallback(async () => {
+      if (!oConta) {
+         return false;
+      }
+
+      try {
+         const oRetorno = await gravaBloqueioApi(oConta.codConta, '');
+         setDatBloqueio('');
+         notifica(oRetorno.mensagem, 'sucesso');
+         return true;
+      } catch (oErro) {
+         notifica(oErro.message, 'erro');
+         return false;
+      }
+   }, [oConta, notifica]);
 
    /**
     * Indica se uma data está dentro do período bloqueado.
@@ -593,18 +640,31 @@ export function useConciliacao(oConta, notifica) {
             return;
          }
 
-         // A exclusão de movimentos do banco vale apenas na sessão: o extrato
-         // permanece no histórico, podendo ser recarregado pelo botão Buscar
+         // Movimentos do banco também são excluídos no MySQL: antes a remoção
+         // valia só na sessão e o registro voltava ao clicar em Buscar
          if (sGrade !== 'lancamento') {
-            setMovimentos((aAtuais) => aAtuais.filter((oItem) => oItem.codMovimento !== oRegistro.codMovimento));
-            limpaSelecao();
-            notifica('Movimento removido da grade.', 'sucesso');
+            try {
+               const oRetorno = await excluiMovimentoApi(oConta.codConta, oRegistro.codMovimento);
+               setMovimentos((aAtuais) =>
+                  aAtuais.filter((oItem) => oItem.codMovimento !== oRegistro.codMovimento)
+               );
+               limpaSelecao();
+               notifica(oRetorno.mensagem, 'sucesso');
+            } catch (oErro) {
+               notifica(oErro.message, 'erro');
+            }
             return;
          }
 
          try {
             const oRetorno = await excluiLancamentoApi(oConta.codConta, oRegistro.codLancamento);
-            setLancamentos((aAtuais) => aAtuais.filter((oItem) => oItem.codLancamento !== oRegistro.codLancamento));
+
+            setLancamentos((aAtuais) =>
+               // Excluir uma perna de transferência remove o par inteiro
+               oRetorno.codTransferencia
+                  ? aAtuais.filter((oItem) => oItem.codTransferencia !== oRetorno.codTransferencia)
+                  : aAtuais.filter((oItem) => oItem.codLancamento !== oRegistro.codLancamento)
+            );
             limpaSelecao();
             notifica(oRetorno.mensagem, 'sucesso');
          } catch (oErro) {
@@ -612,6 +672,71 @@ export function useConciliacao(oConta, notifica) {
          }
       },
       [oConta, estaBloqueada, limpaSelecao, notifica]
+   );
+
+   /**
+    * Gera uma transferência entre contas (item 6.1.3.8 — ação 2).
+    * @param {object} oTransferencia Dados informados na caixa
+    * @returns {Promise<boolean>} true quando a transferência é gravada
+    */
+   const criaTransferencia = useCallback(
+      async (oTransferencia) => {
+         try {
+            const oRetorno = await criaTransferenciaApi(oTransferencia);
+
+            // Só a perna da conta aberta entra na grade; a contrapartida
+            // aparece quando a outra conta for selecionada
+            const oPernaLocal =
+               oRetorno.lancamentoSaida.codConta === oConta?.codConta
+                  ? oRetorno.lancamentoSaida
+                  : oRetorno.lancamentoEntrada.codConta === oConta?.codConta
+                    ? oRetorno.lancamentoEntrada
+                    : null;
+
+            if (oPernaLocal) {
+               setLancamentos((aAtuais) => [...aAtuais, oPernaLocal]);
+            }
+
+            notifica(oRetorno.mensagem, 'sucesso');
+            return true;
+         } catch (oErro) {
+            notifica(oErro.message, 'erro');
+            return false;
+         }
+      },
+      [oConta, notifica]
+   );
+
+   /**
+    * Baixa um ou mais títulos, gerando os lançamentos no extrato do sistema
+    * (item 6.1.3.8 — ação 3).
+    * @param {Array<object>} aBaixas Títulos com data e valores informados
+    * @returns {Promise<boolean>} true quando as baixas são gravadas
+    */
+   const baixaTitulos = useCallback(
+      async (aBaixas) => {
+         if (!oConta) {
+            notifica('Selecione a conta corrente antes de baixar títulos.', 'alerta');
+            return false;
+         }
+
+         try {
+            const oRetorno = await baixaTitulosApi(oConta.codConta, aBaixas);
+            setLancamentos((aAtuais) => [...aAtuais, ...(oRetorno.lancamentos ?? [])]);
+
+            // Os títulos baixados saem da relação de títulos em aberto
+            const oBaixados = new Set(aBaixas.map((oItem) => oItem.codTitulo));
+            setTitulos((aAtuais) => aAtuais.filter((oItem) => !oBaixados.has(oItem.codTitulo)));
+
+            limpaSelecao();
+            notifica(oRetorno.mensagem, 'sucesso');
+            return true;
+         } catch (oErro) {
+            notifica(oErro.message, 'erro');
+            return false;
+         }
+      },
+      [oConta, limpaSelecao, notifica]
    );
 
    /**
@@ -678,6 +803,8 @@ export function useConciliacao(oConta, notifica) {
       desfazConciliacao,
       conciliaAutomaticamente,
       incluiLancamento,
+      criaTransferencia,
+      baixaTitulos,
       excluiRegistro,
       associaLancamento,
    };
