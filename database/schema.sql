@@ -144,6 +144,9 @@ CREATE TABLE IF NOT EXISTS titulo_aberto (
   tip_documento  VARCHAR(20)    NULL,
   num_documento  VARCHAR(40)    NULL,
   num_parcela    VARCHAR(10)    NULL,
+  -- Nosso número do boleto na instituição. É a chave das rotas de cobrança
+  -- (consulta e baixa); sem ela o título só pode ser baixado localmente.
+  num_boleto     VARCHAR(20)    NULL,
   tip_movimento  ENUM('Entrada','Saída') NOT NULL,
   tip_origem     VARCHAR(60)    NOT NULL,
   -- Situação da baixa (item 6.1.3.8 — ação 3). Um título baixado sai da

@@ -34,6 +34,7 @@ const COLUNAS_TITULO = `
    t.tip_documento AS tipDocumento,
    t.num_documento AS numDocumento,
    t.num_parcela AS numParcela,
+   t.num_boleto AS numBoleto,
    t.tip_movimento AS tipMovimento,
    t.tip_origem AS tipOrigem,
    t.sta_baixado AS staBaixado,
@@ -201,11 +202,11 @@ export async function gravaTitulo(oTitulo) {
       `INSERT INTO titulo_aberto
          (id_conta, cod_titulo, dat_emissao, dat_vencimento, nom_emitente, des_historico,
           val_titulo, val_multa, val_juros, val_desconto, tip_documento, num_documento,
-          num_parcela, tip_movimento, tip_origem, sta_baixado)
+          num_parcela, num_boleto, tip_movimento, tip_origem, sta_baixado)
        VALUES
          (:idConta, :codTitulo, :datEmissao, :datVencimento, :nomEmitente, :desHistorico,
           :valTitulo, :valMulta, :valJuros, :valDesconto, :tipDocumento, :numDocumento,
-          :numParcela, :tipMovimento, :tipOrigem, 0)
+          :numParcela, :numBoleto, :tipMovimento, :tipOrigem, 0)
        ON DUPLICATE KEY UPDATE
          id_conta = VALUES(id_conta),
          dat_emissao = VALUES(dat_emissao),
@@ -219,6 +220,7 @@ export async function gravaTitulo(oTitulo) {
          tip_documento = VALUES(tip_documento),
          num_documento = VALUES(num_documento),
          num_parcela = VALUES(num_parcela),
+         num_boleto = VALUES(num_boleto),
          tip_movimento = VALUES(tip_movimento),
          tip_origem = VALUES(tip_origem)`,
       {
@@ -235,6 +237,7 @@ export async function gravaTitulo(oTitulo) {
          tipDocumento: oTitulo.tipDocumento ?? null,
          numDocumento: oTitulo.numDocumento ?? null,
          numParcela: oTitulo.numParcela ?? null,
+         numBoleto: oTitulo.numBoleto ?? null,
          tipMovimento: oTitulo.tipMovimento,
          tipOrigem: oTitulo.tipOrigem,
       }

@@ -393,6 +393,9 @@ function montaTitulos(oConta, aMovimentos) {
          codTitulo: `${PREFIXO_TITULO}-${oConta.codConta}-${String(iSequencia).padStart(3, '0')}`,
          numParcela: '001',
          tipDocumento: 'NF',
+         // Nosso número: habilita a consulta do boleto na instituição.
+         // Só faz sentido nos títulos a receber, que são os emitidos por nós.
+         numBoleto: String(960000000 + iSequencia),
          ...oDados,
       });
    } // adiciona

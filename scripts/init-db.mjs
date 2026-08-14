@@ -40,6 +40,7 @@ const COLUNAS_INCREMENTAIS = [
       sColuna: 'des_historico',
       sDefinicao: 'VARCHAR(500) NULL AFTER nom_emitente',
    },
+   { sTabela: 'titulo_aberto', sColuna: 'num_boleto', sDefinicao: 'VARCHAR(20) NULL AFTER num_parcela' },
    { sTabela: 'titulo_aberto', sColuna: 'sta_baixado', sDefinicao: 'TINYINT(1) NOT NULL DEFAULT 0' },
    { sTabela: 'titulo_aberto', sColuna: 'dat_baixa', sDefinicao: 'DATE NULL' },
    { sTabela: 'titulo_aberto', sColuna: 'val_pago', sDefinicao: 'DECIMAL(18,2) NULL' },

@@ -1675,3 +1675,9 @@ textarea {
    border-color: var(--cor-alerta-borda);
    color: var(--cor-alerta);
 }
+
+/* Coluna de situação do boleto na instituição (baixa de título) */
+.col-situacao-banco {
+   white-space: nowrap;
+   text-align: center;
+}

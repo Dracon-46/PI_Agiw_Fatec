@@ -17,10 +17,10 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, HandCoins, Loader2, Power, Search } from 'lucide-react';
+import { CheckCircle2, HandCoins, Landmark, Loader2, Power, Search } from 'lucide-react';
 import { Modal } from '../comum/Modal.jsx';
 import { CampoData } from '../comum/CampoData.jsx';
-import { buscaTitulosAbertos } from '../../services/conciliacaoService.js';
+import { buscaTitulosAbertos, consultaBoletoBanco } from '../../services/conciliacaoService.js';
 import { converteTextoParaValor, formataMoeda, formataValor } from '../../utils/formatters.js';
 
 /** Campos de valor editáveis por título */
@@ -78,6 +78,9 @@ export function ModalBaixarTitulo({
    const [bCarregando, setCarregando] = useState(false);
    const [bGravando, setGravando] = useState(false);
    const [sErro, setErro] = useState('');
+   // Situação de cada boleto conforme a instituição, indexada pelo título
+   const [oSituacoes, setSituacoes] = useState({});
+   const [sConsultando, setConsultando] = useState('');
 
    const carrega = useCallback(
       async (sLimite, sTipo) => {
@@ -98,6 +101,7 @@ export function ModalBaixarTitulo({
                oNovasEdicoes[oTitulo.codTitulo] = montaEdicao(oTitulo, sLimite);
             }
             setEdicoes(oNovasEdicoes);
+            setSituacoes({});
          } catch (oErro) {
             setErro(oErro.message);
             setTitulos([]);
@@ -148,6 +152,43 @@ export function ModalBaixarTitulo({
       });
       setErro('');
    } // alteraCampo
+
+   /**
+    * Consulta no banco a situação do boleto de um título.
+    *
+    * É uma leitura: não altera nada no sistema nem na instituição. Serve para
+    * o usuário confirmar, antes de baixar, se o título já foi liquidado —
+    * e em que data, o que costuma explicar o movimento do extrato.
+    *
+    * @param {object} oTitulo
+    */
+   async function consultaNoBanco(oTitulo) {
+      if (!oTitulo.numBoleto) {
+         setErro(
+            `O título ${oTitulo.codTitulo} não tem "nosso número" cadastrado; ` +
+               'sem ele a instituição não localiza o boleto.'
+         );
+         return;
+      }
+
+      setConsultando(oTitulo.codTitulo);
+      setErro('');
+      try {
+         const oRetorno = await consultaBoletoBanco(
+            sCodConta,
+            oTitulo.numBoleto,
+            oTitulo.numDocumento || oTitulo.codTitulo
+         );
+         setSituacoes((oAtual) => ({ ...oAtual, [oTitulo.codTitulo]: oRetorno.boleto }));
+      } catch (oErro) {
+         setSituacoes((oAtual) => ({
+            ...oAtual,
+            [oTitulo.codTitulo]: { bErro: true, sSituacao: oErro.message },
+         }));
+      } finally {
+         setConsultando('');
+      }
+   } // consultaNoBanco
 
    /**
     * Marca ou desmarca um título.
@@ -384,6 +425,7 @@ export function ModalBaixarTitulo({
                         <th>Data baixa</th>
                         <th>Tipo</th>
                         <th>Origem</th>
+                        <th>Situação no banco</th>
                      </tr>
                   </thead>
                   <tbody>
@@ -441,6 +483,43 @@ export function ModalBaixarTitulo({
                                  </span>
                               </td>
                               <td>{oTitulo.tipOrigem}</td>
+                              <td className="col-situacao-banco">
+                                 {oSituacoes[oTitulo.codTitulo] ? (
+                                    <span
+                                       className={`selo ${
+                                          oSituacoes[oTitulo.codTitulo].bErro
+                                             ? 'selo-nao-conciliado'
+                                             : oSituacoes[oTitulo.codTitulo].bLiquidado
+                                               ? 'selo-conciliado'
+                                               : 'selo-neutro'
+                                       }`}
+                                       title={oSituacoes[oTitulo.codTitulo].sSituacao}
+                                    >
+                                       {oSituacoes[oTitulo.codTitulo].bErro
+                                          ? 'não consultado'
+                                          : oSituacoes[oTitulo.codTitulo].sSituacao || 'sem situação'}
+                                    </span>
+                                 ) : (
+                                    <button
+                                       type="button"
+                                       className="btn btn-neutro btn-pequeno"
+                                       onClick={() => consultaNoBanco(oTitulo)}
+                                       disabled={sConsultando === oTitulo.codTitulo || !oTitulo.numBoleto}
+                                       title={
+                                          oTitulo.numBoleto
+                                             ? 'Consulta a situação do boleto na instituição'
+                                             : 'Título sem "nosso número" cadastrado'
+                                       }
+                                    >
+                                       {sConsultando === oTitulo.codTitulo ? (
+                                          <Loader2 size={12} className="girando" />
+                                       ) : (
+                                          <Landmark size={12} />
+                                       )}
+                                       Consultar
+                                    </button>
+                                 )}
+                              </td>
                            </tr>
                         );
                      })}
