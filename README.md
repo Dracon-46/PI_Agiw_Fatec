@@ -114,7 +114,8 @@ Cada banco é uma classe que estende `BankProvider` e é registrada na
 | --- | --- |
 | **Bradesco** | Extrato de conta corrente via OAuth2 + mTLS. Exige certificado de cliente (`.crt` + `.key`) do portal do desenvolvedor. |
 | **Safra** | Autenticação OAuth2 (`grant_type=password`) **funcionando** contra o gateway de homologação. Cobrança (consulta, baixa e instrução de boleto) implementada conforme o *Kit Welcome API COB V3.0*. O extrato de conta corrente é um produto contratado à parte — o caminho fica em `SAFRA_EXTRATO_PATH` e o provider já trata a resposta; sem liberação, a API devolve 404 e o sistema orienta a usar a importação por arquivo. |
-| **Itaú / Banco do Brasil** | Estrutura pronta, aguardando a documentação e as credenciais. |
+| **Itaú** | Extrato da carteira de cobrança (*API Boletos — Extrato Boleto Cobrança*) **funcionando** no sandbox: OAuth2 `client_credentials`, `/francesas` e `/francesas/{id}/movimentacoes`. A conciliação importa apenas as **liquidações**, o único evento da francesa que credita a conta. Débitos (TED, PIX, tarifas avulsas) exigem a API de Conta Corrente, ainda não contratada. Produção pede `private_key_jwt` + mTLS. Diagnóstico: `npm run diag:itau`. |
+| **Banco do Brasil** | Estrutura pronta, aguardando a documentação e as credenciais. |
 
 Enquanto uma API não está liberada, a importação por **arquivo OFX/CSV/TXT**
 atende o mesmo fluxo, conforme previsto no item 6.1.3.3.

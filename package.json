@@ -12,6 +12,7 @@
     "db:seed": "node scripts/seed-demo.mjs",
     "db:seed:limpar": "node scripts/seed-demo.mjs --limpar",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
+    "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs"
   },
   "dependencies": {
