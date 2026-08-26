@@ -13,10 +13,7 @@ import {
    calculaSaldoAnterior,
    listaLancamentosPeriodo,
 } from '../../../../lib/repositories/lancamentoRepository.js';
-import {
-   listaMovimentosConta,
-   listaMovimentosPeriodo,
-} from '../../../../lib/repositories/movimentoRepository.js';
+import { leExtratoDaConta } from '../../../../lib/extratoBanco.js';
 import { ACAO_EXPORTACAO, registraAuditoria } from '../../../../lib/repositories/auditoriaRepository.js';
 import {
    ESCOPOS_VALIDOS,
@@ -92,7 +89,6 @@ export async function GET(oRequisicao) {
    const sDataFim = oParams.get('dataFim') ?? '';
    const sFormato = (oParams.get('formato') ?? FORMATO_XLSX).toLowerCase();
    const sEscopo = (oParams.get('escopo') ?? ESCOPO_AMBOS).toLowerCase();
-   const bRecortaPeriodo = oParams.get('recortaPeriodo') === '1';
 
    // Chips de situação das grades (item 6.1.3.4): o relatório imprime os
    // registros exibidos, então o mesmo recorte precisa chegar até aqui
@@ -127,10 +123,10 @@ export async function GET(oRequisicao) {
       const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
       const nSaldoAnterior = await calculaSaldoAnterior(oConta.idConta, sDataInicio);
 
-      // A grade do banco segue o mesmo critério da tela: por padrão, tudo
-      const aMovimentos = bRecortaPeriodo
-         ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-         : await listaMovimentosConta(oConta.idConta);
+      // O item 6.2 manda imprimir "os registros exibidos nas grades": o
+      // relatório lê o extrato pelo mesmo caminho da tela — API da
+      // instituição mais o que foi importado por arquivo.
+      const { aMovimentos } = await leExtratoDaConta(oConta, sDataInicio, sDataFim);
 
       const aLancFiltrados = filtraPorStatus(aLancamentos, bLancConciliados, bLancNaoConciliados);
       const aMovFiltrados = filtraPorStatus(aMovimentos, bMovConciliados, bMovNaoConciliados);

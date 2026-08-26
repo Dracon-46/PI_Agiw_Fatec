@@ -11,6 +11,9 @@
 import { ArrowLeftRight, Download, HelpCircle, LayoutList, LogOut, Trash2, Undo2, Wallet } from 'lucide-react';
 import { ContaTopbar } from '../comum/ContaTopbar.jsx';
 
+/** Logotipo institucional servido de /public */
+const LOGO_AGIW = '/logo-agiw.png';
+
 /** Itens do menu lateral do módulo financeiro */
 const ITENS_MENU = [
    { sChave: 'baixar', sRotulo: 'Baixar', Icone: Wallet },
@@ -38,8 +41,8 @@ const VERSAO_MODULO = 'Versão 2.0.0';
  */
 export function AppShell({
    itemAtivo = 'conciliacao',
-   nomUsuario = 'INFTEC',
-   desEmpresa = 'AGIW SISTEMAS LTDA — Matriz',
+   nomUsuario = '',
+   desEmpresa = '',
    oConta = null,
    aoTrocarConta,
    aoSelecionarItem,
@@ -49,9 +52,13 @@ export function AppShell({
    return (
       <div className="app-shell">
          <aside className="app-sidebar">
-            <div className="sidebar-marca" title="Agiw Sistemas">
-               <Wallet size={20} />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+               className="sidebar-marca"
+               src={LOGO_AGIW}
+               alt="Agiw Sistemas"
+               title="Agiw Sistemas — Otimizando Processos"
+            />
 
             <nav className="sidebar-nav" aria-label="Menu do módulo financeiro">
                {ITENS_MENU.map(({ sChave, sRotulo, Icone }) => (
@@ -80,12 +87,14 @@ export function AppShell({
 
                <ContaTopbar oConta={oConta} aoTrocarConta={aoTrocarConta} />
 
-               <div className="topbar-usuario">
-                  <div>
-                     <strong>Olá, {nomUsuario}</strong>
-                     <span>{desEmpresa}</span>
+               {nomUsuario ? (
+                  <div className="topbar-usuario">
+                     <div>
+                        <strong>Olá, {nomUsuario}</strong>
+                        <span>{desEmpresa}</span>
+                     </div>
                   </div>
-               </div>
+               ) : null}
 
                <button type="button" className="topbar-btn" onClick={aoSair}>
                   <LogOut size={13} />

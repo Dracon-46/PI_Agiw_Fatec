@@ -34,6 +34,42 @@ const COLUNAS_INCREMENTAIS = [
       sColuna: 'cod_titulo',
       sDefinicao: 'VARCHAR(80) NULL AFTER cod_transferencia',
    },
+   {
+      sTabela: 'lancamento_sistema',
+      sColuna: 'tip_documento',
+      sDefinicao: 'VARCHAR(10) NULL AFTER tip_origem',
+   },
+   {
+      sTabela: 'lancamento_sistema',
+      sColuna: 'cod_subgrupo',
+      sDefinicao: 'VARCHAR(20) NULL AFTER tip_documento',
+   },
+   {
+      sTabela: 'lancamento_sistema',
+      sColuna: 'cod_conta_contabil',
+      sDefinicao: 'VARCHAR(20) NULL AFTER cod_subgrupo',
+   },
+   { sTabela: 'banco', sColuna: 'url_logo', sDefinicao: 'VARCHAR(300) NULL AFTER cor_texto' },
+   {
+      sTabela: 'movimento_banco',
+      sColuna: 'b_excluido',
+      sDefinicao: 'TINYINT(1) NOT NULL DEFAULT 0 AFTER sta_conciliado',
+   },
+   {
+      sTabela: 'movimento_banco',
+      sColuna: 'tip_origem',
+      sDefinicao: "ENUM('API','ARQUIVO') NOT NULL DEFAULT 'API' AFTER cod_movimento",
+   },
+   {
+      sTabela: 'movimento_banco',
+      sColuna: 'des_historico',
+      sDefinicao: 'VARCHAR(500) NULL AFTER b_entrada',
+   },
+   {
+      sTabela: 'movimento_banco',
+      sColuna: 'num_documento',
+      sDefinicao: 'VARCHAR(40) NULL AFTER des_historico',
+   },
    { sTabela: 'titulo_aberto', sColuna: 'dat_emissao', sDefinicao: 'DATE NULL AFTER cod_titulo' },
    {
       sTabela: 'titulo_aberto',
@@ -47,6 +83,49 @@ const COLUNAS_INCREMENTAIS = [
    { sTabela: 'titulo_aberto', sColuna: 'val_tarifa', sDefinicao: 'DECIMAL(18,2) NOT NULL DEFAULT 0' },
    { sTabela: 'titulo_aberto', sColuna: 'cod_lancamento_baixa', sDefinicao: 'VARCHAR(80) NULL' },
 ];
+
+/**
+ * Colunas que deixaram de existir.
+ *
+ * movimento_banco deixou de ser cópia do extrato da API: histórico e documento
+ * agora só são preenchidos na importação por arquivo. As colunas de rastro da
+ * importação e do código de lançamento do banco não têm mais uso.
+ */
+const COLUNAS_REMOVIDAS = [
+   { sTabela: 'movimento_banco', sColuna: 'cod_lancamento_banco' },
+   { sTabela: 'movimento_banco', sColuna: 'dat_importacao' },
+];
+
+/**
+ * Remove as colunas que não fazem mais parte do modelo.
+ * @param {import('mysql2/promise').Connection} oConn
+ * @param {string} sBanco Nome do schema
+ * @returns {Promise<number>} Quantidade de colunas removidas
+ */
+async function removeColunasObsoletas(oConn, sBanco) {
+   let iRemovidas = 0;
+
+   for (const oColuna of COLUNAS_REMOVIDAS) {
+      const [aLinhas] = await oConn.query(
+         `SELECT COUNT(*) AS total
+            FROM information_schema.columns
+           WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
+         [sBanco, oColuna.sTabela, oColuna.sColuna]
+      );
+
+      if (Number(aLinhas[0]?.total ?? 0) === 0) {
+         continue;
+      }
+
+      await oConn.query(
+         `ALTER TABLE \`${oColuna.sTabela}\` DROP COLUMN \`${oColuna.sColuna}\``
+      );
+      console.log(`  - ${oColuna.sTabela}.${oColuna.sColuna}`);
+      iRemovidas += 1;
+   }
+
+   return iRemovidas;
+} // removeColunasObsoletas
 
 /**
  * Acrescenta as colunas que ainda não existem na base.
@@ -92,14 +171,27 @@ async function main() {
    });
 
    try {
+      // As colunas novas entram ANTES do schema: o schema.sql traz INSERTs que
+      // já citam essas colunas, e em uma base antiga o CREATE TABLE IF NOT
+      // EXISTS não as acrescenta — o INSERT falharia com "Unknown column".
+      // Em base nova as tabelas ainda não existem e a reconciliação não faz
+      // nada, porque consulta o information_schema antes de alterar.
+      await oConn.query(`CREATE DATABASE IF NOT EXISTS \`${sBanco}\``);
+      await oConn.query(`USE \`${sBanco}\``);
+      console.log('Conferindo colunas de bases existentes...');
+      const iPreCriadas = await reconciliaColunas(oConn, sBanco);
+
       await oConn.query(sSql);
       console.log('Schema aplicado com sucesso em', sBanco);
 
       await oConn.query(`USE \`${sBanco}\``);
       console.log('Conferindo colunas incrementais...');
-      const iCriadas = await reconciliaColunas(oConn, sBanco);
+      const iCriadas = iPreCriadas + (await reconciliaColunas(oConn, sBanco));
+      const iRemovidas = await removeColunasObsoletas(oConn, sBanco);
       console.log(
-         iCriadas === 0 ? '  nenhuma coluna pendente.' : `  ${iCriadas} coluna(s) acrescentada(s).`
+         iCriadas === 0 && iRemovidas === 0
+            ? '  nenhuma coluna pendente.'
+            : `  ${iCriadas} coluna(s) acrescentada(s), ${iRemovidas} removida(s).`
       );
    } finally {
       await oConn.end();

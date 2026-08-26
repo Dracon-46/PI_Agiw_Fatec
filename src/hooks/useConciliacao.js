@@ -28,7 +28,7 @@ import {
    PERIODO_PADRAO_INICIO,
    temPeriodoPadraoFixo,
 } from '../utils/configPeriodo.js';
-import { ORIGEM_CONCILIACAO } from '../utils/mockData.js';
+import { ORIGEM_CONCILIACAO } from '../utils/origens.js';
 
 /** Situações possíveis da seleção corrente nas grades */
 export const SELECAO_VAZIA = null;
@@ -85,6 +85,87 @@ function somaMovimentos(aItens) {
 } // somaMovimentos
 
 /**
+ * Monta uma linha de somatória: sistema, banco e a diferença entre eles.
+ *
+ * O item 6.1.2 pede duas linhas — uma para os selecionados conciliados e
+ * outra para os não conciliados —, "incluindo a diferença" em cada uma.
+ *
+ * @param {Array<object>} aLancamentos Lançamentos selecionados da linha
+ * @param {Array<object>} aMovimentos Movimentos selecionados da linha
+ * @returns {{ oSistema: object, oBanco: object, valDiferenca: number, iQuantidade: number }}
+ */
+function montaLinhaSomatoria(aLancamentos, aMovimentos) {
+   const oSistema = somaMovimentos(aLancamentos);
+   const oBanco = somaMovimentos(aMovimentos);
+
+   return {
+      oSistema,
+      oBanco,
+      valDiferenca: calculaDiferenca(oSistema.valLiquido, oBanco.valLiquido),
+      iQuantidade: aLancamentos.length + aMovimentos.length,
+   };
+} // montaLinhaSomatoria
+
+/**
+ * Chave de correspondência entre um lançamento e um movimento do banco:
+ * data, valor e sentido, como pede o item 6.1.3.3.
+ * @param {object} oRegistro
+ * @returns {string}
+ */
+function chaveCorrespondencia(oRegistro) {
+   return `${oRegistro.datMovimento}|${oRegistro.valMovimento}|${oRegistro.bEntrada ? 'E' : 'S'}`;
+} // chaveCorrespondencia
+
+/**
+ * Casa movimentos e lançamentos não conciliados que tenham data e valor
+ * idênticos, um para um.
+ *
+ * Item 6.1.3.3: "Ao concluir a importação, realizar a seleção automática de
+ * movimentos e lançamentos que possuam data e valor idênticos."
+ *
+ * Só entram registros NÃO conciliados: o item 6.1.3.5 proíbe misturar status
+ * na mesma seleção, e conciliar de novo o que já está conciliado não faz
+ * sentido. O pareamento é um-para-um — dois lançamentos de mesmo valor não
+ * podem casar com o mesmo movimento.
+ *
+ * @param {Array<object>} aLancamentos
+ * @param {Array<object>} aMovimentos
+ * @returns {{ aCodLancamentos: string[], aCodMovimentos: string[] }}
+ */
+function casaPorDataEValor(aLancamentos, aMovimentos) {
+   const oDisponiveis = new Map();
+
+   for (const oLancamento of aLancamentos) {
+      if (oLancamento.staConciliado) {
+         continue;
+      }
+      const sChave = chaveCorrespondencia(oLancamento);
+      if (!oDisponiveis.has(sChave)) {
+         oDisponiveis.set(sChave, []);
+      }
+      oDisponiveis.get(sChave).push(oLancamento.codLancamento);
+   }
+
+   const aCodLancamentos = [];
+   const aCodMovimentos = [];
+
+   for (const oMovimento of aMovimentos) {
+      if (oMovimento.staConciliado) {
+         continue;
+      }
+      const aFila = oDisponiveis.get(chaveCorrespondencia(oMovimento));
+      if (!aFila || aFila.length === 0) {
+         continue;
+      }
+
+      aCodLancamentos.push(aFila.shift());
+      aCodMovimentos.push(oMovimento.codMovimento);
+   }
+
+   return { aCodLancamentos, aCodMovimentos };
+} // casaPorDataEValor
+
+/**
  * Hook principal da tela de conciliação.
  * @param {object|null} oConta Conta corrente selecionada
  * @param {(texto: string, tipo?: string) => void} notifica Emissor de mensagens
@@ -136,13 +217,21 @@ export function useConciliacao(oConta, notifica) {
             if (!bAtivo) {
                return;
             }
-            setLancamentos(oSistema.lancamentos ?? []);
+            const aLancamentosLidos = oSistema.lancamentos ?? [];
+            const aMovimentosLidos = oExtrato.movimentos ?? [];
+
+            setLancamentos(aLancamentosLidos);
             setTitulos(oSistema.titulos ?? []);
             setSaldos(oSistema.saldos ?? { valSaldoAnterior: 0, valSaldoFinal: 0 });
-            setMovimentos(oExtrato.movimentos ?? []);
-            setSelLancamentos([]);
-            setSelMovimentos([]);
-            setStaSelecao(SELECAO_VAZIA);
+            setMovimentos(aMovimentosLidos);
+
+            // Item 6.1.3.3: os pares de mesma data e valor já entram marcados
+            const oPares = casaPorDataEValor(aLancamentosLidos, aMovimentosLidos);
+            setSelLancamentos(oPares.aCodLancamentos);
+            setSelMovimentos(oPares.aCodMovimentos);
+            setStaSelecao(
+               oPares.aCodMovimentos.length > 0 ? SELECAO_NAO_CONCILIADA : SELECAO_VAZIA
+            );
 
             if (oSistema.aviso) {
                notifica(oSistema.aviso, 'info');
@@ -189,19 +278,34 @@ export function useConciliacao(oConta, notifica) {
 
       setCarregando(true);
       try {
-         const oRetorno = await buscaLancamentosSistema(oConta.codConta, sDataInicio, sDataFim);
-         setLancamentos(oRetorno.lancamentos ?? []);
-         // Repovoa a grade do banco com o extrato já importado no período
-         setMovimentos(oRetorno.movimentos ?? []);
+         // Os lançamentos vêm da nossa base; o extrato, sempre da API do banco
+         const [oRetorno, oExtrato] = await Promise.all([
+            buscaLancamentosSistema(oConta.codConta, sDataInicio, sDataFim),
+            importaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim).catch(
+               (oErro) => {
+                  notifica(oErro.message, 'alerta');
+                  return { movimentos: [] };
+               }
+            ),
+         ]);
+
+         const aLancamentosLidos = oRetorno.lancamentos ?? [];
+         const aMovimentosLidos = oExtrato.movimentos ?? [];
+
+         setLancamentos(aLancamentosLidos);
+         setMovimentos(aMovimentosLidos);
          setTitulos(oRetorno.titulos ?? []);
          setSaldos(oRetorno.saldos ?? { valSaldoAnterior: 0, valSaldoFinal: 0 });
          // O bloqueio pode ter sido alterado em outra sessão; a busca é o
          // momento natural de trazer o valor corrente da base
          setDatBloqueio(oRetorno.conta?.datUltimoBloqueio ?? '');
-         limpaSelecao();
 
-         const iTotal = (oRetorno.lancamentos?.length ?? 0) + (oRetorno.movimentos?.length ?? 0);
-         if (iTotal === 0) {
+         const oPares = casaPorDataEValor(aLancamentosLidos, aMovimentosLidos);
+         setSelLancamentos(oPares.aCodLancamentos);
+         setSelMovimentos(oPares.aCodMovimentos);
+         setStaSelecao(oPares.aCodMovimentos.length > 0 ? SELECAO_NAO_CONCILIADA : SELECAO_VAZIA);
+
+         if (aLancamentosLidos.length + aMovimentosLidos.length === 0) {
             notifica(
                'Nenhum lançamento ou movimento no período. Use "Importar Extrato" para buscar no banco.',
                'info'
@@ -212,7 +316,7 @@ export function useConciliacao(oConta, notifica) {
       } finally {
          setCarregando(false);
       }
-   }, [oConta, sDataInicio, sDataFim, notifica, limpaSelecao]);
+   }, [oConta, sDataInicio, sDataFim, notifica]);
 
    /**
     * Importa o extrato bancário do período (item 6.1.3.3).
@@ -228,27 +332,38 @@ export function useConciliacao(oConta, notifica) {
          const oRetorno = await importaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim);
          const aImportados = oRetorno.movimentos ?? [];
 
-         setMovimentos((aAtuais) => {
-            // Chave de unicidade: data + histórico + valor + sentido
-            const oExistentes = new Set(
-               aAtuais.map((oItem) => `${oItem.datMovimento}|${oItem.desHistorico}|${oItem.valMovimento}|${oItem.bEntrada}`)
-            );
-            const aNovos = aImportados.filter(
-               (oItem) => !oExistentes.has(`${oItem.datMovimento}|${oItem.desHistorico}|${oItem.valMovimento}|${oItem.bEntrada}`)
-            );
-            return [...aAtuais, ...aNovos];
-         });
+         // O extrato é o retorno vivo da API: a grade passa a ser exatamente
+         // o que o banco devolveu, sem acumular leituras anteriores
+         setMovimentos(aImportados);
+
+         // Item 6.1.3.3: concluída a importação, seleciona automaticamente os
+         // pares de movimento e lançamento com data e valor idênticos
+         const { aCodLancamentos, aCodMovimentos } = casaPorDataEValor(aLancamentos, aImportados);
+
+         if (aCodMovimentos.length > 0) {
+            setSelLancamentos(aCodLancamentos);
+            setSelMovimentos(aCodMovimentos);
+            setStaSelecao(SELECAO_NAO_CONCILIADA);
+         } else {
+            limpaSelecao();
+         }
 
          if (oRetorno.aviso) {
             notifica(oRetorno.aviso, 'alerta');
          }
-         notifica(`Extrato importado: ${aImportados.length} movimento(s) no período.`, 'sucesso');
+         notifica(
+            `Extrato importado: ${aImportados.length} movimento(s).` +
+               (aCodMovimentos.length > 0
+                  ? ` ${aCodMovimentos.length} par(es) de mesma data e valor já vieram selecionados.`
+                  : ''),
+            'sucesso'
+         );
       } catch (oErro) {
          notifica(oErro.message, 'erro');
       } finally {
          setImportando(false);
       }
-   }, [oConta, sDataInicio, sDataFim, notifica]);
+   }, [oConta, sDataInicio, sDataFim, aLancamentos, notifica, limpaSelecao]);
 
    /**
     * Alterna a seleção de uma linha, impedindo a mistura de status
@@ -282,6 +397,16 @@ export function useConciliacao(oConta, notifica) {
                'alerta'
             );
             return;
+         }
+
+         // Registro conciliado continua selecionável — é assim que o item
+         // 6.1.3.7 permite desfazer. O que não pode é conciliá-lo de novo,
+         // então a tela diz de saída qual é a única ação disponível.
+         if (bStatusRegistro && staSelecao === SELECAO_VAZIA) {
+            notifica(
+               'Registro já conciliado. Esta seleção habilita apenas "Desfazer conciliação".',
+               'info'
+            );
          }
 
          setStaSelecao(bStatusRegistro);
@@ -338,20 +463,48 @@ export function useConciliacao(oConta, notifica) {
       [aMovimentos, aSelMovimentos]
    );
 
+   /**
+    * Somatórias da seleção em duas linhas (item 6.1.2): uma para os
+    * selecionados já conciliados e outra para os não conciliados, cada uma
+    * com a sua diferença.
+    *
+    * A trava do item 6.1.3.5 impede misturar status, então na prática só uma
+    * das linhas fica preenchida por vez — mas as duas ficam visíveis, como o
+    * documento descreve, para que o usuário veja qual delas está em jogo.
+    */
    const oTotais = useMemo(() => {
-      const oSistema = somaMovimentos(aLancSelecionados);
-      const oBanco = somaMovimentos(aMovSelecionados);
+      const oConciliados = montaLinhaSomatoria(
+         aLancSelecionados.filter((oItem) => oItem.staConciliado),
+         aMovSelecionados.filter((oItem) => oItem.staConciliado)
+      );
+      const oNaoConciliados = montaLinhaSomatoria(
+         aLancSelecionados.filter((oItem) => !oItem.staConciliado),
+         aMovSelecionados.filter((oItem) => !oItem.staConciliado)
+      );
+
+      // Diferença da linha ativa — é ela que trava Conciliar e Desfazer
+      const oAtiva = oConciliados.iQuantidade > 0 ? oConciliados : oNaoConciliados;
+
       return {
-         oSistema,
-         oBanco,
-         valDiferenca: calculaDiferenca(oSistema.valLiquido, oBanco.valLiquido),
+         oConciliados,
+         oNaoConciliados,
+         // Mantidos na raiz: o restante da tela e os relatórios já os usam
+         oSistema: montaLinhaSomatoria(aLancSelecionados, aMovSelecionados).oSistema,
+         oBanco: montaLinhaSomatoria(aLancSelecionados, aMovSelecionados).oBanco,
+         valDiferenca: oAtiva.valDiferenca,
       };
    }, [aLancSelecionados, aMovSelecionados]);
 
-   /** Totalizadores gerais do período, exibidos no rodapé das grades */
+   /**
+    * Totalizadores do período de cada grade (item 6.1.2: "ambos os extratos
+    * possuem saldo anterior, entradas e saídas no período e saldo final").
+    */
    const oTotaisPeriodo = useMemo(() => {
       const oGeral = somaMovimentos(aLancamentos);
       const oConciliado = somaMovimentos(aLancamentos.filter((oItem) => oItem.staConciliado));
+      const oBancoGeral = somaMovimentos(aMovimentos);
+      const oBancoConciliado = somaMovimentos(aMovimentos.filter((oItem) => oItem.staConciliado));
+
       return {
          valEntradas: oGeral.valEntradas,
          valSaidas: oGeral.valSaidas,
@@ -359,165 +512,43 @@ export function useConciliacao(oConta, notifica) {
          valSaidasConciliadas: oConciliado.valSaidas,
          valEntradasAConciliar: oGeral.valEntradas - oConciliado.valEntradas,
          valSaidasAConciliar: oGeral.valSaidas - oConciliado.valSaidas,
+         oBanco: {
+            valEntradas: oBancoGeral.valEntradas,
+            valSaidas: oBancoGeral.valSaidas,
+            valEntradasConciliadas: oBancoConciliado.valEntradas,
+            valSaidasConciliadas: oBancoConciliado.valSaidas,
+         },
       };
-   }, [aLancamentos]);
-
-   // ---------- Conciliação e estorno ----------
+   }, [aLancamentos, aMovimentos]);
 
    /**
-    * Aplica um novo status de conciliação aos registros selecionados.
-    * @param {boolean} bConciliado Status gravado nos registros
+    * Saldos de cada lado da tela (item 6.1.2).
+    * O saldo anterior vem da API; entradas, saídas e saldo final são somados
+    * a partir do que está na grade.
     */
-   const aplicaStatusSelecao = useCallback(
-      (bConciliado) => {
-         setLancamentos((aAtuais) =>
-            aAtuais.map((oItem) =>
-               aSelLancamentos.includes(oItem.codLancamento) ? { ...oItem, staConciliado: bConciliado } : oItem
-            )
-         );
-         setMovimentos((aAtuais) =>
-            aAtuais.map((oItem) =>
-               aSelMovimentos.includes(oItem.codMovimento) ? { ...oItem, staConciliado: bConciliado } : oItem
-            )
-         );
-         limpaSelecao();
-      },
-      [aSelLancamentos, aSelMovimentos, limpaSelecao]
+   const oSaldosPorLado = useMemo(
+      () => ({
+         oSistema: {
+            valSaldoAnterior: oSaldos.valSaldoAnterior ?? 0,
+            valEntradas: oTotaisPeriodo.valEntradas,
+            valSaidas: oTotaisPeriodo.valSaidas,
+            valSaldoFinal:
+               (oSaldos.valSaldoAnterior ?? 0) +
+               oTotaisPeriodo.valEntradas -
+               oTotaisPeriodo.valSaidas,
+         },
+         oBanco: {
+            valSaldoAnterior: oSaldos.valSaldoAnteriorBanco ?? 0,
+            valEntradas: oTotaisPeriodo.oBanco.valEntradas,
+            valSaidas: oTotaisPeriodo.oBanco.valSaidas,
+            valSaldoFinal:
+               (oSaldos.valSaldoAnteriorBanco ?? 0) +
+               oTotaisPeriodo.oBanco.valEntradas -
+               oTotaisPeriodo.oBanco.valSaidas,
+         },
+      }),
+      [oSaldos, oTotaisPeriodo]
    );
-
-   /**
-    * Botão "Conciliar" (item 6.1.3.6): exige diferença zero entre as
-    * somatórias dos registros não conciliados selecionados.
-    */
-   const concilia = useCallback(async () => {
-      // Todas as validações ocorrem antes de gravar, conforme padrão de transações
-      if (aSelLancamentos.length === 0 || aSelMovimentos.length === 0) {
-         notifica('Selecione ao menos um lançamento do sistema e um movimento do banco.', 'alerta');
-         return;
-      }
-      if (staSelecao === SELECAO_CONCILIADA) {
-         notifica('Os registros selecionados já estão conciliados.', 'alerta');
-         return;
-      }
-      if (oTotais.valDiferenca !== 0) {
-         notifica('A diferença entre as somatórias deve ser zero para conciliar.', 'erro');
-         return;
-      }
-
-      try {
-         // Persiste no banco antes de refletir a mudança na tela
-         const oRetorno = await gravaConciliacaoApi(
-            oConta.codConta,
-            aLancSelecionados,
-            aMovSelecionados,
-            true
-         );
-         aplicaStatusSelecao(true);
-         notifica(oRetorno.mensagem, 'sucesso');
-      } catch (oErro) {
-         notifica(oErro.message, 'erro');
-      }
-   }, [
-      oConta,
-      aSelLancamentos,
-      aSelMovimentos,
-      aLancSelecionados,
-      aMovSelecionados,
-      staSelecao,
-      oTotais,
-      aplicaStatusSelecao,
-      notifica,
-   ]);
-
-   /**
-    * Botão "Desfazer Conciliação" (item 6.1.3.7): estorna os registros
-    * conciliados selecionados, exigindo diferença zero.
-    */
-   const desfazConciliacao = useCallback(async () => {
-      if (aSelLancamentos.length === 0 && aSelMovimentos.length === 0) {
-         notifica('Selecione os registros conciliados que deseja estornar.', 'alerta');
-         return;
-      }
-      if (staSelecao !== SELECAO_CONCILIADA) {
-         notifica('Somente registros já conciliados podem ser estornados.', 'alerta');
-         return;
-      }
-      if (oTotais.valDiferenca !== 0) {
-         notifica('A diferença entre as somatórias deve ser zero para estornar.', 'erro');
-         return;
-      }
-
-      try {
-         const oRetorno = await gravaConciliacaoApi(
-            oConta.codConta,
-            aLancSelecionados,
-            aMovSelecionados,
-            false
-         );
-         aplicaStatusSelecao(false);
-         notifica(oRetorno.mensagem, 'sucesso');
-      } catch (oErro) {
-         notifica(oErro.message, 'erro');
-      }
-   }, [
-      oConta,
-      aSelLancamentos,
-      aSelMovimentos,
-      aLancSelecionados,
-      aMovSelecionados,
-      staSelecao,
-      oTotais,
-      aplicaStatusSelecao,
-      notifica,
-   ]);
-
-   /**
-    * Conciliação automática (item 6.1.3.3): concilia os pares idênticos
-    * e os agrupamentos cuja somatória corresponde a um movimento do banco.
-    */
-   const conciliaAutomaticamente = useCallback(async () => {
-      setCarregando(true);
-      try {
-         const oRetorno = await executaConciliacaoAutomatica(aLancamentos, aMovimentos);
-         const aGrupos = oRetorno.aGrupos ?? [];
-
-         if (aGrupos.length === 0) {
-            notifica(oRetorno.mensagem ?? 'Nenhuma correspondência automática localizada.', 'alerta');
-            return;
-         }
-
-         const oLancConciliados = new Set(aGrupos.flatMap((oGrupo) => oGrupo.aCodLancamentos));
-         const oMovConciliados = new Set(aGrupos.flatMap((oGrupo) => oGrupo.aCodMovimentos));
-
-         // Grava o resultado no banco antes de atualizar as grades
-         await gravaConciliacaoApi(
-            oConta.codConta,
-            aLancamentos.filter((oItem) => oLancConciliados.has(oItem.codLancamento)),
-            aMovimentos.filter((oItem) => oMovConciliados.has(oItem.codMovimento)),
-            true,
-            true
-         );
-
-         setLancamentos((aAtuais) =>
-            aAtuais.map((oItem) =>
-               oLancConciliados.has(oItem.codLancamento) ? { ...oItem, staConciliado: true } : oItem
-            )
-         );
-         setMovimentos((aAtuais) =>
-            aAtuais.map((oItem) => (oMovConciliados.has(oItem.codMovimento) ? { ...oItem, staConciliado: true } : oItem))
-         );
-         limpaSelecao();
-
-         notifica(
-            `${aGrupos.length} correspondência(s) conciliada(s) automaticamente.`,
-            'sucesso'
-         );
-      } catch (oErro) {
-         notifica(oErro.message, 'erro');
-      } finally {
-         setCarregando(false);
-      }
-   }, [oConta, aLancamentos, aMovimentos, notifica, limpaSelecao]);
 
    // ---------- Bloqueio de período ----------
 
@@ -586,6 +617,252 @@ export function useConciliacao(oConta, notifica) {
       (sData) => Boolean(datBloqueio) && comparaDatas(sData, datBloqueio) <= 0,
       [datBloqueio]
    );
+
+   /**
+    * Descreve os registros selecionados que caem em período fechado.
+    *
+    * O bloqueio do item 6.1.3.1 vale também para conciliar e estornar: as duas
+    * operações alteram o resultado de um período já encerrado. A rota confere
+    * de novo com as datas da base — aqui é para o usuário saber antes de
+    * clicar, e ver quais linhas estão travando.
+    *
+    * @returns {string} Mensagem de impedimento, ou string vazia
+    */
+   const verificaSelecaoBloqueada = useCallback(() => {
+      if (!datBloqueio) {
+         return '';
+      }
+
+      const aBloqueados = [
+         ...aLancSelecionados
+            .filter((oItem) => estaBloqueada(oItem.datMovimento))
+            .map((oItem) => `${oItem.codLancamento} (${oItem.datMovimento})`),
+         ...aMovSelecionados
+            .filter((oItem) => estaBloqueada(oItem.datMovimento))
+            .map((oItem) => `${oItem.codMovimento} (${oItem.datMovimento})`),
+      ];
+
+      if (aBloqueados.length === 0) {
+         return '';
+      }
+
+      return (
+         `A conta está bloqueada até ${datBloqueio} e ${aBloqueados.length} registro(s) ` +
+         `da seleção estão nesse período: ${aBloqueados.slice(0, 3).join(', ')}` +
+         (aBloqueados.length > 3 ? ` e mais ${aBloqueados.length - 3}.` : '.') +
+         ' Remova o bloqueio ou retire esses registros da seleção.'
+      );
+   }, [datBloqueio, aLancSelecionados, aMovSelecionados, estaBloqueada]);
+
+   // ---------- Conciliação e estorno ----------
+
+   /**
+    * Aplica um novo status de conciliação aos registros selecionados.
+    * @param {boolean} bConciliado Status gravado nos registros
+    */
+   const aplicaStatusSelecao = useCallback(
+      (bConciliado) => {
+         setLancamentos((aAtuais) =>
+            aAtuais.map((oItem) =>
+               aSelLancamentos.includes(oItem.codLancamento) ? { ...oItem, staConciliado: bConciliado } : oItem
+            )
+         );
+         setMovimentos((aAtuais) =>
+            aAtuais.map((oItem) =>
+               aSelMovimentos.includes(oItem.codMovimento) ? { ...oItem, staConciliado: bConciliado } : oItem
+            )
+         );
+         limpaSelecao();
+      },
+      [aSelLancamentos, aSelMovimentos, limpaSelecao]
+   );
+
+   /**
+    * Botão "Conciliar" (item 6.1.3.6): exige diferença zero entre as
+    * somatórias dos registros não conciliados selecionados.
+    */
+   const concilia = useCallback(async () => {
+      // Todas as validações ocorrem antes de gravar, conforme padrão de transações
+      if (aSelLancamentos.length === 0 || aSelMovimentos.length === 0) {
+         notifica('Selecione ao menos um lançamento do sistema e um movimento do banco.', 'alerta');
+         return;
+      }
+      if (staSelecao === SELECAO_CONCILIADA) {
+         notifica(
+            'Os registros selecionados já estão conciliados. Use "Desfazer" para estornar antes de conciliar novamente.',
+            'alerta'
+         );
+         return;
+      }
+      if (oTotais.valDiferenca !== 0) {
+         notifica('A diferença entre as somatórias deve ser zero para conciliar.', 'erro');
+         return;
+      }
+
+      // Item 6.1.3.1: período fechado não aceita conciliação
+      const sBloqueio = verificaSelecaoBloqueada();
+      if (sBloqueio) {
+         notifica(sBloqueio, 'erro');
+         return;
+      }
+
+      try {
+         // Persiste no banco antes de refletir a mudança na tela
+         const oRetorno = await gravaConciliacaoApi(
+            oConta.codConta,
+            aLancSelecionados,
+            aMovSelecionados,
+            true
+         );
+         aplicaStatusSelecao(true);
+         notifica(oRetorno.mensagem, 'sucesso');
+      } catch (oErro) {
+         notifica(oErro.message, 'erro');
+      }
+   }, [
+      oConta,
+      aSelLancamentos,
+      aSelMovimentos,
+      aLancSelecionados,
+      aMovSelecionados,
+      staSelecao,
+      oTotais,
+      aplicaStatusSelecao,
+      verificaSelecaoBloqueada,
+      notifica,
+   ]);
+
+   /**
+    * Botão "Desfazer Conciliação" (item 6.1.3.7): estorna os registros
+    * conciliados selecionados, exigindo diferença zero.
+    */
+   const desfazConciliacao = useCallback(async () => {
+      if (aSelLancamentos.length === 0 && aSelMovimentos.length === 0) {
+         notifica('Selecione os registros conciliados que deseja estornar.', 'alerta');
+         return;
+      }
+      if (staSelecao !== SELECAO_CONCILIADA) {
+         notifica('Somente registros já conciliados podem ser estornados.', 'alerta');
+         return;
+      }
+      if (oTotais.valDiferenca !== 0) {
+         notifica('A diferença entre as somatórias deve ser zero para estornar.', 'erro');
+         return;
+      }
+
+      // Item 6.1.3.1: reabrir uma conciliação em período fechado alteraria um
+      // mês já encerrado — a trava vale para o estorno tanto quanto para a
+      // conciliação
+      const sBloqueio = verificaSelecaoBloqueada();
+      if (sBloqueio) {
+         notifica(sBloqueio, 'erro');
+         return;
+      }
+
+      try {
+         const oRetorno = await gravaConciliacaoApi(
+            oConta.codConta,
+            aLancSelecionados,
+            aMovSelecionados,
+            false
+         );
+         aplicaStatusSelecao(false);
+         notifica(oRetorno.mensagem, 'sucesso');
+      } catch (oErro) {
+         notifica(oErro.message, 'erro');
+      }
+   }, [
+      oConta,
+      aSelLancamentos,
+      aSelMovimentos,
+      aLancSelecionados,
+      aMovSelecionados,
+      staSelecao,
+      oTotais,
+      aplicaStatusSelecao,
+      verificaSelecaoBloqueada,
+      notifica,
+   ]);
+
+   /**
+    * Conciliação automática (item 6.1.3.3): concilia os pares idênticos
+    * e os agrupamentos cuja somatória corresponde a um movimento do banco.
+    */
+   const conciliaAutomaticamente = useCallback(async () => {
+      setCarregando(true);
+      try {
+         const oRetorno = await executaConciliacaoAutomatica(aLancamentos, aMovimentos);
+         const aGrupos = oRetorno.aGrupos ?? [];
+
+         if (aGrupos.length === 0) {
+            notifica(oRetorno.mensagem ?? 'Nenhuma correspondência automática localizada.', 'alerta');
+            return;
+         }
+
+         // Item 6.1.3.1: grupos que tocam o período fechado ficam de fora.
+         // O grupo é indivisível — conciliar só metade dele deixaria a outra
+         // metade órfã, sem contrapartida —, então basta uma ponta bloqueada
+         // para o grupo inteiro ser descartado.
+         const oLancPorCodigo = new Map(aLancamentos.map((oItem) => [oItem.codLancamento, oItem]));
+         const oMovPorCodigo = new Map(aMovimentos.map((oItem) => [oItem.codMovimento, oItem]));
+
+         const aGruposLivres = aGrupos.filter((oGrupo) => {
+            const bTocaBloqueio =
+               oGrupo.aCodLancamentos.some((sCodigo) =>
+                  estaBloqueada(oLancPorCodigo.get(sCodigo)?.datMovimento)
+               ) ||
+               oGrupo.aCodMovimentos.some((sCodigo) =>
+                  estaBloqueada(oMovPorCodigo.get(sCodigo)?.datMovimento)
+               );
+            return !bTocaBloqueio;
+         });
+
+         const iBloqueados = aGrupos.length - aGruposLivres.length;
+
+         if (aGruposLivres.length === 0) {
+            notifica(
+               `As ${aGrupos.length} correspondência(s) localizada(s) estão em período ` +
+                  `bloqueado (até ${datBloqueio}). Remova o bloqueio para conciliá-las.`,
+               'alerta'
+            );
+            return;
+         }
+
+         const oLancConciliados = new Set(aGruposLivres.flatMap((oGrupo) => oGrupo.aCodLancamentos));
+         const oMovConciliados = new Set(aGruposLivres.flatMap((oGrupo) => oGrupo.aCodMovimentos));
+
+         // Grava o resultado no banco antes de atualizar as grades
+         await gravaConciliacaoApi(
+            oConta.codConta,
+            aLancamentos.filter((oItem) => oLancConciliados.has(oItem.codLancamento)),
+            aMovimentos.filter((oItem) => oMovConciliados.has(oItem.codMovimento)),
+            true,
+            true
+         );
+
+         setLancamentos((aAtuais) =>
+            aAtuais.map((oItem) =>
+               oLancConciliados.has(oItem.codLancamento) ? { ...oItem, staConciliado: true } : oItem
+            )
+         );
+         setMovimentos((aAtuais) =>
+            aAtuais.map((oItem) => (oMovConciliados.has(oItem.codMovimento) ? { ...oItem, staConciliado: true } : oItem))
+         );
+         limpaSelecao();
+
+         notifica(
+            `${aGruposLivres.length} correspondência(s) conciliada(s) automaticamente.` +
+               (iBloqueados > 0
+                  ? ` ${iBloqueados} ficaram de fora por estarem em período bloqueado até ${datBloqueio}.`
+                  : ''),
+            iBloqueados > 0 ? 'alerta' : 'sucesso'
+         );
+      } catch (oErro) {
+         notifica(oErro.message, 'erro');
+      } finally {
+         setCarregando(false);
+      }
+   }, [oConta, aLancamentos, aMovimentos, datBloqueio, estaBloqueada, notifica, limpaSelecao]);
 
    // ---------- Inclusão e exclusão de registros ----------
 
@@ -775,6 +1052,7 @@ export function useConciliacao(oConta, notifica) {
       aMovimentos,
       aTitulos,
       oSaldos,
+      oSaldosPorLado,
       bCarregando,
       bImportando,
 

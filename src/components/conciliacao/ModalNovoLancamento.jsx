@@ -14,19 +14,26 @@ import { useEffect, useState } from 'react';
 import { CircleDollarSign, PlusCircle, Power } from 'lucide-react';
 import { Modal } from '../comum/Modal.jsx';
 import { CampoData } from '../comum/CampoData.jsx';
-import { converteTextoParaValor, formataMoeda, formataValor } from '../../utils/formatters.js';
-
-/** Origens que o usuário pode atribuir ao lançamento */
-const ORIGENS = ['Conciliação', 'Contas a Pagar', 'Contas a Receber', 'Transferência'];
+import { useBankContext } from '../../contexts/BankContext.jsx';
+import { ORIGENS_LANCAMENTO } from '../../utils/origens.js';
+import {
+   converteTextoParaValor,
+   formataContaCorrente,
+   formataMoeda,
+   formataValor,
+} from '../../utils/formatters.js';
 
 /** Estado inicial do formulário */
 const FORMULARIO_VAZIO = {
    datMovimento: '',
    datCompensacao: '',
+   tipDocumento: '',
    numDocumento: '',
    desHistorico: '',
    sValor: '',
    bEntrada: false,
+   codSubgrupo: '',
+   codContaContabil: '',
    tipOrigem: 'Conciliação',
 };
 
@@ -39,6 +46,7 @@ const FORMULARIO_VAZIO = {
  * @param {() => void} oPropriedades.aoFechar
  */
 export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoConfirmar, aoFechar }) {
+   const { oCatalogos, oContaSelecionada } = useBankContext();
    const [oFormulario, setFormulario] = useState(FORMULARIO_VAZIO);
    const [bGravando, setGravando] = useState(false);
    const [sErro, setErro] = useState('');
@@ -53,13 +61,15 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
 
       if (oMovimentoBase) {
          setFormulario({
+            ...FORMULARIO_VAZIO,
             datMovimento: oMovimentoBase.datMovimento,
             datCompensacao: oMovimentoBase.datMovimento,
             numDocumento: oMovimentoBase.numDocumento ?? '',
             desHistorico: oMovimentoBase.desHistorico ?? '',
             sValor: formataValor(oMovimentoBase.valMovimento),
             bEntrada: Boolean(oMovimentoBase.bEntrada),
-            tipOrigem: 'Conciliação',
+            // Lançamento nascido de um movimento do banco na conciliação
+            tipDocumento: 'MC',
          });
          return;
       }
@@ -101,10 +111,13 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
          const bSucesso = await aoConfirmar({
             datMovimento: oFormulario.datMovimento.trim(),
             datCompensacao: oFormulario.datCompensacao.trim() || oFormulario.datMovimento.trim(),
+            tipDocumento: oFormulario.tipDocumento,
             numDocumento: oFormulario.numDocumento.trim(),
             desHistorico: oFormulario.desHistorico.trim(),
             valMovimento: nValorInformado,
             bEntrada: oFormulario.bEntrada,
+            codSubgrupo: oFormulario.codSubgrupo,
+            codContaContabil: oFormulario.codContaContabil,
             tipOrigem: oFormulario.tipOrigem,
          });
 
@@ -166,6 +179,24 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
                />
 
                <label className="campo">
+                  <span className="campo-rotulo">Tipo do documento</span>
+                  <select
+                     className="campo-controle"
+                     value={oFormulario.tipDocumento}
+                     onChange={(oEvento) => alteraCampo('tipDocumento', oEvento.target.value)}
+                  >
+                     <option value="">Não informado</option>
+                     {oCatalogos.aTiposDocumento.map((oTipo) => (
+                        <option key={oTipo.codTipoDocumento} value={oTipo.codTipoDocumento}>
+                           {oTipo.codTipoDocumento} — {oTipo.desTipoDocumento}
+                        </option>
+                     ))}
+                  </select>
+               </label>
+            </div>
+
+            <div className="linha-campos col-2">
+               <label className="campo">
                   <span className="campo-rotulo">Número do documento</span>
                   <input
                      type="text"
@@ -173,6 +204,19 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
                      placeholder="Ex.: 000123"
                      value={oFormulario.numDocumento}
                      onChange={(oEvento) => alteraCampo('numDocumento', oEvento.target.value)}
+                  />
+               </label>
+
+               {/* O lançamento nasce na conta que está sendo conciliada: o
+                   campo é exibido para conferência, não para escolha. */}
+               <label className="campo">
+                  <span className="campo-rotulo">Banco / Agência / C.C.</span>
+                  <input
+                     type="text"
+                     className="campo-controle"
+                     value={formataContaCorrente(oContaSelecionada)}
+                     readOnly
+                     title={oContaSelecionada?.desAgencia}
                   />
                </label>
             </div>
@@ -223,9 +267,43 @@ export function ModalNovoLancamento({ aberto, oMovimentoBase, sDataSugerida, aoC
                      value={oFormulario.tipOrigem}
                      onChange={(oEvento) => alteraCampo('tipOrigem', oEvento.target.value)}
                   >
-                     {ORIGENS.map((sOrigem) => (
+                     {ORIGENS_LANCAMENTO.map((sOrigem) => (
                         <option key={sOrigem} value={sOrigem}>
                            {sOrigem}
+                        </option>
+                     ))}
+                  </select>
+               </label>
+            </div>
+
+            <div className="linha-campos col-2">
+               <label className="campo">
+                  <span className="campo-rotulo">Subgrupo</span>
+                  <select
+                     className="campo-controle"
+                     value={oFormulario.codSubgrupo}
+                     onChange={(oEvento) => alteraCampo('codSubgrupo', oEvento.target.value)}
+                  >
+                     <option value="">Não informado</option>
+                     {oCatalogos.aSubgrupos.map((oSubgrupo) => (
+                        <option key={oSubgrupo.codSubgrupo} value={oSubgrupo.codSubgrupo}>
+                           {oSubgrupo.codSubgrupo} — {oSubgrupo.desSubgrupo}
+                        </option>
+                     ))}
+                  </select>
+               </label>
+
+               <label className="campo">
+                  <span className="campo-rotulo">Conta contábil</span>
+                  <select
+                     className="campo-controle"
+                     value={oFormulario.codContaContabil}
+                     onChange={(oEvento) => alteraCampo('codContaContabil', oEvento.target.value)}
+                  >
+                     <option value="">Não informada</option>
+                     {oCatalogos.aContasContabeis.map((oConta) => (
+                        <option key={oConta.codContaContabil} value={oConta.codContaContabil}>
+                           {oConta.codContaContabil} — {oConta.desContaContabil}
                         </option>
                      ))}
                   </select>

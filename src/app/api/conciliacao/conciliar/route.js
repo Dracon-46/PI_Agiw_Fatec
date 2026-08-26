@@ -13,8 +13,15 @@
 
 import { NextResponse } from 'next/server';
 import { buscaContaPorCodigo } from '../../../../lib/repositories/contaRepository.js';
-import { atualizaStatusLancamentos } from '../../../../lib/repositories/lancamentoRepository.js';
-import { atualizaStatusMovimentos } from '../../../../lib/repositories/movimentoRepository.js';
+import {
+   atualizaStatusLancamentos,
+   listaDatasLancamentos,
+} from '../../../../lib/repositories/lancamentoRepository.js';
+import {
+   atualizaStatusMovimentos,
+   listaDatasMovimentos,
+} from '../../../../lib/repositories/movimentoRepository.js';
+import { dataBrParaMysql } from '../../../../lib/db.js';
 import {
    ACAO_CONCILIACAO,
    ACAO_CONCILIACAO_AUTOMATICA,
@@ -36,6 +43,61 @@ function somaLiquido(aItens) {
       0
    );
 } // somaLiquido
+
+/**
+ * Localiza registros em período já bloqueado (item 6.1.3.1).
+ *
+ * O bloqueio fecha o período: conciliar ou estornar ali mudaria o resultado de
+ * um mês já encerrado, tanto quanto lançar. Por isso a trava vale para as duas
+ * operações — conciliar e desfazer.
+ *
+ * As datas são lidas da base, e não do corpo da requisição: quem grava não
+ * pode aceitar a data que o navegador informou.
+ *
+ * @param {object} oConta Conta com datUltimoBloqueio
+ * @param {string[]} aCodLancamentos
+ * @param {string[]} aCodMovimentos
+ * @returns {Promise<{ sMensagem: string, aRegistros: string[] }>}
+ */
+async function verificaPeriodoBloqueado(oConta, aCodLancamentos, aCodMovimentos) {
+   if (!oConta.datUltimoBloqueio) {
+      return { sMensagem: '', aRegistros: [] };
+   }
+
+   const sBloqueio = dataBrParaMysql(oConta.datUltimoBloqueio);
+   if (!sBloqueio) {
+      return { sMensagem: '', aRegistros: [] };
+   }
+
+   const [aDatasLanc, aDatasMov] = await Promise.all([
+      listaDatasLancamentos(oConta.idConta, aCodLancamentos),
+      listaDatasMovimentos(oConta.idConta, aCodMovimentos),
+   ]);
+
+   const aBloqueados = [
+      ...aDatasLanc.map((oItem) => ({ sCodigo: oItem.codLancamento, sData: oItem.datMovimento })),
+      ...aDatasMov.map((oItem) => ({ sCodigo: oItem.codMovimento, sData: oItem.datMovimento })),
+   ].filter((oItem) => {
+      const sDataMysql = dataBrParaMysql(oItem.sData);
+      return sDataMysql && sDataMysql <= sBloqueio;
+   });
+
+   if (aBloqueados.length === 0) {
+      return { sMensagem: '', aRegistros: [] };
+   }
+
+   const aRegistros = aBloqueados.map((oItem) => `${oItem.sCodigo} (${oItem.sData})`);
+
+   return {
+      sMensagem:
+         `A conta está bloqueada para lançamentos até ${oConta.datUltimoBloqueio} e ` +
+         `${aBloqueados.length} registro(s) da seleção estão nesse período: ` +
+         `${aRegistros.slice(0, 5).join(', ')}` +
+         (aRegistros.length > 5 ? ` e mais ${aRegistros.length - 5}.` : '.') +
+         ' Remova o bloqueio ou retire esses registros da seleção.',
+      aRegistros,
+   };
+} // verificaPeriodoBloqueado
 
 /**
  * POST /api/conciliacao/conciliar
@@ -94,6 +156,19 @@ export async function POST(oRequisicao) {
       const oConta = await buscaContaPorCodigo(sCodConta);
       if (!oConta) {
          return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
+      }
+
+      // Item 6.1.3.1: o período fechado também recusa conciliação e estorno
+      const oBloqueio = await verificaPeriodoBloqueado(
+         oConta,
+         aLancamentos.map((oItem) => oItem.codLancamento),
+         aMovimentos.map((oItem) => oItem.codMovimento)
+      );
+      if (oBloqueio.sMensagem) {
+         return NextResponse.json(
+            { erro: oBloqueio.sMensagem, aRegistrosBloqueados: oBloqueio.aRegistros },
+            { status: 409 }
+         );
       }
 
       // ---------- Gravação ----------

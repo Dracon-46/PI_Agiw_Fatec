@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Banco do Brasil">
+  <circle cx="32" cy="32" r="32" fill="#f7d117"/>
+  <path d="M32 12 L52 32 L32 52 L12 32 Z" fill="#0033a0"/>
+  <path d="M32 21 L43 32 L32 43 L21 32 Z" fill="#f7d117"/>
+  <path d="M32 27 L37 32 L32 37 L27 32 Z" fill="#0033a0"/>
+</svg>

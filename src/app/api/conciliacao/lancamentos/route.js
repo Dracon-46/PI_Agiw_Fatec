@@ -12,6 +12,7 @@ import {
    calculaSaldoAnterior,
    excluiLancamento,
    insereLancamento,
+   listaLancamentosConta,
    listaLancamentosPeriodo,
 } from '../../../../lib/repositories/lancamentoRepository.js';
 import {
@@ -19,10 +20,7 @@ import {
    ACAO_LANCAMENTO_INCLUIDO,
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
-import {
-   listaMovimentosConta,
-   listaMovimentosPeriodo,
-} from '../../../../lib/repositories/movimentoRepository.js';
+import { calculaSaldoAnteriorBanco } from '../../../../lib/repositories/movimentoRepository.js';
 import {
    listaTitulosAbertos,
    reabreTituloPorLancamento,
@@ -30,11 +28,37 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-function calculaSaldoFinal(nSaldoAnterior, aLancamentos) {
-   return aLancamentos.reduce((nSaldo, oLancamento) => {
-      return oLancamento.bEntrada ? nSaldo + oLancamento.valMovimento : nSaldo - oLancamento.valMovimento;
-   }, nSaldoAnterior);
-} // calculaSaldoFinal
+/**
+ * Monta o bloco de saldos de um dos lados da tela.
+ *
+ * O item 6.1.2 pede que "ambos os extratos" tragam saldo anterior, entradas e
+ * saídas no período e saldo final — por isso a mesma função serve ao sistema
+ * e ao banco.
+ *
+ * @param {number} nSaldoAnterior
+ * @param {Array<object>} aRegistros Lançamentos ou movimentos do período
+ * @returns {{ valSaldoAnterior: number, valEntradas: number,
+ *             valSaidas: number, valSaldoFinal: number }}
+ */
+function montaSaldos(nSaldoAnterior, aRegistros) {
+   let nEntradas = 0;
+   let nSaidas = 0;
+
+   for (const oRegistro of aRegistros) {
+      if (oRegistro.bEntrada) {
+         nEntradas += oRegistro.valMovimento;
+      } else {
+         nSaidas += oRegistro.valMovimento;
+      }
+   }
+
+   return {
+      valSaldoAnterior: nSaldoAnterior,
+      valEntradas: nEntradas,
+      valSaidas: nSaidas,
+      valSaldoFinal: nSaldoAnterior + nEntradas - nSaidas,
+   };
+} // montaSaldos
 
 /**
  * GET /api/conciliacao/lancamentos?conta=&dataInicio=&dataFim=
@@ -44,9 +68,6 @@ export async function GET(oRequisicao) {
    const sCodConta = oParams.get('conta') ?? '';
    const sDataInicio = oParams.get('dataInicio') ?? '';
    const sDataFim = oParams.get('dataFim') ?? '';
-   // Por padrão a grade do banco exibe todo o extrato importado; passe
-   // "recortaPeriodo=1" para limitá-la às datas informadas na tela.
-   const bRecortaPeriodo = oParams.get('recortaPeriodo') === '1';
 
    if (!sCodConta) {
       return NextResponse.json(
@@ -68,31 +89,45 @@ export async function GET(oRequisicao) {
       // o botão Buscar "traz os lançamentos e movimentos já registrados no
       // Satis" do período informado). Aqui a base é nossa e as datas são
       // confiáveis, então o recorte é legítimo.
-      const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
-      const nSaldoAnterior = await calculaSaldoAnterior(oConta.idConta, sDataInicio);
+      // As duas grades precisam cobrir a mesma janela, senão a conferência
+      // fica impossível. Quando BANK_FILTRA_PERIODO=false o extrato do banco
+      // não é recortado (o sandbox ignora as datas), então o lado do sistema
+      // também não pode ser — caso contrário sobrariam movimentos do banco
+      // sem nenhum lançamento correspondente à vista.
+      const bRecortaPeriodo =
+         (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
 
-      // A grade do banco continua trazendo todo o extrato importado por
-      // padrão: as instituições devolvem o extrato pelo próprio critério — o
-      // sandbox do Bradesco, por exemplo, ignora as datas enviadas e responde
-      // sempre out/2024 a jan/2025. Recortar aqui esconderia movimentos que
-      // foram efetivamente importados. Use recortaPeriodo=1 para forçar.
-      const aMovimentos = bRecortaPeriodo
-         ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-         : await listaMovimentosConta(oConta.idConta);
+      const aLancamentos = bRecortaPeriodo
+         ? await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
+         : await listaLancamentosConta(oConta.idConta);
+
+      // Saldo anterior é o acumulado ANTES da primeira linha da grade. Sem
+      // recorte a grade traz o extrato inteiro, então não há nada antes dela:
+      // somar o período anterior contaria os mesmos movimentos duas vezes.
+      const [nSaldoAnterior, nSaldoAnteriorBanco] = bRecortaPeriodo
+         ? await Promise.all([
+              calculaSaldoAnterior(oConta.idConta, sDataInicio),
+              calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
+           ])
+         : [0, 0];
 
       // Títulos abertos até o fim do período: alimentam a ação "Baixar Título"
       const aTitulos = await listaTitulosAbertos(oConta.idConta, { sDataLimiteBr: sDataFim });
 
       return NextResponse.json({
          lancamentos: aLancamentos,
-         movimentos: aMovimentos,
          titulos: aTitulos,
          conta: oConta,
          saldos: {
-            valSaldoAnterior: nSaldoAnterior,
-            valSaldoFinal: calculaSaldoFinal(nSaldoAnterior, aLancamentos),
+            // Bloco do sistema — mantido na raiz por compatibilidade com a tela
+            ...montaSaldos(nSaldoAnterior, aLancamentos),
             datSaldoAnterior: sDataInicio,
             datSaldoFinal: sDataFim,
+            // Item 6.1.2: cada extrato tem o seu próprio conjunto de saldos.
+            // O do banco sai sem entradas/saídas: os movimentos do período
+            // chegam pela API, e a tela os soma ao receber o extrato.
+            oSistema: montaSaldos(nSaldoAnterior, aLancamentos),
+            valSaldoAnteriorBanco: nSaldoAnteriorBanco,
          },
          periodo: { sDataInicio, sDataFim },
          aviso:
@@ -168,6 +203,10 @@ export async function POST(oRequisicao) {
          valMovimento: nValor,
          bEntrada: Boolean(oCorpo.bEntrada),
          tipOrigem: oCorpo.tipOrigem,
+         // Campos do item 6.1.3.8 — ação 1
+         tipDocumento: oCorpo.tipDocumento,
+         codSubgrupo: oCorpo.codSubgrupo,
+         codContaContabil: oCorpo.codContaContabil,
       });
 
       // A mensagem de sucesso é emitida somente após concluir a gravação

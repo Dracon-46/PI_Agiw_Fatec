@@ -20,7 +20,7 @@ import { ArrowLeftRight, Power } from 'lucide-react';
 import { Modal } from '../comum/Modal.jsx';
 import { CampoData } from '../comum/CampoData.jsx';
 import { converteTextoParaValor, formataMoeda, formataValor } from '../../utils/formatters.js';
-import { subgruposFluxoCaixa } from '../../utils/mockData.js';
+import { useBankContext } from '../../contexts/BankContext.jsx';
 
 /** Estado inicial do formulário */
 const FORMULARIO_VAZIO = {
@@ -61,6 +61,7 @@ export function ModalTransferencia({
    aoConfirmar,
    aoFechar,
 }) {
+   const { oCatalogos } = useBankContext();
    const [oFormulario, setFormulario] = useState(FORMULARIO_VAZIO);
    const [bGravando, setGravando] = useState(false);
    const [sErro, setErro] = useState('');
@@ -287,7 +288,7 @@ export function ModalTransferencia({
                   onChange={(oEvento) => alteraCampo('codSubgrupo', oEvento.target.value)}
                >
                   <option value="">Não informado</option>
-                  {subgruposFluxoCaixa.map((oSubgrupo) => (
+                  {oCatalogos.aSubgrupos.map((oSubgrupo) => (
                      <option key={oSubgrupo.codSubgrupo} value={oSubgrupo.codSubgrupo}>
                         {oSubgrupo.codSubgrupo} — {oSubgrupo.desSubgrupo}
                      </option>

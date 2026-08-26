@@ -10,7 +10,7 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react';
-import { CheckCircle2, CircleDashed, Landmark, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle2, Landmark, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useBankContext } from '../../contexts/BankContext.jsx';
 import { MarcaBanco } from '../comum/MarcaBanco.jsx';
 import { CadastroContaModal } from '../comum/CadastroContaModal.jsx';
@@ -25,6 +25,8 @@ export function BankSelectorPage({ aoSelecionar }) {
    const { aContas, bCarregando, sErro, selecionaConta, removeContaCadastrada } = useBankContext();
    const [sPesquisa, setPesquisa] = useState('');
    const [bCadastroAberto, setCadastroAberto] = useState(false);
+   // Conta em edição; nula quando a caixa está cadastrando uma nova
+   const [oContaEdicao, setContaEdicao] = useState(null);
 
    // Filtra pelo banco, agência, conta ou descrição da agência
    const aContasFiltradas = useMemo(() => {
@@ -60,6 +62,40 @@ export function BankSelectorPage({ aoSelecionar }) {
       void removeContaCadastrada(sCodConta);
    } // trataRemocao
 
+   /**
+    * Abre a caixa em modo de alteração, sem selecionar a conta.
+    * @param {import('react').MouseEvent} oEvento
+    * @param {object} oConta
+    */
+   function trataEdicao(oEvento, oConta) {
+      oEvento.stopPropagation();
+      setContaEdicao(oConta);
+      setCadastroAberto(true);
+   } // trataEdicao
+
+   /** Abre a caixa em modo de cadastro. */
+   function abreCadastro() {
+      setContaEdicao(null);
+      setCadastroAberto(true);
+   } // abreCadastro
+
+   /** Fecha a caixa e descarta o modo de edição. */
+   function fechaCadastro() {
+      setCadastroAberto(false);
+      setContaEdicao(null);
+   } // fechaCadastro
+
+   /**
+    * Após gravar: um cadastro novo já abre a conciliação; uma alteração
+    * apenas atualiza a lista, porque o usuário pode estar só corrigindo dados.
+    * @param {string} sCodConta
+    */
+   function trataGravacao(sCodConta) {
+      if (!oContaEdicao) {
+         trataEscolha(sCodConta);
+      }
+   } // trataGravacao
+
    return (
       <div className="selecao-banco-pagina">
          <div className="selecao-banco-caixa">
@@ -70,7 +106,7 @@ export function BankSelectorPage({ aoSelecionar }) {
                   <button
                      type="button"
                      className="btn btn-primario btn-pequeno"
-                     onClick={() => setCadastroAberto(true)}
+                     onClick={abreCadastro}
                   >
                      <Plus size={13} />
                      Cadastrar conta
@@ -105,12 +141,13 @@ export function BankSelectorPage({ aoSelecionar }) {
 
                {!bCarregando && !sErro && aContasFiltradas.length === 0 ? (
                   <div className="grade-vazia">
-                     Nenhuma conta corrente localizada.
+                     Nenhuma conta corrente com integração configurada. Preencha as credenciais do
+                     banco no <code>.env</code> do servidor e cadastre a agência e a conta.
                      {' '}
                      <button
                         type="button"
                         className="btn btn-primario btn-pequeno"
-                        onClick={() => setCadastroAberto(true)}
+                        onClick={abreCadastro}
                         style={{ marginTop: 10 }}
                      >
                         <Plus size={13} />
@@ -134,9 +171,24 @@ export function BankSelectorPage({ aoSelecionar }) {
                                  corBanco={oConta.corBanco}
                                  corTexto={oConta.corTexto}
                                  nomBanco={oConta.nomBanco}
+                                 urlLogo={oConta.urlLogo}
                               />
                               <span className="cartao-banco-nome">
                                  {oConta.codBanco} - {oConta.nomBanco}
+                              </span>
+                              <span
+                                 role="button"
+                                 tabIndex={0}
+                                 className="cartao-banco-acao"
+                                 title="Alterar banco, agência ou conta corrente"
+                                 onClick={(oEvento) => trataEdicao(oEvento, oConta)}
+                                 onKeyDown={(oEvento) => {
+                                    if (oEvento.key === 'Enter' || oEvento.key === ' ') {
+                                       trataEdicao(oEvento, oConta);
+                                    }
+                                 }}
+                              >
+                                 <Pencil size={12} />
                               </span>
                               <span
                                  role="button"
@@ -168,17 +220,13 @@ export function BankSelectorPage({ aoSelecionar }) {
                               <span>Último bloqueio: {trataDataNula(oConta.datUltimoBloqueio)}</span>
                            </div>
 
-                           {oConta.bIntegracaoConfigurada ? (
-                              <span className="cartao-banco-situacao situacao-configurado">
-                                 <CheckCircle2 size={11} />
-                                 Integração configurada
-                              </span>
-                           ) : (
-                              <span className="cartao-banco-situacao situacao-pendente">
-                                 <CircleDashed size={11} />
-                                 Importação por arquivo ou homologação
-                              </span>
-                           )}
+                           {/* Só chegam aqui contas com integração configurada:
+                               o contexto filtra as demais, porque sem
+                               credencial não há extrato a importar. */}
+                           <span className="cartao-banco-situacao situacao-configurado">
+                              <CheckCircle2 size={11} />
+                              Integração configurada
+                           </span>
                         </button>
                      ))}
                   </div>
@@ -188,8 +236,9 @@ export function BankSelectorPage({ aoSelecionar }) {
 
          <CadastroContaModal
             aberto={bCadastroAberto}
-            aoFechar={() => setCadastroAberto(false)}
-            aoCadastrar={trataEscolha}
+            oContaEdicao={oContaEdicao}
+            aoFechar={fechaCadastro}
+            aoGravar={trataGravacao}
          />
       </div>
    );

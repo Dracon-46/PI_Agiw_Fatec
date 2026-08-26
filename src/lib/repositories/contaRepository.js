@@ -13,7 +13,7 @@ import { dataBrParaMysql, dataMysqlParaBr, query } from '../db.js';
 export async function listaBancos() {
    return query(
       `SELECT cod_banco AS codBanco, nom_banco AS nomBanco, slug_provider AS slugProvider,
-              cor_banco AS corBanco, cor_texto AS corTexto
+              cor_banco AS corBanco, cor_texto AS corTexto, url_logo AS urlLogo
          FROM banco
      ORDER BY nom_banco`
    );
@@ -39,6 +39,7 @@ function mapeiaConta(oLinha, aProviders = []) {
       desAgencia: oLinha.desAgencia,
       corBanco: oLinha.corBanco,
       corTexto: oLinha.corTexto,
+      urlLogo: oLinha.urlLogo ?? '',
       valSaldoSistema: Number(oLinha.valSaldoSistema ?? 0),
       datUltimoBloqueio: dataMysqlParaBr(oLinha.datUltimoBloqueio),
       bIntegracaoConfigurada: Boolean(oProvider?.configured),
@@ -64,6 +65,7 @@ export async function listaContasCorrentes() {
               c.des_agencia AS desAgencia,
               b.cor_banco AS corBanco,
               b.cor_texto AS corTexto,
+              b.url_logo AS urlLogo,
               c.val_saldo_sistema AS valSaldoSistema,
               c.dat_ultimo_bloqueio AS datUltimoBloqueio
          FROM conta_corrente c
@@ -96,6 +98,7 @@ export async function buscaContaPorCodigo(sCodConta) {
               c.des_agencia AS desAgencia,
               b.cor_banco AS corBanco,
               b.cor_texto AS corTexto,
+              b.url_logo AS urlLogo,
               c.val_saldo_sistema AS valSaldoSistema,
               c.dat_ultimo_bloqueio AS datUltimoBloqueio
          FROM conta_corrente c
@@ -169,6 +172,72 @@ export async function cadastraContaCorrente(oDados) {
 
    return buscaContaPorCodigo(sCodConta);
 } // cadastraContaCorrente
+
+/**
+ * Altera banco, agência, conta e descrição de uma conta já cadastrada.
+ *
+ * O código lógico deriva de slug + agência + conta, então mudar qualquer um
+ * deles muda o cod_conta. As tabelas filhas apontam para id_conta, que não se
+ * altera — o histórico de conciliação da conta é preservado.
+ *
+ * @param {string} sCodContaAtual Código da conta antes da alteração
+ * @param {object} oDados
+ * @returns {Promise<object>} Conta atualizada
+ */
+export async function atualizaContaCorrente(sCodContaAtual, oDados) {
+   const oAtual = await buscaContaPorCodigo(sCodContaAtual);
+   if (!oAtual) {
+      throw new Error(`Conta "${sCodContaAtual}" não localizada.`);
+   }
+
+   const aBancos = await listaBancos();
+   const oBanco = aBancos.find((oItem) => oItem.slugProvider === oDados.slugProvider);
+   if (!oBanco) {
+      throw new Error('Banco inválido. Selecione um banco do catálogo.');
+   }
+
+   const sAgencia = String(oDados.codAgencia ?? '').trim();
+   const sConta = String(oDados.numContaCorrente ?? '').trim();
+   if (!sAgencia || !sConta) {
+      throw new Error('Informe a agência e a conta corrente.');
+   }
+
+   const sCodConta = montaCodConta(oBanco.slugProvider, sAgencia, sConta);
+   const sTipConta = oDados.tipConta === 'cp' ? 'cp' : 'cc';
+
+   try {
+      await query(
+         `UPDATE conta_corrente
+             SET cod_conta = :codConta,
+                 cod_banco = :codBanco,
+                 cod_agencia = :codAgencia,
+                 num_conta_corrente = :numConta,
+                 tip_conta = :tipConta,
+                 des_agencia = :desAgencia,
+                 val_saldo_sistema = :valSaldo,
+                 dat_ultimo_bloqueio = :datBloqueio
+           WHERE id_conta = :idConta`,
+         {
+            idConta: oAtual.idConta,
+            codConta: sCodConta,
+            codBanco: oBanco.codBanco,
+            codAgencia: sAgencia,
+            numConta: sConta,
+            tipConta: sTipConta,
+            desAgencia: String(oDados.desAgencia ?? '').trim() || `Agência ${sAgencia}`,
+            valSaldo: Number(oDados.valSaldoSistema) || 0,
+            datBloqueio: dataBrParaMysql(oDados.datUltimoBloqueio),
+         }
+      );
+   } catch (oErro) {
+      if (oErro?.code === 'ER_DUP_ENTRY') {
+         throw new Error('Já existe outra conta cadastrada com este banco, agência e C.C.');
+      }
+      throw oErro;
+   }
+
+   return buscaContaPorCodigo(sCodConta);
+} // atualizaContaCorrente
 
 /**
  * Atualiza a data de bloqueio da conta.

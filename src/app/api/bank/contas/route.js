@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import {
+   atualizaContaCorrente,
    cadastraContaCorrente,
    inativaConta,
    listaBancos,
@@ -39,6 +40,34 @@ export async function POST(oRequisicao) {
       return NextResponse.json({ erro: oErro.message }, { status: nStatus });
    }
 } // POST
+
+/**
+ * PUT /api/bank/contas — altera banco/agência/C.C. de uma conta cadastrada.
+ * Corpo: { codConta, slugProvider, tipConta, codAgencia, numContaCorrente, ... }
+ */
+export async function PUT(oRequisicao) {
+   try {
+      const oCorpo = await oRequisicao.json();
+      const sCodConta = String(oCorpo?.codConta ?? '');
+
+      if (!sCodConta) {
+         return NextResponse.json({ erro: 'Informe a conta a ser alterada.' }, { status: 400 });
+      }
+
+      const oConta = await atualizaContaCorrente(sCodConta, oCorpo);
+      return NextResponse.json({ conta: oConta });
+   } catch (oErro) {
+      const nStatus =
+         oErro.message?.includes('Já existe') ||
+         oErro.message?.includes('Informe') ||
+         oErro.message?.includes('inválido')
+            ? 400
+            : oErro.message?.includes('não localizada')
+              ? 404
+              : 500;
+      return NextResponse.json({ erro: oErro.message }, { status: nStatus });
+   }
+} // PUT
 
 /**
  * DELETE /api/bank/contas?conta=codConta — inativa conta

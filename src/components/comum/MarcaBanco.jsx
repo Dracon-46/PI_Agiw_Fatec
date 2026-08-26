@@ -1,11 +1,17 @@
+'use client';
 // ============================================================================
 // MarcaBanco.jsx - Identificação visual do banco
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// Exibe o código do banco (compensação) sobre a cor institucional. Substitui
-// o logotipo enquanto os arquivos oficiais não estão disponíveis no projeto,
-// mantendo o reconhecimento visual previsto no protótipo.
+// Item 6.1.1 do documento de visão: o cartão da conta exibe o logotipo do
+// banco. No Satis a origem é "/pesqgen?nompesquisa=LOGO_BANCO"; aqui o caminho
+// vem da coluna banco.url_logo e aponta para os arquivos em /public/bancos.
+//
+// Sem logotipo cadastrado — ou se o arquivo não carregar — cai no selo com o
+// código de compensação sobre a cor institucional, que é sempre reconhecível.
 // ============================================================================
+
+import { useEffect, useState } from 'react';
 
 /** Tamanhos aceitos, mapeados para as classes utilitárias do tema */
 const TAMANHOS = {
@@ -21,13 +27,43 @@ const TAMANHOS = {
  * @param {string} [oPropriedades.corTexto] Cor do texto sobre o fundo
  * @param {'sm'|'md'|'lg'} [oPropriedades.tamanho] Dimensão do selo
  * @param {string} [oPropriedades.nomBanco] Nome usado no título acessível
+ * @param {string} [oPropriedades.urlLogo] Caminho do logotipo do banco
  */
-export function MarcaBanco({ codBanco, corBanco = '#3b82f6', corTexto = '#ffffff', tamanho = 'md', nomBanco }) {
+export function MarcaBanco({
+   codBanco,
+   corBanco = '#3b82f6',
+   corTexto = '#ffffff',
+   tamanho = 'md',
+   nomBanco,
+   urlLogo = '',
+}) {
+   const [bFalhou, setFalhou] = useState(false);
+   const sClasse = `marca-banco ${TAMANHOS[tamanho] ?? TAMANHOS.md}`;
+   const sTitulo = nomBanco ?? codBanco;
+
+   // Trocar de banco precisa reabilitar a tentativa de carregar o logotipo
+   useEffect(() => {
+      setFalhou(false);
+   }, [urlLogo]);
+
+   if (urlLogo && !bFalhou) {
+      return (
+         // eslint-disable-next-line @next/next/no-img-element
+         <img
+            className={`${sClasse} marca-banco-logo`}
+            src={urlLogo}
+            alt={sTitulo}
+            title={sTitulo}
+            onError={() => setFalhou(true)}
+         />
+      );
+   }
+
    return (
       <span
-         className={`marca-banco ${TAMANHOS[tamanho] ?? TAMANHOS.md}`}
+         className={sClasse}
          style={{ background: corBanco, color: corTexto }}
-         title={nomBanco ?? codBanco}
+         title={sTitulo}
          aria-hidden="true"
       >
          {codBanco}

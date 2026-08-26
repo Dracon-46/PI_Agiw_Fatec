@@ -13,8 +13,8 @@
 import { NextResponse } from 'next/server';
 import { buscaContaPorCodigo } from '../../../../../lib/repositories/contaRepository.js';
 import {
-   gravaMovimentosImportados,
-   listaMovimentosConta,
+   gravaMovimentosArquivo,
+   listaMovimentosArquivo,
 } from '../../../../../lib/repositories/movimentoRepository.js';
 import {
    ACAO_IMPORTACAO_ARQUIVO,
@@ -155,12 +155,12 @@ export async function POST(oRequisicao) {
       const aMovimentos = normalizaMovimentos(aLidos, sCodConta, sFormato);
 
       // Compara com o que já existe para informar quantos foram ignorados
-      const aExistentes = await listaMovimentosConta(oConta.idConta);
+      const aExistentes = await listaMovimentosArquivo(oConta.idConta);
       const oChavesExistentes = new Set(aExistentes.map((oItem) => oItem.codMovimento));
       const iNovos = aMovimentos.filter((oItem) => !oChavesExistentes.has(oItem.codMovimento)).length;
       const iIgnorados = aMovimentos.length - iNovos;
 
-      await gravaMovimentosImportados(oConta.idConta, aMovimentos);
+      await gravaMovimentosArquivo(oConta.idConta, aMovimentos);
 
       await registraArquivoImportado({
          idConta: oConta.idConta,
@@ -182,8 +182,9 @@ export async function POST(oRequisicao) {
             `${aMovimentos.length} movimento(s) lido(s), ${iNovos} novo(s), ${iIgnorados} já existente(s).`,
       });
 
-      // Devolve o extrato completo da conta, já com o que veio do arquivo
-      const aTodos = await listaMovimentosConta(oConta.idConta);
+      // Devolve tudo o que veio de arquivo nesta conta. Os movimentos de API
+      // não entram aqui: a tela os obtém consultando a instituição.
+      const aTodos = await listaMovimentosArquivo(oConta.idConta);
 
       return NextResponse.json({
          movimentos: aTodos,

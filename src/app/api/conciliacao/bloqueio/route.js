@@ -21,6 +21,12 @@ import {
    ACAO_DESBLOQUEIO,
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
+import {
+   PERM_BLOQUEIO,
+   mensagemSemPermissao,
+   nomUsuarioAtual,
+   temPermissao,
+} from '../../../../lib/repositories/usuarioRepository.js';
 import { dataBrParaMysql } from '../../../../lib/db.js';
 import { formataDataBr } from '../../../../utils/formatters.js';
 
@@ -48,6 +54,12 @@ export async function POST(oRequisicao) {
    // ---------- Validações (antes de qualquer gravação) ----------
    if (!sCodConta) {
       return NextResponse.json({ erro: 'Selecione a conta corrente.' }, { status: 400 });
+   }
+
+   // Item 6.1.3.1: "Verificar permissão de acesso para uso desses botões."
+   // A conferência é feita aqui, no servidor, e não apenas na tela.
+   if (!(await temPermissao(PERM_BLOQUEIO))) {
+      return NextResponse.json({ erro: mensagemSemPermissao(PERM_BLOQUEIO) }, { status: 403 });
    }
 
    if (!bRemove) {
@@ -82,6 +94,7 @@ export async function POST(oRequisicao) {
          tipAcao: bRemove ? ACAO_DESBLOQUEIO : ACAO_BLOQUEIO,
          desEntidade: 'conta',
          codEntidade: sCodConta,
+         nomUsuario: nomUsuarioAtual(),
          desDetalhe: bRemove
             ? `Bloqueio removido da conta ${oConta.codAgencia}/${oConta.numContaCorrente}.`
             : `Conta ${oConta.codAgencia}/${oConta.numContaCorrente} bloqueada para lançamentos até ${sDatBloqueio}.`,

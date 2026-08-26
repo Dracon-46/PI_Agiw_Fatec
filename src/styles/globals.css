@@ -15,12 +15,18 @@
    --agiw-primary-active: #1d4ed8;
    --agiw-primary-light: #eff6ff;
    --agiw-primary-border: #bfdbfe;
-   --agiw-topbar: #3f6fb5;
-   --agiw-topbar-dark: #355f9c;
+   /* A barra superior usa a própria cor de destaque do padrão, sem tons
+      próprios: o PadraoInterface.pdf define #3B82F6 para "botões principais,
+      links e itens selecionados". */
+   --agiw-topbar: #3b82f6;
+   --agiw-topbar-dark: #2563eb;
 
    /* ---------- Fundo, textos e bordas (grafite/zinco) ---------- */
+   /* Modo claro do padrão: fundo branco puro. Os cinzas ficam restritos a
+      bordas, textos secundários e faixas internas (cabeçalho e rodapé das
+      grades), como descrito no item 2 do PadraoInterface.pdf. */
    --cor-superficie: #ffffff;
-   --cor-canvas: #f7f8fa;
+   --cor-canvas: #ffffff;
    --cor-canvas-alt: #fafafa;
    --cor-borda: #e4e4e7;
    --cor-borda-clara: #f4f4f5;
@@ -120,15 +126,13 @@ textarea {
 }
 
 /* ---------- Sidebar ---------- */
+/* Logotipo da Agiw. object-fit: contain preserva a proporção da marca
+   dentro do quadrado da barra lateral. */
 .sidebar-marca {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   width: 40px;
-   height: 40px;
-   border-radius: var(--raio-md);
-   background: var(--agiw-primary-light);
-   color: var(--agiw-primary);
+   display: block;
+   width: 52px;
+   height: 38px;
+   object-fit: contain;
    margin-bottom: 12px;
    flex-shrink: 0;
 }
@@ -809,6 +813,27 @@ textarea {
    background: var(--agiw-primary-light);
 }
 
+/* Item 6.1.2: linha já conciliada fica verde, para o usuário reconhecer de
+   relance o que não entra em uma nova conciliação */
+.grade tbody tr.conciliada {
+   background: var(--cor-conciliado-bg);
+}
+
+.grade tbody tr.conciliada:hover {
+   background: var(--cor-conciliado-borda);
+}
+
+.grade tbody tr.conciliada.selecionada {
+   background: var(--cor-conciliado-borda);
+   box-shadow: inset 2px 0 0 var(--cor-conciliado);
+}
+
+.grade thead th.col-origem,
+.grade tbody td.col-origem {
+   white-space: nowrap;
+   color: var(--cor-texto-secundario);
+}
+
 .grade tbody tr.bloqueada {
    opacity: 0.55;
    cursor: not-allowed;
@@ -1035,6 +1060,129 @@ textarea {
 
 .totais-valor.diferenca-aberta {
    color: var(--cor-saida);
+}
+
+/* ---------- Saldos de cada extrato (item 6.1.2) ---------- */
+.saldos-grade {
+   display: flex;
+   align-items: center;
+   gap: 18px;
+   flex-wrap: wrap;
+   font-size: 11px;
+   white-space: nowrap;
+}
+
+.saldos-grade-item {
+   display: inline-flex;
+   align-items: center;
+   gap: 5px;
+}
+
+/* ---------- Somatórias da seleção em duas linhas (item 6.1.2) ---------- */
+.linhas-somatoria {
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+   margin-top: 12px;
+}
+
+.linha-somatoria {
+   display: flex;
+   align-items: center;
+   gap: 18px;
+   flex-wrap: wrap;
+   padding: 7px 12px;
+   border: 1px solid var(--cor-borda);
+   border-radius: var(--raio-md);
+   background: var(--cor-canvas-alt);
+   font-size: 11px;
+   opacity: 0.6;
+   transition: all 0.15s ease;
+}
+
+/* A linha em uso ganha destaque; a outra fica visível mas apagada */
+.linha-somatoria.ativa {
+   opacity: 1;
+   border-color: var(--agiw-primary-border);
+   background: var(--agiw-primary-light);
+}
+
+.linha-somatoria-rotulo {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   min-width: 250px;
+   font-weight: 600;
+   color: var(--cor-texto-secundario);
+}
+
+.linha-somatoria-rotulo .chip-contador {
+   margin-left: 0;
+}
+
+.linha-somatoria-item {
+   display: inline-flex;
+   align-items: center;
+   gap: 5px;
+}
+
+/* ---------- Filtro por campo da grade (item 6.1.3.4) ---------- */
+.filtro-grade {
+   position: relative;
+   margin-left: auto;
+}
+
+.filtro-grade-caixa {
+   position: absolute;
+   top: calc(100% + 6px);
+   right: 0;
+   z-index: 500;
+   width: 290px;
+   border: 1px solid var(--cor-borda);
+   border-radius: var(--raio-md);
+   background: var(--cor-superficie);
+   box-shadow: var(--sombra-lg);
+}
+
+.filtro-grade-cabecalho {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   padding: 8px 10px;
+   border-bottom: 1px solid var(--cor-borda-clara);
+   font-size: 11.5px;
+   font-weight: 600;
+   color: var(--cor-texto-secundario);
+}
+
+.filtro-grade-corpo {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+   padding: 10px;
+   max-height: 300px;
+   overflow-y: auto;
+}
+
+.filtro-grade-intervalo {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 6px;
+}
+
+.filtro-grade-rodape {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   padding: 8px 10px;
+   border-top: 1px solid var(--cor-borda-clara);
+   background: var(--cor-canvas-alt);
+}
+
+.filtro-grade-resumo {
+   font-size: 10.5px;
+   color: var(--cor-texto-secundario);
 }
 
 /* ============================================================================
@@ -1446,6 +1594,30 @@ textarea {
    letter-spacing: -0.3px;
 }
 
+/* Logotipo do banco no lugar do selo com o código (item 6.1.1) */
+.marca-banco-logo {
+   background: transparent;
+   object-fit: contain;
+   padding: 1px;
+}
+
+.cartao-banco-acao {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   width: 20px;
+   height: 20px;
+   border-radius: var(--raio-sm);
+   color: var(--cor-texto-suave);
+   cursor: pointer;
+   flex-shrink: 0;
+}
+
+.cartao-banco-acao:hover {
+   background: var(--agiw-primary-light);
+   color: var(--agiw-primary);
+}
+
 .marca-banco-sm { width: 22px; height: 22px; font-size: 8.5px; }
 .marca-banco-md { width: 34px; height: 34px; font-size: 11px; }
 .marca-banco-lg { width: 44px; height: 44px; font-size: 13px; }
@@ -1512,10 +1684,6 @@ textarea {
    RESPONSIVIDADE
    ========================================================================== */
 @media (max-width: 1180px) {
-   .area-conciliacao {
-      grid-template-columns: minmax(0, 1fr);
-   }
-
    .filtro-conciliacao {
       grid-template-columns: repeat(2, minmax(0, 1fr));
    }
@@ -1525,6 +1693,15 @@ textarea {
    }
 
    .grade-rodape {
+      grid-template-columns: minmax(0, 1fr);
+   }
+}
+
+/* O item 6.1.2 exige o extrato do banco e os lançamentos do sistema "lado a
+   lado". As grades só empilham em telas realmente estreitas — acima disso
+   cada uma rola na horizontal dentro do próprio quadro. */
+@media (max-width: 900px) {
+   .area-conciliacao {
       grid-template-columns: minmax(0, 1fr);
    }
 }

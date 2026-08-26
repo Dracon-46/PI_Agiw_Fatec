@@ -12,7 +12,6 @@ import { useRouter } from 'next/navigation';
 import {
    ArrowLeftRight,
    CheckCircle2,
-   Circle,
    Download,
    HandCoins,
    Lock,
@@ -34,6 +33,8 @@ import { ModalNovoLancamento } from './ModalNovoLancamento.jsx';
 import { ModalTransferencia } from './ModalTransferencia.jsx';
 import { ModalBaixarTitulo } from './ModalBaixarTitulo.jsx';
 import { MenuExportar } from './MenuExportar.jsx';
+import { FiltroGrade, aplicaFiltrosGrade } from '../comum/FiltroGrade.jsx';
+import { PERM_BLOQUEIO } from '../../utils/permissoes.js';
 import {
    formataContaCorrente,
    formataDataBr,
@@ -41,6 +42,26 @@ import {
    formataValor,
    somaDiasData,
 } from '../../utils/formatters.js';
+
+/**
+ * Colunas filtráveis da grade de lançamentos do sistema (item 6.1.3.4).
+ * Espelham exatamente as colunas exibidas, como pede o documento.
+ */
+const CAMPOS_LANCAMENTO = [
+   { sChave: 'datMovimento', sRotulo: 'Data baixa', sExemplo: 'Ex.: 15/11' },
+   { sChave: 'numDocumento', sRotulo: 'Documento', sExemplo: 'Ex.: 000123' },
+   { sChave: 'desHistorico', sRotulo: 'Descrição do documento', sExemplo: 'Contém...' },
+   { sChave: 'valMovimento', sRotulo: 'Valor', sTipo: 'valor' },
+   { sChave: 'tipOrigem', sRotulo: 'Origem', sExemplo: 'Ex.: Contas a Pagar' },
+];
+
+/** Colunas filtráveis da grade de movimentos do banco (item 6.1.3.4) */
+const CAMPOS_MOVIMENTO = [
+   { sChave: 'datMovimento', sRotulo: 'Data do movimento', sExemplo: 'Ex.: 15/11' },
+   { sChave: 'numDocumento', sRotulo: 'Documento', sExemplo: 'Ex.: 000123' },
+   { sChave: 'desHistorico', sRotulo: 'Descrição do movimento', sExemplo: 'Contém...' },
+   { sChave: 'valMovimento', sRotulo: 'Valor', sTipo: 'valor' },
+];
 
 /**
  * Filtra a grade conforme chips conciliado / não conciliado.
@@ -72,30 +93,100 @@ function CelulaValor({ bEntrada, valMovimento }) {
 
 /**
  * Selo visual do status de conciliação.
+ *
+ * Item 6.1.2: "exibir um sinal de marcação verde quando já conciliado, quando
+ * não conciliado não exibe nada".
+ *
  * @param {{ conciliado: boolean }} oPropriedades
  */
 function SeloStatus({ conciliado }) {
-   if (conciliado) {
-      return (
-         <span className="selo selo-conciliado">
-            <CheckCircle2 size={11} />
-            Sim
-         </span>
-      );
+   if (!conciliado) {
+      return null;
    }
+
    return (
-      <span className="selo selo-nao-conciliado">
-         <Circle size={11} />
-         Não
+      <span className="icone-conciliado" title="Conciliado">
+         <CheckCircle2 size={14} />
       </span>
    );
 } // SeloStatus
 
+/**
+ * Uma das duas linhas de somatória da seleção (item 6.1.2).
+ *
+ * @param {object} oPropriedades
+ * @param {string} oPropriedades.sRotulo Identificação da linha
+ * @param {object} oPropriedades.oLinha Totais de sistema, banco e diferença
+ */
+function LinhaSomatoria({ sRotulo, oLinha }) {
+   const bAtiva = oLinha.iQuantidade > 0;
+
+   return (
+      <div className={`linha-somatoria ${bAtiva ? 'ativa' : ''}`}>
+         <span className="linha-somatoria-rotulo">
+            {sRotulo}
+            <span className="chip-contador">{oLinha.iQuantidade} selecionado(s)</span>
+         </span>
+         <span className="linha-somatoria-item">
+            <span className="totais-rotulo">Sistema</span>
+            <span className="totais-valor">{formataMoeda(oLinha.oSistema.valLiquido)}</span>
+         </span>
+         <span className="linha-somatoria-item">
+            <span className="totais-rotulo">Banco</span>
+            <span className="totais-valor">{formataMoeda(oLinha.oBanco.valLiquido)}</span>
+         </span>
+         <span className="linha-somatoria-item">
+            <span className="totais-rotulo">Diferença</span>
+            <span
+               className={`totais-valor ${
+                  !bAtiva ? '' : oLinha.valDiferenca === 0 ? 'diferenca-zero' : 'diferenca-aberta'
+               }`}
+            >
+               {formataMoeda(oLinha.valDiferenca)}
+            </span>
+         </span>
+      </div>
+   );
+} // LinhaSomatoria
+
+/**
+ * Bloco de saldos de um dos extratos (item 6.1.2).
+ *
+ * @param {object} oPropriedades
+ * @param {object} oPropriedades.oSaldos Saldo anterior, entradas, saídas e final
+ */
+function SaldosGrade({ oSaldos }) {
+   return (
+      <div className="saldos-grade">
+         <span className="saldos-grade-item">
+            <span className="totais-rotulo">Saldo anterior</span>
+            <span className="totais-valor">{formataMoeda(oSaldos.valSaldoAnterior)}</span>
+         </span>
+         <span className="saldos-grade-item">
+            <span className="totais-rotulo">Entradas</span>
+            <span className="totais-valor entrada">{formataMoeda(oSaldos.valEntradas)}</span>
+         </span>
+         <span className="saldos-grade-item">
+            <span className="totais-rotulo">Saídas</span>
+            <span className="totais-valor saida">{formataMoeda(oSaldos.valSaidas)}</span>
+         </span>
+         <span className="saldos-grade-item">
+            <span className="totais-rotulo">Saldo final</span>
+            <span className="totais-valor">{formataMoeda(oSaldos.valSaldoFinal)}</span>
+         </span>
+      </div>
+   );
+} // SaldosGrade
+
 export function ConciliacaoBancariaPage() {
    const router = useRouter();
-   const { aContas, oContaSelecionada, limpaSelecao } = useBankContext();
+   const { aContas, oContaSelecionada, limpaSelecao, oUsuario, temPermissao } = useBankContext();
    const { notifica } = useNotificacoes();
    const oConc = useConciliacao(oContaSelecionada, notifica);
+   // Filtros por campo de cada grade (item 6.1.3.4)
+   const [oFiltrosLanc, setFiltrosLanc] = useState({});
+   const [oFiltrosMov, setFiltrosMov] = useState({});
+   const bPodeBloquear = temPermissao(PERM_BLOQUEIO);
    const [sDatBloqueioEdicao, setDatBloqueioEdicao] = useState('');
    const [bLancamentoAberto, setLancamentoAberto] = useState(false);
    const [bTransferenciaAberta, setTransferenciaAberta] = useState(false);
@@ -118,24 +209,34 @@ export function ConciliacaoBancariaPage() {
       setDatBloqueioEdicao(oConc.datBloqueio || '');
    }, [oConc.datBloqueio]);
 
+   // Os dois filtros do item 6.1.3.4 se somam: primeiro os chips de situação,
+   // depois os filtros por campo da grade
    const aLancVisiveis = useMemo(
       () =>
-         filtraPorStatus(
-            oConc.aLancamentos,
-            oConc.oFiltrosGrade.bLancConciliados,
-            oConc.oFiltrosGrade.bLancNaoConciliados
+         aplicaFiltrosGrade(
+            filtraPorStatus(
+               oConc.aLancamentos,
+               oConc.oFiltrosGrade.bLancConciliados,
+               oConc.oFiltrosGrade.bLancNaoConciliados
+            ),
+            oFiltrosLanc,
+            CAMPOS_LANCAMENTO
          ),
-      [oConc.aLancamentos, oConc.oFiltrosGrade]
+      [oConc.aLancamentos, oConc.oFiltrosGrade, oFiltrosLanc]
    );
 
    const aMovVisiveis = useMemo(
       () =>
-         filtraPorStatus(
-            oConc.aMovimentos,
-            oConc.oFiltrosGrade.bMovConciliados,
-            oConc.oFiltrosGrade.bMovNaoConciliados
+         aplicaFiltrosGrade(
+            filtraPorStatus(
+               oConc.aMovimentos,
+               oConc.oFiltrosGrade.bMovConciliados,
+               oConc.oFiltrosGrade.bMovNaoConciliados
+            ),
+            oFiltrosMov,
+            CAMPOS_MOVIMENTO
          ),
-      [oConc.aMovimentos, oConc.oFiltrosGrade]
+      [oConc.aMovimentos, oConc.oFiltrosGrade, oFiltrosMov]
    );
 
    /** Volta à tela de seleção de banco/agência. */
@@ -300,6 +401,8 @@ export function ConciliacaoBancariaPage() {
    return (
       <AppShell
          itemAtivo="conciliacao"
+         nomUsuario={oUsuario.nomUsuario}
+         desEmpresa={oUsuario.desEmpresa}
          oConta={oContaSelecionada}
          aoSelecionarItem={trataMenuLateral}
          aoTrocarConta={trocaConta}
@@ -372,10 +475,18 @@ export function ConciliacaoBancariaPage() {
                            titulo="A data de bloqueio deve ser anterior à data do dia"
                            classe="campo-data-compacto"
                         />
+                        {/* Item 6.1.3.1: "Verificar permissão de acesso para
+                            uso desses botões." A rota confere de novo — aqui
+                            é só para o usuário não tentar em vão. */}
                         <button
                            type="button"
                            className="btn-icone"
-                           title="Aplicar bloqueio"
+                           title={
+                              bPodeBloquear
+                                 ? 'Aplicar bloqueio'
+                                 : `${oUsuario.nomUsuario || 'O usuário atual'} não tem permissão para bloquear o período.`
+                           }
+                           disabled={!bPodeBloquear}
                            onClick={() => oConc.aplicaBloqueio(sDatBloqueioEdicao)}
                         >
                            <Lock size={14} />
@@ -383,7 +494,12 @@ export function ConciliacaoBancariaPage() {
                         <button
                            type="button"
                            className="btn-icone"
-                           title="Remover bloqueio"
+                           title={
+                              bPodeBloquear
+                                 ? 'Remover bloqueio'
+                                 : `${oUsuario.nomUsuario || 'O usuário atual'} não tem permissão para reabrir o período.`
+                           }
+                           disabled={!bPodeBloquear}
                            onClick={oConc.removeBloqueio}
                         >
                            <Unlock size={14} />
@@ -392,37 +508,21 @@ export function ConciliacaoBancariaPage() {
                   </div>
                </div>
 
+               {/* Item 6.1.2: as somatórias da seleção em duas linhas — uma
+                   para os conciliados e outra para os não conciliados —,
+                   cada uma com a sua diferença. */}
+               <div className="linhas-somatoria">
+                  <LinhaSomatoria
+                     sRotulo="Selecionados não conciliados"
+                     oLinha={oConc.oTotais.oNaoConciliados}
+                  />
+                  <LinhaSomatoria
+                     sRotulo="Selecionados conciliados"
+                     oLinha={oConc.oTotais.oConciliados}
+                  />
+               </div>
+
                <div className="linha-saldos">
-                  <div className="card-saldo">
-                     <div className="card-saldo-icone">
-                        <Download size={15} />
-                     </div>
-                     <div>
-                        <div className="card-saldo-rotulo">Saldo anterior</div>
-                        <div className="card-saldo-valor">{formataMoeda(oConc.oSaldos.valSaldoAnterior)}</div>
-                     </div>
-                  </div>
-                  <div className="card-saldo">
-                     <div className="card-saldo-icone">
-                        <CheckCircle2 size={15} />
-                     </div>
-                     <div>
-                        <div className="card-saldo-rotulo">Saldo final (sistema)</div>
-                        <div className="card-saldo-valor">{formataMoeda(oConc.oSaldos.valSaldoFinal)}</div>
-                     </div>
-                  </div>
-                  <div className="card-saldo">
-                     <div>
-                        <div className="card-saldo-rotulo">Diferença da seleção</div>
-                        <div
-                           className={`card-saldo-valor ${
-                              oConc.oTotais.valDiferenca === 0 ? '' : 'negativo'
-                           }`}
-                        >
-                           {formataMoeda(oConc.oTotais.valDiferenca)}
-                        </div>
-                     </div>
-                  </div>
                   <div className="saldos-acoes">
                      <button
                         type="button"
@@ -559,6 +659,13 @@ export function ConciliacaoBancariaPage() {
                   >
                      Não conciliados
                   </button>
+
+                  <FiltroGrade
+                     aCampos={CAMPOS_LANCAMENTO}
+                     oFiltros={oFiltrosLanc}
+                     aoAlterar={setFiltrosLanc}
+                     sTitulo="Movimentos no Sistema"
+                  />
                </div>
 
                <div
@@ -588,10 +695,14 @@ export function ConciliacaoBancariaPage() {
                                     aria-label="Selecionar todos os lançamentos"
                                  />
                               </th>
-                              <th>Data</th>
+                              {/* Campos do item 6.1.2 para os lançamentos do
+                                  sistema: número do documento, data da baixa,
+                                  descrição, valor, origem e situação */}
+                              <th>Data baixa</th>
                               <th>Documento</th>
-                              <th className="col-historico">Histórico</th>
+                              <th className="col-historico">Descrição</th>
                               <th className="col-valor">Valor</th>
+                              <th className="col-origem">Origem</th>
                               <th className="col-status">Conc.</th>
                            </tr>
                         </thead>
@@ -601,7 +712,9 @@ export function ConciliacaoBancariaPage() {
                               return (
                                  <tr
                                     key={oLanc.codLancamento}
-                                    className={bSel ? 'selecionada' : ''}
+                                    className={`${bSel ? 'selecionada' : ''} ${
+                                       oLanc.staConciliado ? 'conciliada' : ''
+                                    }`}
                                     onClick={() => oConc.alternaSelecao(oLanc, 'lancamento')}
                                     onContextMenu={(oEvento) => abreMenuContexto(oEvento, oLanc, 'lancamento')}
                                  >
@@ -618,6 +731,7 @@ export function ConciliacaoBancariaPage() {
                                     <td>{oLanc.numDocumento}</td>
                                     <td className="col-historico">{oLanc.desHistorico}</td>
                                     <CelulaValor bEntrada={oLanc.bEntrada} valMovimento={oLanc.valMovimento} />
+                                    <td className="col-origem">{oLanc.tipOrigem}</td>
                                     <td className="col-status">
                                        <SeloStatus conciliado={oLanc.staConciliado} />
                                     </td>
@@ -630,24 +744,7 @@ export function ConciliacaoBancariaPage() {
                </div>
 
                <div className="grade-rodape">
-                  <div className="totais">
-                     <div className="totais-item">
-                        <span className="totais-rotulo">Selecionado (sistema)</span>
-                        <span className="totais-valor">{formataMoeda(oConc.oTotais.oSistema.valLiquido)}</span>
-                     </div>
-                     <div className="totais-item">
-                        <span className="totais-rotulo">Entradas a conciliar</span>
-                        <span className="totais-valor entrada">
-                           {formataMoeda(oConc.oTotaisPeriodo.valEntradasAConciliar)}
-                        </span>
-                     </div>
-                     <div className="totais-item">
-                        <span className="totais-rotulo">Saídas a conciliar</span>
-                        <span className="totais-valor saida">
-                           {formataMoeda(oConc.oTotaisPeriodo.valSaidasAConciliar)}
-                        </span>
-                     </div>
-                  </div>
+                  <SaldosGrade oSaldos={oConc.oSaldosPorLado.oSistema} />
                </div>
             </div>
 
@@ -685,6 +782,13 @@ export function ConciliacaoBancariaPage() {
                   >
                      Não conciliados
                   </button>
+
+                  <FiltroGrade
+                     aCampos={CAMPOS_MOVIMENTO}
+                     oFiltros={oFiltrosMov}
+                     aoAlterar={setFiltrosMov}
+                     sTitulo="Movimentos no Banco"
+                  />
                </div>
 
                <div
@@ -714,9 +818,11 @@ export function ConciliacaoBancariaPage() {
                                     aria-label="Selecionar todos os movimentos"
                                  />
                               </th>
-                              <th>Data</th>
+                              {/* Campos do item 6.1.2 para os movimentos do
+                                  banco: data, descrição e valor */}
+                              <th>Data movimento</th>
                               <th>Documento</th>
-                              <th className="col-historico">Histórico</th>
+                              <th className="col-historico">Descrição do movimento</th>
                               <th className="col-valor">Valor</th>
                               <th className="col-status">Conc.</th>
                            </tr>
@@ -727,7 +833,9 @@ export function ConciliacaoBancariaPage() {
                               return (
                                  <tr
                                     key={oMov.codMovimento}
-                                    className={bSel ? 'selecionada' : ''}
+                                    className={`${bSel ? 'selecionada' : ''} ${
+                                       oMov.staConciliado ? 'conciliada' : ''
+                                    }`}
                                     onClick={() => oConc.alternaSelecao(oMov, 'movimento')}
                                     onContextMenu={(oEvento) => abreMenuContexto(oEvento, oMov, 'movimento')}
                                  >
@@ -756,22 +864,7 @@ export function ConciliacaoBancariaPage() {
                </div>
 
                <div className="grade-rodape">
-                  <div className="totais">
-                     <div className="totais-item">
-                        <span className="totais-rotulo">Selecionado (banco)</span>
-                        <span className="totais-valor">{formataMoeda(oConc.oTotais.oBanco.valLiquido)}</span>
-                     </div>
-                     <div className="totais-item">
-                        <span className="totais-rotulo">Diferença</span>
-                        <span
-                           className={`totais-valor ${
-                              oConc.oTotais.valDiferenca === 0 ? 'diferenca-zero' : 'diferenca-aberta'
-                           }`}
-                        >
-                           {formataMoeda(oConc.oTotais.valDiferenca)}
-                        </span>
-                     </div>
-                  </div>
+                  <SaldosGrade oSaldos={oConc.oSaldosPorLado.oBanco} />
                </div>
             </div>
          </div>

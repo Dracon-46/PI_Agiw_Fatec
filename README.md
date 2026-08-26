@@ -44,9 +44,11 @@ com usuário `root` sem senha.
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
 | `npm run build` / `npm start` | Build de produção e execução |
-| `npm run db:init` | Aplica `database/schema.sql` e acrescenta colunas faltantes |
-| `npm run db:seed` | Popula a massa de testes |
-| `npm run db:seed:limpar` | Remove apenas a massa de testes |
+| `npm run db:init` | Aplica `database/schema.sql` e reconcilia as colunas |
+| `npm run db:erp` | Preenche o extrato do ERP a partir da API do banco |
+| `npm run db:erp:limpar` | Remove os lançamentos gerados por `db:erp` |
+| `npm run db:seed` | Massa de exemplo (não usa API; para tela sem credencial) |
+| `npm run db:seed:limpar` | Remove apenas a massa de exemplo |
 | `npm run diag:safra` | Diagnostica a integração Safra ponta a ponta |
 | `npm run diag:bradesco` | Diagnostica a integração Bradesco |
 
@@ -56,9 +58,12 @@ com usuário `root` sem senha.
 
 ### Tela inicial — escolha da conta (item 6.1.1)
 
-Cartão por conta corrente com banco, agência, saldo previsto no sistema, data
-do último bloqueio e situação da integração. Permite cadastrar e remover
+Cartão por conta corrente com o logotipo do banco, agência, saldo previsto no
+sistema e data do último bloqueio. Permite cadastrar, **alterar** e remover
 contas, que ficam no MySQL.
+
+Só aparecem as contas cujo banco tem a integração configurada: sem credencial
+não há extrato a importar, e exibi-las levaria o usuário direto a um erro.
 
 ### Tela de conciliação (itens 6.1.2 e 6.1.3)
 
@@ -69,11 +74,21 @@ contas, que ficam no MySQL.
 - **Conciliar / Desfazer:** exigem diferença zero entre as somatórias
 - **Auto conciliar:** correspondência exata 1‑para‑1 e agrupamento por somatória
   (vários lançamentos que fecham um único movimento do banco)
-- **Importar extrato:** via API do banco ou arquivo OFX / CSV / TXT, ignorando
-  movimentos já existentes
+- **Importar extrato:** a grade do banco é sempre o retorno vivo da API — o
+  extrato não é copiado para o MySQL. Do nosso banco vem só o estado que a API
+  não sabe responder (conciliado, excluído da grade). Arquivos OFX / CSV / TXT
+  são a exceção: não há a que voltar para reler, então ficam gravados por
+  inteiro. Concluída a importação, os pares de mesma data e valor já vêm
+  selecionados
 - **Bloqueio de período:** gravado em `conta_corrente`, recusa lançamentos e
-  baixas em data já fechada
-- **Filtros de situação** nos dois lados, com contadores
+  baixas em data já fechada. Exige a permissão `conciliacao.bloqueio`,
+  conferida no servidor — a tela apenas reflete o que a rota autoriza
+- **Filtros de situação** nos dois lados, com contadores, mais o filtro por
+  qualquer campo da grade — combinável e com a quantidade aplicada à vista
+- **Somatórias em duas linhas:** uma para os selecionados conciliados e outra
+  para os não conciliados, cada uma com a sua diferença
+- **Saldos por extrato:** saldo anterior, entradas, saídas e saldo final nos
+  dois lados
 
 ### Menu do botão direito (item 6.1.3.8)
 
@@ -96,6 +111,25 @@ Botão **Exportar** com duas escolhas: *qual* extrato (Satis, banco ou os dois) 
 filtros de situação são aplicados e descritos no cabeçalho — e sempre traz saldo
 inicial, movimentos, saldo final e os totais de entradas, saídas, conciliado e
 não conciliado.
+
+### Usuários e permissões
+
+O usuário corrente vem de `USUARIO_ATUAL` no `.env` enquanto o módulo não
+recebe a sessão do Satis. As permissões ficam em `usuario_permissao`:
+
+| Permissão | Cobre |
+| --- | --- |
+| `conciliacao.bloqueio` | Fechar e reabrir período (item 6.1.3.1) |
+| `conciliacao.conciliar` | Conciliar e estornar (itens 6.1.3.6 e 6.1.3.7) |
+| `conciliacao.lancamento` | Lançar, transferir e baixar título (item 6.1.3.8) |
+
+`INFTEC` tem as três; `OPERADOR` concilia e lança, mas não fecha o período.
+
+### Catálogos
+
+Tipos de documento, subgrupos de fluxo de caixa (TBFLCX002), contas contábeis
+(TBGENE023) e centros de custo (TBCOMP008) vêm do MySQL e alimentam as caixas
+de lançamento e transferência.
 
 ### Auditoria
 

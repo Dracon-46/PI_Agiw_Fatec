@@ -58,6 +58,9 @@ export async function listaLancamentosPeriodo(iIdConta, sDataInicioBr, sDataFimB
               l.val_movimento AS valMovimento,
               l.b_entrada AS bEntrada,
               l.tip_origem AS tipOrigem,
+              l.tip_documento AS tipDocumento,
+              l.cod_subgrupo AS codSubgrupo,
+              l.cod_conta_contabil AS codContaContabil,
               l.sta_conciliado AS staConciliado,
               l.cod_transferencia AS codTransferencia,
               l.cod_titulo AS codTitulo
@@ -104,6 +107,9 @@ export async function listaLancamentosConta(iIdConta) {
               l.val_movimento AS valMovimento,
               l.b_entrada AS bEntrada,
               l.tip_origem AS tipOrigem,
+              l.tip_documento AS tipDocumento,
+              l.cod_subgrupo AS codSubgrupo,
+              l.cod_conta_contabil AS codContaContabil,
               l.sta_conciliado AS staConciliado,
               l.cod_transferencia AS codTransferencia,
               l.cod_titulo AS codTitulo
@@ -176,11 +182,13 @@ export async function insereLancamento(iIdConta, oLancamento) {
    await query(
       `INSERT INTO lancamento_sistema
          (id_conta, cod_lancamento, dat_movimento, dat_compensacao, num_documento,
-          des_historico, val_movimento, b_entrada, tip_origem, sta_conciliado,
+          des_historico, val_movimento, b_entrada, tip_origem, tip_documento,
+          cod_subgrupo, cod_conta_contabil, sta_conciliado,
           cod_transferencia, cod_titulo)
        VALUES
          (:idConta, :codLancamento, :datMovimento, :datCompensacao, :numDocumento,
-          :desHistorico, :valMovimento, :bEntrada, :tipOrigem, :staConciliado,
+          :desHistorico, :valMovimento, :bEntrada, :tipOrigem, :tipDocumento,
+          :codSubgrupo, :codContaContabil, :staConciliado,
           :codTransferencia, :codTitulo)
        ON DUPLICATE KEY UPDATE
          dat_movimento = VALUES(dat_movimento),
@@ -190,6 +198,9 @@ export async function insereLancamento(iIdConta, oLancamento) {
          val_movimento = VALUES(val_movimento),
          b_entrada = VALUES(b_entrada),
          tip_origem = VALUES(tip_origem),
+         tip_documento = VALUES(tip_documento),
+         cod_subgrupo = VALUES(cod_subgrupo),
+         cod_conta_contabil = VALUES(cod_conta_contabil),
          cod_transferencia = VALUES(cod_transferencia),
          cod_titulo = VALUES(cod_titulo)`,
       {
@@ -202,6 +213,9 @@ export async function insereLancamento(iIdConta, oLancamento) {
          valMovimento: Math.abs(nValor),
          bEntrada: oLancamento.bEntrada ? 1 : 0,
          tipOrigem: oLancamento.tipOrigem || ORIGEM_CONCILIACAO,
+         tipDocumento: oLancamento.tipDocumento || null,
+         codSubgrupo: oLancamento.codSubgrupo || null,
+         codContaContabil: oLancamento.codContaContabil || null,
          staConciliado: oLancamento.staConciliado ? 1 : 0,
          codTransferencia: oLancamento.codTransferencia || null,
          codTitulo: oLancamento.codTitulo || null,
@@ -217,6 +231,9 @@ export async function insereLancamento(iIdConta, oLancamento) {
       valMovimento: Math.abs(nValor),
       bEntrada: Boolean(oLancamento.bEntrada),
       tipOrigem: oLancamento.tipOrigem || ORIGEM_CONCILIACAO,
+      tipDocumento: oLancamento.tipDocumento || null,
+      codSubgrupo: oLancamento.codSubgrupo || null,
+      codContaContabil: oLancamento.codContaContabil || null,
       staConciliado: Boolean(oLancamento.staConciliado),
       codTransferencia: oLancamento.codTransferencia || null,
       codTitulo: oLancamento.codTitulo || null,
@@ -366,6 +383,40 @@ export async function insereTransferencia(oTransferencia) {
 
    return { sCodTransferencia, oSaida, oEntrada };
 } // insereTransferencia
+
+/**
+ * Datas dos lançamentos informados, lidas da base.
+ *
+ * A conferência do bloqueio (item 6.1.3.1) não pode confiar na data que a tela
+ * envia — quem grava precisa consultar a data real do registro.
+ *
+ * @param {number} iIdConta
+ * @param {string[]} aCodLancamentos
+ * @returns {Promise<Array<{ codLancamento: string, datMovimento: string }>>}
+ */
+export async function listaDatasLancamentos(iIdConta, aCodLancamentos) {
+   if (!Array.isArray(aCodLancamentos) || aCodLancamentos.length === 0) {
+      return [];
+   }
+
+   const aLinhas = [];
+   for (const sCodigo of aCodLancamentos) {
+      const aResultado = await query(
+         `SELECT cod_lancamento AS codLancamento, dat_movimento AS datMovimento
+            FROM lancamento_sistema
+           WHERE id_conta = :idConta AND cod_lancamento = :codLancamento`,
+         { idConta: iIdConta, codLancamento: sCodigo }
+      );
+      if (aResultado[0]) {
+         aLinhas.push({
+            codLancamento: aResultado[0].codLancamento,
+            datMovimento: dataMysqlParaBr(aResultado[0].datMovimento),
+         });
+      }
+   }
+
+   return aLinhas;
+} // listaDatasLancamentos
 
 /**
  * Grava o status de conciliação de um conjunto de lançamentos.

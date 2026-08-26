@@ -52,6 +52,36 @@ export async function cadastraContaCorrenteApi(oDados) {
 } // cadastraContaCorrenteApi
 
 /**
+ * Catálogo de bancos disponíveis para cadastro (tabela banco / TBGENE015).
+ * @returns {Promise<{ bancos: Array<object> }>}
+ */
+export async function buscaBancosApi() {
+   return requisitaJson('/api/bank/contas');
+} // buscaBancosApi
+
+/**
+ * Altera banco, agência e conta de um cadastro existente.
+ * @param {string} sCodConta Código atual da conta
+ * @param {object} oDados Novos dados
+ * @returns {Promise<{ conta: object }>}
+ */
+export async function atualizaContaCorrenteApi(sCodConta, oDados) {
+   return requisitaJson('/api/bank/contas', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...oDados, codConta: sCodConta }),
+   });
+} // atualizaContaCorrenteApi
+
+/**
+ * Carrega usuário corrente, permissões e catálogos do módulo.
+ * @returns {Promise<{ usuario: object, catalogos: object }>}
+ */
+export async function buscaSessao() {
+   return requisitaJson('/api/sessao');
+} // buscaSessao
+
+/**
  * Inativa conta corrente no MySQL.
  * @param {string} sCodConta
  * @returns {Promise<{ ok: boolean }>}

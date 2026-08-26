@@ -15,6 +15,12 @@ node_modules/
 *.jks
 !certs/.gitkeep
 
+# A pasta certs/ inteira fica fora do Git: além das chaves mTLS, ela recebe
+# manuais e kits enviados pelos bancos, que trazem credenciais de integração.
+certs/**
+!certs/.gitkeep
+!certs/LEIA-ME.txt
+
 # ---------------------------------------------------------------------------
 # Credenciais soltas em documentação
 # ---------------------------------------------------------------------------

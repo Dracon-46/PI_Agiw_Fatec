@@ -8,7 +8,9 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
+   atualizaContaCorrenteApi,
    buscaContasCorrentes,
+   buscaSessao,
    cadastraContaCorrenteApi,
    removeContaCorrenteApi,
 } from '../services/conciliacaoService.js';
@@ -16,6 +18,17 @@ import {
 const CHAVE_CONTA_SELECIONADA = 'agiw.conciliacao.contaSelecionada';
 
 const BankContext = createContext(null);
+
+/** Usuário sem permissão alguma, usado antes de a sessão chegar */
+const SESSAO_VAZIA = { nomUsuario: '', desNome: '', desEmpresa: '', aPermissoes: [] };
+
+/** Catálogos vazios, usados antes de a sessão chegar */
+const CATALOGOS_VAZIOS = {
+   aTiposDocumento: [],
+   aSubgrupos: [],
+   aContasContabeis: [],
+   aCentrosCusto: [],
+};
 
 /**
  * @param {{ children: React.ReactNode }} oPropriedades
@@ -26,12 +39,19 @@ export function BankContextProvider({ children }) {
    const [sCodContaSelecionada, setCodContaSelecionada] = useState(null);
    const [bCarregando, setCarregando] = useState(true);
    const [sErro, setErro] = useState('');
+   const [oUsuario, setUsuario] = useState(SESSAO_VAZIA);
+   const [oCatalogos, setCatalogos] = useState(CATALOGOS_VAZIOS);
 
    const recarregaContas = useCallback(async () => {
       const oRetorno = await buscaContasCorrentes();
-      setContas(oRetorno.contas ?? []);
+      // Conta sem integração configurada não vai para a tela: sem credencial
+      // não há extrato, e exibi-la só levaria o usuário a um erro de 503.
+      const aConfiguradas = (oRetorno.contas ?? []).filter(
+         (oConta) => oConta.bIntegracaoConfigurada
+      );
+      setContas(aConfiguradas);
       setProviders(oRetorno.providers ?? []);
-      return oRetorno.contas ?? [];
+      return aConfiguradas;
    }, []);
 
    useEffect(() => {
@@ -39,9 +59,22 @@ export function BankContextProvider({ children }) {
 
       async function carregaContas() {
          try {
-            const aLista = await recarregaContas();
+            // Sessão e contas chegam juntas: as duas são necessárias antes de
+            // a tela desenhar, e encadeá-las só somaria latência
+            const [aLista, oSessao] = await Promise.all([
+               recarregaContas(),
+               buscaSessao().catch((oErro) => {
+                  console.error('[BankContext] Falha ao carregar a sessão:', oErro);
+                  return null;
+               }),
+            ]);
             if (!bAtivo) {
                return;
+            }
+
+            if (oSessao) {
+               setUsuario(oSessao.usuario ?? SESSAO_VAZIA);
+               setCatalogos(oSessao.catalogos ?? CATALOGOS_VAZIOS);
             }
 
             const sArmazenada = window.localStorage.getItem(CHAVE_CONTA_SELECIONADA);
@@ -98,6 +131,37 @@ export function BankContextProvider({ children }) {
       [recarregaContas]
    );
 
+   /**
+    * Altera uma conta já cadastrada.
+    *
+    * Mudar banco, agência ou C.C. muda o código lógico da conta; quando a
+    * conta alterada é a que está aberta, a seleção acompanha o novo código
+    * para a tela não ficar apontando para um cadastro que deixou de existir.
+    *
+    * @param {string} sCodConta Código atual
+    * @param {object} oDados Novos dados
+    * @returns {Promise<{ ok: boolean, erro?: string, conta?: object }>}
+    */
+   const atualizaConta = useCallback(
+      async (sCodConta, oDados) => {
+         try {
+            const oRetorno = await atualizaContaCorrenteApi(sCodConta, oDados);
+            await recarregaContas();
+
+            const sNovoCodigo = oRetorno.conta?.codConta;
+            if (sNovoCodigo && sCodContaSelecionada === sCodConta && sNovoCodigo !== sCodConta) {
+               setCodContaSelecionada(sNovoCodigo);
+               window.localStorage.setItem(CHAVE_CONTA_SELECIONADA, sNovoCodigo);
+            }
+
+            return { ok: true, conta: oRetorno.conta };
+         } catch (oErro) {
+            return { ok: false, erro: oErro.message };
+         }
+      },
+      [recarregaContas, sCodContaSelecionada]
+   );
+
    const removeContaCadastrada = useCallback(
       async (sCodConta) => {
          try {
@@ -119,6 +183,18 @@ export function BankContextProvider({ children }) {
       [aContas, sCodContaSelecionada]
    );
 
+   /**
+    * Indica se o usuário corrente possui a permissão informada.
+    * Serve apenas para a tela desabilitar botões e explicar o motivo: quem
+    * autoriza de fato é a rota que grava.
+    * @param {string} sCodPermissao
+    * @returns {boolean}
+    */
+   const temPermissao = useCallback(
+      (sCodPermissao) => oUsuario.aPermissoes.includes(sCodPermissao),
+      [oUsuario]
+   );
+
    const oValor = useMemo(
       () => ({
          aContas,
@@ -127,9 +203,13 @@ export function BankContextProvider({ children }) {
          sCodContaSelecionada,
          bCarregando,
          sErro,
+         oUsuario,
+         oCatalogos,
+         temPermissao,
          selecionaConta,
          limpaSelecao,
          cadastraConta,
+         atualizaConta,
          removeContaCadastrada,
          recarregaContas,
       }),
@@ -140,9 +220,13 @@ export function BankContextProvider({ children }) {
          sCodContaSelecionada,
          bCarregando,
          sErro,
+         oUsuario,
+         oCatalogos,
+         temPermissao,
          selecionaConta,
          limpaSelecao,
          cadastraConta,
+         atualizaConta,
          removeContaCadastrada,
          recarregaContas,
       ]

@@ -1,18 +1,24 @@
 'use client';
 // ============================================================================
-// CadastroContaModal.jsx - Cadastro de banco/agência/conta corrente (MySQL)
+// CadastroContaModal.jsx - Cadastro e edição de banco/agência/conta (MySQL)
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
+//
+// A mesma caixa atende as duas operações: sem oContaEdicao ela cadastra, com
+// ela altera. O catálogo de bancos vem do MySQL (tabela banco / TBGENE015) —
+// antes estava fixo em utils/mockData.js, o que impedia o cliente de manter os
+// próprios bancos.
 // ============================================================================
 
-import { useState } from 'react';
-import { Landmark, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Landmark, Plus, Save } from 'lucide-react';
 import { Modal } from './Modal.jsx';
 import { CampoData } from './CampoData.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
-import { bancosDisponiveis } from '../../utils/mockData.js';
+import { buscaBancosApi } from '../../services/conciliacaoService.js';
+import { formataValor } from '../../utils/formatters.js';
 
 const FORMULARIO_VAZIO = {
-   slugProvider: 'bradesco',
+   slugProvider: '',
    tipConta: 'cc',
    codAgencia: '',
    numContaCorrente: '',
@@ -24,14 +30,67 @@ const FORMULARIO_VAZIO = {
 /**
  * @param {object} oPropriedades
  * @param {boolean} oPropriedades.aberto
+ * @param {object|null} [oPropriedades.oContaEdicao] Conta a alterar; ausente cadastra
  * @param {() => void} oPropriedades.aoFechar
- * @param {(codConta: string) => void} [oPropriedades.aoCadastrar]
+ * @param {(codConta: string) => void} [oPropriedades.aoGravar]
  */
-export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
-   const { cadastraConta } = useBankContext();
+export function CadastroContaModal({ aberto, oContaEdicao = null, aoFechar, aoGravar }) {
+   const { cadastraConta, atualizaConta } = useBankContext();
+   const [aBancos, setBancos] = useState([]);
    const [oForm, setForm] = useState(FORMULARIO_VAZIO);
    const [sErro, setErro] = useState('');
    const [bSalvando, setSalvando] = useState(false);
+
+   const bEdicao = Boolean(oContaEdicao);
+
+   // O catálogo é lido uma vez, na primeira abertura da caixa
+   useEffect(() => {
+      if (!aberto || aBancos.length > 0) {
+         return;
+      }
+
+      let bAtivo = true;
+      buscaBancosApi()
+         .then((oRetorno) => {
+            if (bAtivo) {
+               setBancos(oRetorno.bancos ?? []);
+            }
+         })
+         .catch((oErro) => {
+            if (bAtivo) {
+               setErro(`Não foi possível carregar o catálogo de bancos: ${oErro.message}`);
+            }
+         });
+
+      return () => {
+         bAtivo = false;
+      };
+   }, [aberto, aBancos.length]);
+
+   // Preenche o formulário conforme a operação
+   useEffect(() => {
+      if (!aberto) {
+         return;
+      }
+      setErro('');
+
+      if (oContaEdicao) {
+         setForm({
+            slugProvider: oContaEdicao.slugProvider ?? '',
+            tipConta: oContaEdicao.tipConta ?? 'cc',
+            codAgencia: oContaEdicao.codAgencia ?? '',
+            numContaCorrente: oContaEdicao.numContaCorrente ?? '',
+            desAgencia: oContaEdicao.desAgencia ?? '',
+            valSaldoSistema: oContaEdicao.valSaldoSistema
+               ? formataValor(oContaEdicao.valSaldoSistema)
+               : '',
+            datUltimoBloqueio: oContaEdicao.datUltimoBloqueio ?? '',
+         });
+         return;
+      }
+
+      setForm({ ...FORMULARIO_VAZIO, slugProvider: aBancos[0]?.slugProvider ?? '' });
+   }, [aberto, oContaEdicao, aBancos]);
 
    function alteraCampo(sCampo, sValor) {
       setForm((oAtual) => ({ ...oAtual, [sCampo]: sValor }));
@@ -45,26 +104,39 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
    } // fecha
 
    async function salva() {
+      if (!oForm.slugProvider) {
+         setErro('Selecione o banco.');
+         return;
+      }
+      if (!oForm.codAgencia.trim() || !oForm.numContaCorrente.trim()) {
+         setErro('Informe a agência e a conta corrente.');
+         return;
+      }
+
       setSalvando(true);
       try {
-         const oResultado = await cadastraConta({
+         const oDados = {
             slugProvider: oForm.slugProvider,
             tipConta: oForm.tipConta,
-            codAgencia: oForm.codAgencia,
-            numContaCorrente: oForm.numContaCorrente,
-            desAgencia: oForm.desAgencia,
+            codAgencia: oForm.codAgencia.trim(),
+            numContaCorrente: oForm.numContaCorrente.trim(),
+            desAgencia: oForm.desAgencia.trim(),
             valSaldoSistema: oForm.valSaldoSistema
                ? Number(String(oForm.valSaldoSistema).replace(/\./g, '').replace(',', '.'))
                : 0,
             datUltimoBloqueio: oForm.datUltimoBloqueio,
-         });
+         };
+
+         const oResultado = bEdicao
+            ? await atualizaConta(oContaEdicao.codConta, oDados)
+            : await cadastraConta(oDados);
 
          if (!oResultado.ok) {
             setErro(oResultado.erro);
             return;
          }
 
-         aoCadastrar?.(oResultado.conta.codConta);
+         aoGravar?.(oResultado.conta.codConta);
          fecha();
       } finally {
          setSalvando(false);
@@ -74,7 +146,7 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
    return (
       <Modal
          aberto={aberto}
-         titulo="Cadastrar conta corrente"
+         titulo={bEdicao ? 'Alterar conta corrente' : 'Cadastrar conta corrente'}
          icone={<Landmark size={15} />}
          largura="m"
          aoFechar={fecha}
@@ -85,8 +157,8 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
                   Cancelar
                </button>
                <button type="button" className="btn btn-primario" onClick={salva} disabled={bSalvando}>
-                  <Plus size={14} />
-                  {bSalvando ? 'Salvando...' : 'Salvar no MySQL'}
+                  {bEdicao ? <Save size={14} /> : <Plus size={14} />}
+                  {bSalvando ? 'Salvando...' : bEdicao ? 'Salvar alterações' : 'Cadastrar conta'}
                </button>
             </>
          }
@@ -97,6 +169,13 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
             Para Bradesco, use agência e conta só com dígitos (ex.: agência 3750, conta 75557) e um
             período em que a conta tenha movimento real.
          </p>
+
+         {bEdicao ? (
+            <div className="alerta alerta-info" style={{ marginBottom: 12 }}>
+               Alterar banco, agência ou C.C. muda o código da conta. O histórico de conciliação
+               é preservado.
+            </div>
+         ) : null}
 
          {sErro ? <div className="alerta alerta-erro" style={{ marginBottom: 12 }}>{sErro}</div> : null}
 
@@ -110,7 +189,8 @@ export function CadastroContaModal({ aberto, aoFechar, aoCadastrar }) {
                   value={oForm.slugProvider}
                   onChange={(oEvento) => alteraCampo('slugProvider', oEvento.target.value)}
                >
-                  {bancosDisponiveis.map((oBanco) => (
+                  <option value="">Selecione o banco</option>
+                  {aBancos.map((oBanco) => (
                      <option key={oBanco.slugProvider} value={oBanco.slugProvider}>
                         {oBanco.codBanco} — {oBanco.nomBanco}
                      </option>
