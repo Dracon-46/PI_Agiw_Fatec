@@ -124,6 +124,9 @@ function LinhaSomatoria({ sRotulo, oLinha }) {
             {sRotulo}
             <span className="chip-contador">{oLinha.iQuantidade} selecionado(s)</span>
          </span>
+         {/* Sistema antes do banco, na mesma ordem das grades: ler a somatória
+             em ordem diferente da tela faria o usuário conferir o número
+             errado. */}
          <span className="linha-somatoria-item">
             <span className="totais-rotulo">Sistema</span>
             <span className="totais-valor">{formataMoeda(oLinha.oSistema.valLiquido)}</span>
@@ -833,6 +836,7 @@ export function ConciliacaoBancariaPage() {
                   <SaldosGrade oSaldos={oConc.oSaldosPorLado.oBanco} />
                </div>
             </div>
+
          </div>
 
          <ModalNovoLancamento

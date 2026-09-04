@@ -14,7 +14,8 @@
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs",
-    "diag:bb": "node scripts/diag-bb.mjs"
+    "diag:bb": "node scripts/diag-bb.mjs",
+    "db:extrato": "node scripts/carrega-extrato.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

@@ -119,13 +119,20 @@ export async function buscaLancamentosSistema(sCodConta, sDataInicio, sDataFim) 
  * @param {string} sDataFim Data final (DD/MM/AAAA)
  * @returns {Promise<{ movimentos: Array, resumo: object, origem: string, aviso?: string }>}
  */
-export async function buscaExtratoBanco(sSlugBanco, sCodConta, sDataInicio, sDataFim) {
+export async function buscaExtratoBanco(sSlugBanco, sCodConta, sDataInicio, sDataFim, bSomenteCache = false) {
    const oParams = new URLSearchParams({
       banco: sSlugBanco,
       conta: sCodConta,
       dataInicio: sDataInicio,
       dataFim: sDataFim,
    });
+
+   // Abertura de tela não espera a instituição: mostra o que está gravado e
+   // deixa a consulta para o Buscar
+   if (bSomenteCache) {
+      oParams.set('somenteCache', '1');
+   }
+
    return requisitaJson(`/api/bank/extrato?${oParams}`);
 } // buscaExtratoBanco
 

@@ -116,6 +116,54 @@ async function removeTabelasObsoletas(oConn, sBanco) {
 } // removeTabelasObsoletas
 
 /**
+ * Remove os movimentos gravados no modelo anterior.
+ *
+ * Antes, a origem API guardava só o ESTADO do movimento (data, valor, sentido e
+ * se estava conciliado); histórico e documento ficavam nulos porque vinham da
+ * instituição a cada consulta. Agora o extrato é copiado por inteiro.
+ *
+ * Como o cod_movimento passou a incluir o discriminador de ocorrência, a chave
+ * antiga não casa com a nova: reconsultar o período INSERE em vez de atualizar,
+ * e a grade mostra cada movimento duas vezes — um com histórico, outro sem.
+ *
+ * A limpeza remove apenas as linhas sem histórico que já têm equivalente
+ * completo (mesma conta, data, valor e sentido), e transfere o status de
+ * conciliação antes de apagar, para não desfazer conciliação já feita.
+ *
+ * @param {import('mysql2/promise').Connection} oConn
+ * @returns {Promise<number>} Quantidade de linhas removidas
+ */
+async function removeMovimentosDoModeloAntigo(oConn) {
+   // Preserva a conciliação: o registro novo herda o status do antigo
+   await oConn.query(
+      `UPDATE movimento_banco novo
+         INNER JOIN movimento_banco antigo
+            ON antigo.id_conta = novo.id_conta
+           AND antigo.dat_movimento = novo.dat_movimento
+           AND antigo.val_movimento = novo.val_movimento
+           AND antigo.b_entrada = novo.b_entrada
+           AND antigo.des_historico IS NULL
+           AND novo.des_historico IS NOT NULL
+          SET novo.sta_conciliado = 1
+        WHERE antigo.sta_conciliado = 1`
+   );
+
+   const [oResultado] = await oConn.query(
+      `DELETE antigo
+         FROM movimento_banco antigo
+        INNER JOIN movimento_banco novo
+           ON novo.id_conta = antigo.id_conta
+          AND novo.dat_movimento = antigo.dat_movimento
+          AND novo.val_movimento = antigo.val_movimento
+          AND novo.b_entrada = antigo.b_entrada
+          AND novo.des_historico IS NOT NULL
+        WHERE antigo.des_historico IS NULL`
+   );
+
+   return oResultado.affectedRows ?? 0;
+} // removeMovimentosDoModeloAntigo
+
+/**
  * Marca como consultados os dias que já têm movimento gravado.
  *
  * extrato_dia nasceu depois de movimento_banco. Sem esta carga, uma base que
@@ -243,6 +291,10 @@ async function main() {
       console.log('Conferindo tabelas obsoletas...');
       const iTabelas = await removeTabelasObsoletas(oConn, sBanco);
       console.log(iTabelas === 0 ? '  nenhuma tabela pendente.' : `  ${iTabelas} tabela(s) removida(s).`);
+
+      console.log('Limpando movimentos do modelo anterior...');
+      const iAntigos = await removeMovimentosDoModeloAntigo(oConn);
+      console.log(iAntigos === 0 ? '  nada a limpar.' : `  ${iAntigos} duplicata(s) removida(s).`);
 
       console.log('Marcando dias já cobertos pelo extrato gravado...');
       const iDias = await preencheDiasConsultados(oConn);

@@ -1148,10 +1148,11 @@ textarea {
    margin-left: auto;
 }
 
+/* Posição fixa, ancorada ao botão por JS: o painel da grade tem
+   overflow:hidden (para o border-radius recortar a tabela) e recortava esta
+   caixa quando ela era "absolute" dentro dele. */
 .filtro-grade-caixa {
-   position: absolute;
-   top: calc(100% + 6px);
-   right: 0;
+   position: fixed;
    z-index: 500;
    width: 290px;
    border: 1px solid var(--cor-borda);

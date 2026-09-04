@@ -233,7 +233,17 @@ export function useConciliacao(oConta, notifica) {
          try {
             const [oSistema, oExtrato] = await Promise.all([
                buscaLancamentosSistema(oConta.codConta, oPeriodo.sDataInicio, oPeriodo.sDataFim),
-               buscaExtratoBanco(oConta.slugProvider, oConta.codConta, oPeriodo.sDataInicio, oPeriodo.sDataFim),
+               // Só o que já está gravado: abrir a tela ou trocar de conta não
+               // pode esperar a instituição responder. Um período ainda não
+               // consultado leva mais de um segundo por conta, e o usuário
+               // paga isso a cada troca. A ida à API fica no botão Buscar.
+               buscaExtratoBanco(
+                  oConta.slugProvider,
+                  oConta.codConta,
+                  oPeriodo.sDataInicio,
+                  oPeriodo.sDataFim,
+                  true
+               ),
             ]);
             if (!bAtivo) {
                return;

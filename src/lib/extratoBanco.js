@@ -25,6 +25,7 @@ import { BankProviderFactory } from '../providers/BankProviderFactory.js';
 import {
    gravaMovimentos,
    listaDiasConsultados,
+   listaMovimentosConta,
    listaMovimentosPeriodo,
    marcaDiasConsultados,
 } from './repositories/movimentoRepository.js';
@@ -50,6 +51,24 @@ export const MAX_DIAS_POR_CHAMADA = 31;
  * abrir a tela dispararia uma rajada contra o gateway do banco.
  */
 export const MAX_FAIXAS_POR_BUSCA = 8;
+
+/**
+ * Indica se o extrato deve ser recortado pelo período informado.
+ *
+ * Ligado é o comportamento do item 6.1.3.3 e o correto em produção. Em
+ * homologação o recorte atrapalha: o sandbox do Bradesco só ACEITA a janela
+ * 06/11/2024-20/11/2024 na consulta, mas RESPONDE sempre out/2024 a jan/2025 —
+ * recortar deixaria um único movimento na grade.
+ *
+ * Com o extrato gravado, a chave age em dois lugares: o que a API devolve fora
+ * da faixa é gravado do mesmo jeito (é dado real do banco) e a grade passa a
+ * mostrar o extrato inteiro da conta, sem recorte.
+ *
+ * @returns {boolean}
+ */
+export function recortaPorPeriodo() {
+   return (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
+} // recortaPorPeriodo
 
 /**
  * Monta o código determinístico de um movimento.
@@ -220,6 +239,10 @@ export function agrupaEmFaixas(aDiasIso) {
  * @returns {{ aDentro: Array<object>, iFora: number }}
  */
 export function recortaPeriodo(aMovimentos, sDataInicio, sDataFim) {
+   if (!recortaPorPeriodo()) {
+      return { aDentro: aMovimentos, iFora: 0 };
+   }
+
    const aDentro = [];
    let iFora = 0;
 
@@ -319,7 +342,10 @@ async function buscaEGrava(oProvider, oConta, aFaixas) {
  * @param {string} sDataFim DD/MM/AAAA
  * @param {object} [oOpcoes]
  * @param {boolean} [oOpcoes.bForcaApi] Reconsulta o período inteiro, ignorando
- *        o que já está gravado. Usado pelo botão "Atualizar extrato".
+ *        o que já está gravado.
+ * @param {boolean} [oOpcoes.bSomenteCache] Não consulta a instituição: devolve
+ *        apenas o que já está gravado. A tela usa isso ao abrir, para que
+ *        trocar de conta seja instantâneo; a ida à API fica no botão Buscar.
  * @returns {Promise<{ aMovimentos: Array<object>, sAviso: string,
  *                     bApiConsultada: boolean, iDiasBuscados: number }>}
  */
@@ -347,7 +373,7 @@ export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = 
    const aDiasFaltantes = aDiasPeriodo.filter((sDia) => !oJaConsultados.has(sDia));
 
    // ---------- 2. consulta a instituição só para os buracos ----------
-   if (aDiasFaltantes.length > 0) {
+   if (aDiasFaltantes.length > 0 && !oOpcoes.bSomenteCache) {
       try {
          const oProvider = BankProviderFactory.createProvider(oConta.slugProvider);
 
@@ -387,7 +413,11 @@ export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = 
    }
 
    // ---------- 3. a grade sai sempre do MySQL ----------
-   const aMovimentos = await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
+   // Sem recorte, a grade traz o extrato inteiro da conta — é o que mantém as
+   // duas grades simétricas quando o ambiente ignora as datas enviadas.
+   const aMovimentos = recortaPorPeriodo()
+      ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
+      : await listaMovimentosConta(oConta.idConta);
 
    return {
       aMovimentos,

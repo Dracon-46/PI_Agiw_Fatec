@@ -81,20 +81,31 @@ export async function GET(oRequisicao) {
          );
       }
 
-      // Item 6.1.3.2: o botão Buscar "traz os lançamentos e movimentos já
-      // registrados no Satis" do período informado.
-      //
-      // As duas grades cobrem sempre a mesma janela. Antes havia a chave
-      // BANK_FILTRA_PERIODO para desligar o recorte, porque o extrato vinha
-      // vivo da API e o sandbox ignorava as datas pedidas. Agora o extrato é
-      // gravado e lido do MySQL pelo período, então o recorte é sempre o
-      // mesmo dos dois lados e a chave deixou de existir.
-      const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
+      // Os lançamentos do sistema SEMPRE respeitam o período (item 6.1.3.2:
+      // o botão Buscar "traz os lançamentos e movimentos já registrados no
+      // Satis" do período informado). Aqui a base é nossa e as datas são
+      // confiáveis, então o recorte é legítimo.
+      // As duas grades precisam cobrir a mesma janela, senão a conferência
+      // fica impossível. Quando BANK_FILTRA_PERIODO=false o extrato do banco
+      // não é recortado (o sandbox ignora as datas), então o lado do sistema
+      // também não pode ser — caso contrário sobrariam movimentos do banco
+      // sem nenhum lançamento correspondente à vista.
+      const bRecortaPeriodo =
+         (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
 
-      const [nSaldoAnterior, nSaldoAnteriorBanco] = await Promise.all([
-         calculaSaldoAnterior(oConta.idConta, sDataInicio),
-         calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
-      ]);
+      const aLancamentos = bRecortaPeriodo
+         ? await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
+         : await listaLancamentosConta(oConta.idConta);
+
+      // Saldo anterior é o acumulado ANTES da primeira linha da grade. Sem
+      // recorte a grade traz o extrato inteiro, então não há nada antes dela:
+      // somar o período anterior contaria os mesmos movimentos duas vezes.
+      const [nSaldoAnterior, nSaldoAnteriorBanco] = bRecortaPeriodo
+         ? await Promise.all([
+              calculaSaldoAnterior(oConta.idConta, sDataInicio),
+              calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
+           ])
+         : [0, 0];
 
 
       return NextResponse.json({

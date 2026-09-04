@@ -12,7 +12,7 @@
 // intervalo (de / até), que é como se procura um lançamento na conferência.
 // ============================================================================
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Filter, X } from 'lucide-react';
 import { converteTextoParaValor, normalizaTexto } from '../../utils/formatters.js';
 
@@ -71,10 +71,50 @@ export function aplicaFiltrosGrade(aLinhas, oFiltros, aCampos) {
  * @param {(filtros: object) => void} oPropriedades.aoAlterar
  * @param {string} oPropriedades.sTitulo Nome da grade, usado no rótulo acessível
  */
+/** Largura da caixa de filtros; usada para posicioná-la sem sair da janela */
+const LARGURA_CAIXA = 290;
+
+/** Distância entre o botão e a caixa */
+const FOLGA_BOTAO = 6;
+
 export function FiltroGrade({ aCampos, oFiltros, aoAlterar, sTitulo }) {
    const [bAberto, setAberto] = useState(false);
+   // Posição em coordenadas de viewport: a caixa é "fixed" porque o painel da
+   // grade tem overflow:hidden e recortava o popover posicionado por absolute
+   const [oPosicao, setPosicao] = useState({ iTopo: 0, iEsquerda: 0 });
    const oCaixa = useRef(null);
+   const oBotao = useRef(null);
    const iAtivos = contaFiltrosAtivos(oFiltros);
+
+   /** Ancora a caixa abaixo do botão, sem deixá-la sair da janela. */
+   const posicionaCaixa = useCallback(() => {
+      if (!oBotao.current) {
+         return;
+      }
+      const oRetangulo = oBotao.current.getBoundingClientRect();
+
+      // Alinha pela direita do botão e recua quando faltaria espaço à direita
+      const iEsquerdaIdeal = oRetangulo.right - LARGURA_CAIXA;
+      const iEsquerda = Math.max(8, Math.min(iEsquerdaIdeal, window.innerWidth - LARGURA_CAIXA - 8));
+
+      setPosicao({ iTopo: oRetangulo.bottom + FOLGA_BOTAO, iEsquerda });
+   }, []);
+
+   // Reposiciona ao abrir e enquanto a página rola ou muda de tamanho: a caixa
+   // é fixa, então não acompanha sozinha o botão que a ancora
+   useEffect(() => {
+      if (!bAberto) {
+         return;
+      }
+      posicionaCaixa();
+
+      window.addEventListener('scroll', posicionaCaixa, true);
+      window.addEventListener('resize', posicionaCaixa);
+      return () => {
+         window.removeEventListener('scroll', posicionaCaixa, true);
+         window.removeEventListener('resize', posicionaCaixa);
+      };
+   }, [bAberto, posicionaCaixa]);
 
    // Fecha ao clicar fora ou pressionar Esc, como os demais menus da tela
    useEffect(() => {
@@ -120,6 +160,7 @@ export function FiltroGrade({ aCampos, oFiltros, aoAlterar, sTitulo }) {
          <button
             type="button"
             className={`chip-toggle ${iAtivos > 0 ? 'ligado' : ''}`}
+            ref={oBotao}
             onClick={() => setAberto((bAtual) => !bAtual)}
             aria-expanded={bAberto}
             title={`Filtrar ${sTitulo} por qualquer campo da grade`}
@@ -130,7 +171,12 @@ export function FiltroGrade({ aCampos, oFiltros, aoAlterar, sTitulo }) {
          </button>
 
          {bAberto ? (
-            <div className="filtro-grade-caixa" role="dialog" aria-label={`Filtros de ${sTitulo}`}>
+            <div
+               className="filtro-grade-caixa"
+               role="dialog"
+               aria-label={`Filtros de ${sTitulo}`}
+               style={{ top: oPosicao.iTopo, left: oPosicao.iEsquerda }}
+            >
                <header className="filtro-grade-cabecalho">
                   <span>Filtrar por campo</span>
                   <button

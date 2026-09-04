@@ -38,11 +38,47 @@ const ORIGEM_RECEBER = 'Contas a Receber';
 const ORIGEM_PAGAR = 'Contas a Pagar';
 
 /**
+ * Janela com dados de cada banco nos ambientes de teste.
+ *
+ * Os sandboxes só respondem para intervalos específicos: o Bradesco tem uma
+ * combinação de agência/conta/período previamente cadastrada, e a carteira de
+ * cobrança do Itaú só tem posição em setembro de 2021. Uma janela única não
+ * atende os dois, então cada conta usa a do seu banco.
+ */
+const PERIODO_POR_BANCO = {
+   bradesco: { sDataInicio: '06/11/2024', sDataFim: '20/11/2024' },
+   itau: { sDataInicio: '01/09/2021', sDataFim: '30/09/2021' },
+};
+
+/**
+ * Resolve o período de uma conta: o do banco quando houver, senão o geral.
+ * @param {object} oConta
+ * @param {{ sDataInicio: string, sDataFim: string }} oPeriodoGeral
+ * @param {boolean} bPeriodoExplicito Datas vieram da linha de comando
+ * @returns {{ sDataInicio: string, sDataFim: string }}
+ */
+function periodoDaConta(oConta, oPeriodoGeral, bPeriodoExplicito) {
+   if (bPeriodoExplicito) {
+      return oPeriodoGeral;
+   }
+   return PERIODO_POR_BANCO[oConta.slug_provider] ?? oPeriodoGeral;
+}
+
+/**
  * Período consultado na API. Usa a janela fixa do .env quando houver — os
  * ambientes de homologação só respondem para intervalos específicos.
  * @returns {{ sDataInicio: string, sDataFim: string }}
  */
 function resolvePeriodo() {
+   // Datas na linha de comando vencem tudo: cada banco tem a sua janela com
+   // dados nos ambientes de teste (o Bradesco responde nov/2024, a carteira de
+   // cobrança do Itaú só tem posição em set/2021), e uma janela única não
+   // atende as duas.
+   const aDatas = process.argv.slice(2).filter((s) => !s.startsWith('--'));
+   if (aDatas.length === 2) {
+      return { sDataInicio: aDatas[0], sDataFim: aDatas[1] };
+   }
+
    const sInicio = (process.env.NEXT_PUBLIC_PERIODO_INICIO ?? '').trim();
    const sFim = (process.env.NEXT_PUBLIC_PERIODO_FIM ?? '').trim();
 
@@ -122,8 +158,9 @@ async function leExtratoDaApi(oConta, oPeriodo) {
       tipConta: oConta.tip_conta,
    });
 
+   const bRecorta = (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
+
    // O mesmo recorte da tela: a instituição pode ignorar as datas enviadas
-   const bRecorta = true;
 
    return aBrutos
       .map((oMovimento) => {
@@ -238,13 +275,21 @@ async function main() {
          return;
       }
 
-      console.log(`Período consultado: ${oPeriodo.sDataInicio} a ${oPeriodo.sDataFim}\n`);
+      // Datas na linha de comando valem para todas as contas; sem elas, cada
+      // uma usa a janela com dados do seu banco (PERIODO_POR_BANCO)
+      const bPeriodoExplicito =
+         process.argv.slice(2).filter((sArg) => !sArg.startsWith('--')).length === 2;
 
       for (const oConta of aAlvo) {
+         const oPeriodoConta = periodoDaConta(oConta, oPeriodo, bPeriodoExplicito);
          let aMovimentos = [];
 
+         console.log(
+            `${oConta.cod_conta} — ${oPeriodoConta.sDataInicio} a ${oPeriodoConta.sDataFim}`
+         );
+
          try {
-            aMovimentos = await leExtratoDaApi(oConta, oPeriodo);
+            aMovimentos = await leExtratoDaApi(oConta, oPeriodoConta);
          } catch (oErro) {
             console.log(`${oConta.cod_conta}: ignorada — ${oErro.message}`);
             continue;

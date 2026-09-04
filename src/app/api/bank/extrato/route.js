@@ -58,6 +58,9 @@ export async function GET(oRequisicao) {
    const sCodConta = oParams.get('conta') ?? '';
    const sDataInicio = oParams.get('dataInicio') ?? '';
    const sDataFim = oParams.get('dataFim') ?? '';
+   // A tela abre com somenteCache=1: mostra o que já está gravado sem esperar
+   // a instituição. O botão Buscar chama sem o parâmetro e aí sim consulta.
+   const bSomenteCache = oParams.get('somenteCache') === '1';
 
    // ---------- Validações (antes de tocar na rede ou no banco) ----------
    if (!sDataInicio || !sDataFim) {
@@ -91,7 +94,9 @@ export async function GET(oRequisicao) {
    }
 
    try {
-      const { aMovimentos, sAviso } = await leExtratoDaConta(oConta, sDataInicio, sDataFim);
+      const { aMovimentos, sAviso } = await leExtratoDaConta(oConta, sDataInicio, sDataFim, {
+         bSomenteCache,
+      });
 
       return NextResponse.json({
          movimentos: aMovimentos,

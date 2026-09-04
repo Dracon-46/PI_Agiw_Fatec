@@ -67,6 +67,45 @@ export async function listaMovimentosPeriodo(iIdConta, sDataInicioBr, sDataFimBr
 } // listaMovimentosPeriodo
 
 /**
+ * Lista TODOS os movimentos da conta, sem recortar por período.
+ *
+ * Mantém a grade do banco simétrica à do sistema quando o recorte está
+ * desligado (BANK_FILTRA_PERIODO=false): ambientes de homologação ignoram as
+ * datas enviadas, e recortar deixaria quase nada na tela.
+ *
+ * @param {number} iIdConta
+ * @returns {Promise<Array<object>>}
+ */
+export async function listaMovimentosConta(iIdConta) {
+   const aLinhas = await query(
+      `SELECT m.cod_movimento AS codMovimento,
+              c.cod_conta AS codConta,
+              m.dat_movimento AS datMovimento,
+              m.des_historico AS desHistorico,
+              m.num_documento AS numDocumento,
+              m.val_movimento AS valMovimento,
+              m.b_entrada AS bEntrada,
+              m.sta_conciliado AS staConciliado,
+              m.cod_lancamento_banco AS codigoLancamento
+         FROM movimento_banco m
+         INNER JOIN conta_corrente c ON c.id_conta = m.id_conta
+        WHERE m.id_conta = :idConta
+     ORDER BY m.dat_movimento, m.id_movimento`,
+      { idConta: iIdConta }
+   );
+
+   return aLinhas.map((oLinha) => ({
+      ...oLinha,
+      valMovimento: Number(oLinha.valMovimento),
+      bEntrada: Boolean(oLinha.bEntrada),
+      staConciliado: Boolean(oLinha.staConciliado),
+      datMovimento: dataMysqlParaBr(oLinha.datMovimento),
+      desHistorico: oLinha.desHistorico ?? '',
+      numDocumento: oLinha.numDocumento ?? '',
+   }));
+} // listaMovimentosConta
+
+/**
  * Grava os movimentos lidos da instituição.
  *
  * O status de conciliação NÃO é tocado no update: ele é nosso, não do banco.
