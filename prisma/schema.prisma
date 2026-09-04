@@ -1,0 +1,718 @@
+// Schema Prisma gerado a partir do dicionário de dados real do sistema
+// ("Tabelas do sistema.txt" — saída de `prisma db pull` do banco SQL Server).
+//
+// Contém apenas as 14 tabelas solicitadas. Os campos, tipos, defaults e nomes
+// de constraint (map: "...") foram mantidos exatamente como no dicionário original.
+// Relacionamentos (@relation) foram mantidos SOMENTE entre tabelas presentes
+// neste subconjunto — relações para tabelas fora da lista (ex.: TBGENE009,
+// TBGENE032, TBFATU016, etc.) foram removidas porque essas tabelas não
+// fazem parte deste schema. As colunas FK correspondentes continuam
+// presentes como campos escalares comuns.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  schemas  = ["dbo"]
+}
+
+/// TBCOMP008 - Centro de Custo
+model TBCOMP008 {
+  CODEMP                String      @default("01", map: "DF__TBCOMP008__CODEM__656C112C") @db.Char(2)
+  CCUSTO                String      @db.Char(10)
+  DESCCUSTO             String      @db.Char(30)
+  DATCADAST             DateTime    @db.DateTime
+  STACCUSTO             String      @db.Char(1)
+  TIPCCUSTO             String      @db.Char(1)
+  CODALMOX              String?     @db.Char(3)
+  CONTLABOUR            String?     @db.Char(12)
+  STAOBRIGAPLANO        String?     @db.Char(1)
+  STAPERMITENOVORATEIO  String?     @default("N", map: "DF__TBCOMP008__STAPE__66603565") @db.Char(1)
+  CODORDEM              String?     @db.Char(12)
+  SEQORDEM              String?     @db.Char(3)
+  USER_ID_RESPONSAVEL   String?     @db.Char(10)
+  VALESTIMADO           Decimal?    @db.Decimal(28, 14)
+  ANOCALENDARIO         String?     @db.Char(4)
+  DATINICIO             DateTime?   @db.DateTime
+  DATCONCLUSAO          DateTime?   @db.DateTime
+  DESSITUACAOPROJETO    String?     @db.Char(30)
+  DATPREVISAOTERMINO    DateTime?   @db.DateTime
+  CONTESTO              String?     @db.Char(12)
+
+  TBGENE023             TBGENE023?  @relation(fields: [CODEMP, CONTLABOUR], references: [CODEMP, CONTESTO], onUpdate: NoAction, map: "FKTBCOMP008_TBGENE023_01")
+
+  @@id([CODEMP, CCUSTO], map: "PKTBCOMP008")
+  @@index([CODEMP, CODALMOX], map: "INDTBCOMP008_CODALMOX")
+  @@schema("dbo")
+}
+
+/// TBCOMP009 - Condição de Pagamento
+model TBCOMP009 {
+  CODCPAGTO                String      @id(map: "PKTBCOMP009") @db.Char(3)
+  DATCADAST                DateTime    @db.DateTime
+  DESCPAGTO                String      @db.Char(30)
+  STACODCPAGTO             String      @db.Char(1)
+  CODCLASSIFIC             String      @db.Char(3)
+  STAEMITEDUPLICATA        String      @db.Char(1)
+  PERCDESCONTO             Decimal?    @default(0, map: "DF__TBCOMP009__PERCD__693CA210") @db.Decimal(28, 14)
+  STAPERMITEALTERAR        String?     @default("N", map: "DF__TBCOMP009__STAPE__6A30C649") @db.Char(1)
+  CAMPOVENCIMENTO          String?     @default("E", map: "DF__TBCOMP009__CAMPO__6B24EA82") @db.Char(1)
+  ENCFINANCEIRO            Decimal?    @db.Decimal(28, 14)
+  STAANTECIPADO            String?     @db.Char(1)
+  DIASDESCONTO             String?     @db.Char(2)
+  DESCFINAN                Decimal?    @db.Decimal(28, 14)
+  MEDIAWEB                 Int?        @default(0, map: "DF__TBCOMP009__MEDIA__2C6CC877")
+  STADISPWEB               String?     @db.Char(1)
+  PERCACRESCIMOFINANCEIRO  Decimal?    @db.Decimal(28, 14)
+  NAOGERAXML               String?     @db.VarChar(1)
+  CODOBSMOVFISC            String?     @db.VarChar(2)
+
+  TBFATU006                TBFATU006[]
+
+  @@schema("dbo")
+}
+
+/// TBCONB001 - Movimento da Conciliação Bancária
+model TBCONB001 {
+  CODEMP            String      @db.Char(2)
+  CODDOCUM          String      @db.Char(3)
+  NUMDOCTO          String      @db.Char(8)
+  SERIE             String      @default(" ", map: "DF__TBCONB001__SERIE__1C5231C2") @db.Char(5)
+  CODEMITENTE       String      @db.Char(6)
+  DESDOBRO          String      @db.Char(2)
+  NUMSEQPAGTO       String      @db.Char(2)
+  DATMOVTO          DateTime    @db.DateTime
+  DATBAIXA          DateTime?   @db.DateTime
+  DATSALDO          DateTime?   @db.DateTime
+  HISTMOVTO         String?     @db.Char(60)
+  TIPOMOVTO         String      @db.Char(1)
+  VALMOVTO          Decimal     @db.Decimal(28, 14)
+  ORIGEMMOVTO       String      @db.Char(1)
+  CODBANCO          String      @db.Char(6)
+  CODAGENCIA        String      @db.Char(10)
+  NUMCTACORRENTE    String      @db.Char(15)
+  SALDO             Decimal?    @db.Decimal(28, 14)
+  NUMCHEQUE         String?     @db.Char(10)
+  OBSERVACAO        String?     @db.Char(100)
+  CTACONTRAPARTIDA  String?     @db.Char(12)
+  CCUSTO            String?     @db.Char(10)
+  DTLANCTO          DateTime?   @db.DateTime
+  CODFILIALBANCO    String?     @db.Char(2)
+  STAINTEGRACONT    String?     @db.Char(1)
+  ANOLOTECONTAB     String?     @db.Char(4)
+  MESLOTECONTAB     String?     @db.Char(2)
+  NUMLOTECONTAB     String?     @db.Char(7)
+  SUBGRUPO          String?     @db.Char(12)
+  CATEGORIA         String?     @db.Char(1)
+  CODGRUPO          String?     @db.Char(6)
+  STAGERARTITREC    String?     @default("N", map: "DF__TBCONB001__STAGE__1D4655FB") @db.Char(1)
+  STAMOVTO          String?     @db.Char(1)
+  NUMSEQCONC        String?     @db.Char(6)
+  TPEMITENTECHEQUE  String?     @db.Char(1)
+  EMITENTECHEQUE    String?     @db.Char(50)
+  BANCOCHEQUE       String?     @db.Char(3)
+  AGENCIACHEQUE     String?     @db.Char(10)
+  CONTACHEQUE       String?     @db.Char(20)
+  SEQMOVTOCONB      String      @default("001", map: "DF__TBCONB001__SEQMO__36BDA5E9") @db.Char(3)
+  SEQMOVTOCONBRELAC String?     @db.Char(3)
+  SINAL             Int
+
+  TBCONB003         TBCONB003[]
+
+  @@id([CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODEMITENTE, DESDOBRO, NUMSEQPAGTO, SEQMOVTOCONB], map: "PKTBCONB001")
+  @@index([CODEMP, CODBANCO, CODAGENCIA, NUMCTACORRENTE, DATSALDO], map: "INDTBCONB001_CODBANCO")
+  @@index([CODEMP, CODBANCO, CODAGENCIA, NUMCTACORRENTE, DATBAIXA], map: "INDTBCONB001_CODBANCO_DATBAIXA")
+  @@index([CODEMP, CODBANCO, CODAGENCIA, NUMCTACORRENTE, DATBAIXA, DATMOVTO], map: "INDTBCONB001_CODBANCO_DATBAIXA_DATMOVTO")
+  @@index([CODEMP, CODBANCO, CODAGENCIA, NUMCTACORRENTE, DATMOVTO], map: "INDTBCONB001_CODBANCO_DATMOVTO")
+  @@index([DATBAIXA], map: "INDTBCONB001_DATBAIXA")
+  @@index([ORIGEMMOVTO, CODDOCUM, SERIE, DESDOBRO, NUMSEQPAGTO, CODEMITENTE, NUMDOCTO, SEQMOVTOCONB, CODEMP], map: "INDTBCONB001_GFN_001")
+  @@index([DATMOVTO, CODDOCUM, SERIE, DESDOBRO, NUMSEQPAGTO, CODEMITENTE, ORIGEMMOVTO, CODEMP, SEQMOVTOCONB, NUMDOCTO, DATBAIXA], map: "INDTBCONB001_GFN_002")
+  @@schema("dbo")
+}
+
+/// TBCONB003 - Rateio do Valor por Centro de Custo
+model TBCONB003 {
+  CODEMP         String    @db.Char(2)
+  CODDOCUM       String    @db.Char(3)
+  NUMDOCTO       String    @db.Char(8)
+  SERIE          String    @default(" ", map: "DF__TBCONB003__SERIE__23F3538A") @db.Char(5)
+  CODEMITENTE    String    @db.Char(6)
+  DESDOBRO       String    @db.Char(2)
+  NUMSEQPAGTO    String    @db.Char(2)
+  CODORDEM       String    @db.Char(12)
+  SEQORDEM       String    @db.Char(3)
+  SEQCCUSTO      String    @default("000001", map: "DF__TBCONB003__SEQCC__24E777C3") @db.Char(6)
+  CCUSTO         String?   @db.Char(10)
+  VALMOVTOCCUSTO Decimal   @default(0, map: "DF__TBCONB003__VALMO__25DB9BFC") @db.Decimal(28, 14)
+  CCUSTOORIGEM   String?   @db.Char(10)
+  SEQMOVTOCONB   String    @default("001", map: "DF__TBCONB003__SEQMO__37B1CA22") @db.Char(3)
+
+  TBCONB001      TBCONB001 @relation(fields: [CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODEMITENTE, DESDOBRO, NUMSEQPAGTO, SEQMOVTOCONB], references: [CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODEMITENTE, DESDOBRO, NUMSEQPAGTO, SEQMOVTOCONB], map: "FKTBCONB003_TBCONB001_01")
+
+  @@id([CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODEMITENTE, DESDOBRO, NUMSEQPAGTO, SEQMOVTOCONB, CODORDEM, SEQORDEM, SEQCCUSTO], map: "PKTBCONB003")
+  @@schema("dbo")
+}
+
+/// TBCTRC001 - Títulos a Receber
+model TBCTRC001 {
+  CODEMP             String      @db.Char(2)
+  CODDOCUM           String      @db.Char(3)
+  NUMDOCTO           String      @db.Char(8)
+  SERIE              String      @default(" ", map: "DF__TBCTRC001__SERIE__6F1576F7") @db.Char(5)
+  CODCLI             String      @db.Char(9)
+  DATEMISSAO         DateTime    @db.DateTime
+  DATLANCTO          DateTime?   @db.DateTime
+  DATULTRECEB        DateTime?   @db.DateTime
+  CATEGORIA          String?     @db.Char(1)
+  CODGRUPO           String?     @db.Char(6)
+  SUBGRUPO           String?     @db.Char(12)
+  STATITULO          String?     @db.Char(1)
+  OBSERVACAO         String?     @db.Text
+  VALTITULO          Decimal     @db.Decimal(28, 14)
+  ORIGEMTITULO       String      @db.Char(1)
+  DATCOMPET          DateTime    @db.DateTime
+  STAEXPCONTINC      String?     @db.Char(1)
+  STANOTADEBCRED     String?     @default("N", map: "DF__TBCTRC001__STANO__70099B30") @db.Char(1)
+  CODDOCUMSEMAPROP   String?     @db.Char(3)
+  NUMDOCTOSEMAPROP   String?     @db.Char(8)
+  STAINTEGRACONT     String?     @default("N", map: "DF__TBCTRC001__STAIN__70FDBF69") @db.Char(1)
+  CODCPAGTO          String?     @db.Char(3)
+  ANOLOTECONTAB      String?     @db.Char(4)
+  MESLOTECONTAB      String?     @db.Char(2)
+  NUMLOTECONTAB      String?     @db.Char(7)
+  TIPOCOBRANCA       String?     @db.Char(1)
+  DATREFERIND        DateTime?   @db.DateTime
+  CODINDICE          String?     @db.Char(3)
+  VALTITULOIND       Decimal?    @db.Decimal(28, 14)
+  STAINTERFACE       String?     @default("N", map: "DF__TBCTRC001__STAIN__71F1E3A2") @db.Char(1)
+  TIPTITULO          String?     @db.Char(2)
+  DESCOMPLTIT        String?     @db.Char(250)
+  NUMTRANSELETRONICA String?     @db.Char(30)
+  NUMCONTRATO        String?     @db.Char(9)
+  NUMDOCTOORIG       String?     @db.Char(8)
+
+  TBFATU006          TBFATU006   @relation(fields: [CODCLI], references: [CODCLI], onUpdate: NoAction, map: "FKTBCTRC001_TBFATU006_01")
+  TBFLCX002          TBFLCX002?  @relation(fields: [CATEGORIA, CODGRUPO, SUBGRUPO], references: [CATEGORIA, CODGRUPO, SUBGRUPO], onDelete: NoAction, onUpdate: NoAction, map: "FKTBCTRC001_TBFLCX002_01")
+  TBCTRC002          TBCTRC002[]
+
+  @@id([CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI], map: "PKTBCTRC001")
+  @@index([CODCLI, DATEMISSAO], map: "INDTBCTRC001_CODCLI")
+  @@index([DATCOMPET], map: "INDTBCTRC001_DATCOMPET")
+  @@index([DATEMISSAO, CODDOCUM, NUMDOCTO, SERIE, CODCLI, CODEMP, DATCOMPET], map: "INDTBCTRC001_GFN_001")
+  @@index([CODEMP, NUMDOCTO, SERIE, CODCLI, ORIGEMTITULO], map: "INDTBCTRC001_NUMDOCTO")
+  @@index([CODCLI, STANOTADEBCRED, CODEMP], map: "INDTBCTRC001_STANOTADEBCRED")
+  @@index([CODEMP, STATITULO], map: "INDTBCTRC001_STATITULO")
+  @@schema("dbo")
+}
+
+/// TBCTRC002 - Parcela do Título
+model TBCTRC002 {
+  CODEMP              String      @db.Char(2)
+  CODDOCUM            String      @db.Char(3)
+  NUMDOCTO            String      @db.Char(8)
+  SERIE               String      @default(" ", map: "DF__TBCTRC002__SERIE__74CE504D") @db.Char(5)
+  CODCLI              String      @db.Char(9)
+  DESDOBRO            String      @db.Char(2)
+  NUMSEQRECEB         String      @db.Char(2)
+  DATVENCTO           DateTime    @db.DateTime
+  VALDESDOBRO         Decimal     @db.Decimal(28, 14)
+  VALSDARECEBER       Decimal     @db.Decimal(28, 14)
+  VALRECEBI           Decimal?    @db.Decimal(28, 14)
+  VALJUROS            Decimal?    @db.Decimal(28, 14)
+  VALDESCTO           Decimal?    @db.Decimal(28, 14)
+  DTRECEBI            DateTime?   @db.DateTime
+  NUMBORDERO          String?     @db.Char(6)
+  CODBANCO            String?     @db.Char(6)
+  CODAGENCIA          String?     @db.Char(10)
+  NUMCHEQUE           String?     @db.Char(10)
+  CODDOCCRED          String?     @db.Char(10)
+  CTAJUROS            String?     @db.Char(12)
+  CTADESCTO           String?     @db.Char(12)
+  OBSPARCELA          String?     @db.Text
+  CODTPBAIXA          String?     @db.Char(2)
+  PERCJUROSDIA        Decimal?    @db.Decimal(28, 14)
+  VALMULTA            Decimal?    @db.Decimal(28, 14)
+  PERCMULTA           Decimal?    @db.Decimal(28, 14)
+  CALCTPJUROS         String?     @db.Char(1)
+  BASEJUROS           String?     @db.Char(1)
+  STAEXPCONTREC       String?     @db.Char(1)
+  DATPRORROGA         DateTime?   @db.DateTime
+  NOSSONUM            String?     @db.Char(20)
+  CODOCORRET1         String?     @db.Char(5)
+  CODOCORRET2         String?     @db.Char(5)
+  CODOCORRET3         String?     @db.Char(5)
+  CODOCORRET4         String?     @db.Char(5)
+  CODOCORRET5         String?     @db.Char(5)
+  DATARQRET           DateTime?   @db.DateTime
+  CONTACANC           String?     @db.Char(12)
+  CODOCORRET          String?     @db.Char(5)
+  NUMDOCADIANTA       String?     @db.Char(8)
+  NUMSEQADIANTA       String?     @db.Char(8)
+  MULTAATRASO         Decimal?    @default(0, map: "DF__TBCTRC002__MULTA__75C27486") @db.Decimal(28, 14)
+  CTAMULTA            String?     @db.Char(12)
+  CCMULTA             String?     @db.Char(10)
+  NUMCONTRATO         String?     @db.Char(15)
+  TPEMITENTE          String?     @db.Char(1)
+  CODEMITENTE         String?     @db.Char(9)
+  STATROCATITULO      String?     @db.Char(1)
+  CODTPCONTRATO       String?     @db.Char(2)
+  CCJUROS             String?     @db.Char(10)
+  CCDESCTO            String?     @db.Char(10)
+  DIGNOSSONUM         String?     @db.Char(2)
+  CODEMPORIGEM        String?     @db.Char(2)
+  CODCLIBAIXA         String?     @db.Char(6)
+  STAINTEGRACONT      String?     @default("N", map: "DF__TBCTRC002__STAIN__76B698BF") @db.Char(1)
+  CODFILIALBANCO      String?     @db.Char(2)
+  CODFILIALBORDERO    String?     @db.Char(2)
+  ANOLOTECONTAB       String?     @db.Char(4)
+  MESLOTECONTAB       String?     @db.Char(2)
+  NUMLOTECONTAB       String?     @db.Char(7)
+  FILIALDOCTODEV      String?     @db.Char(2)
+  CODDOCUMDEV         String?     @db.Char(3)
+  NUMDOCTODEV         String?     @db.Char(8)
+  SERIEDEV            String?     @db.Char(5)
+  CODCLIDEV           String?     @db.Char(6)
+  DESDOBRODEV         String?     @db.Char(2)
+  NUMSEQDEV           String?     @db.Char(2)
+  ORIGEMDOCTODEV      String?     @db.Char(1)
+  DIGITOCODBARRAS     String?     @db.Char(1)
+  CAMPOLIVRECODBARRAS String?     @db.Char(30)
+  VALTARIFA           Decimal?    @default(0, map: "DF__TBCTRC002__VALTA__77AABCF8") @db.Decimal(28, 14)
+  NOMARQREMESSACOB    String?     @db.Char(12)
+  DATARQREMESSACOB    DateTime?   @db.DateTime
+  VALDESDOBROIND      Decimal?    @db.Decimal(28, 14)
+  VALVARIACAOCAMBIAL  Decimal?    @db.Decimal(28, 14)
+  CTAVARIACAOCAMBIAL  String?     @db.Char(12)
+  CCVARIACAOCAMBIAL   String?     @db.Char(10)
+  STAENVIOBCO         String?     @db.Char(1)
+  TIPRECEB            String?     @db.Char(1)
+  DESCOMPLRECEB       String?     @db.Char(250)
+  TPEMITENTECHEQUE    String?     @db.Char(1)
+  EMITENTECHEQUE      String?     @db.Char(50)
+  BANCOCHEQUE         String?     @db.Char(3)
+  AGENCIACHEQUE       String?     @db.Char(10)
+  CONTACHEQUE         String?     @db.Char(20)
+  SEQMOVTOCONB        String?     @db.Char(3)
+  CODOPERADORA        String?     @db.Char(5)
+  STACREDDEB          String?     @db.Char(1)
+  CODDOCUMARQRET      String?     @db.Char(3)
+  NUMDOCTOARQRET      String?     @db.Char(8)
+  CODDOCUMBORDERO     String?     @db.Char(3)
+  SERIEDOCBAIXA       String?     @db.Char(5)
+  NOMARQRET           String?     @db.Char(12)
+  NUMCARTEIRA         String?     @db.Char(1)
+  SACADORAVALIST      String?     @db.Char(9)
+  NUMBOLETO           String?     @db.Char(6)
+  VALPAGOIND          Decimal?    @db.Decimal(28, 14)
+  compVALLIQUIDO      Decimal?    @db.Decimal(32, 14)
+  STAENVAPI           String?     @db.VarChar(1)
+  DTHORAENVAPI        DateTime?   @db.DateTime
+  RETORNOAPI          String?     @db.VarChar(Max)
+  QRCODEEMV           String?     @db.VarChar(Max)
+  QRCODETXID          String?     @db.VarChar(Max)
+  STAENVAGW           String?     @db.Char(1)
+
+  TBCTRC001           TBCTRC001   @relation(fields: [CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI], references: [CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI], map: "FKTBCTRC002_TBCTRC001_01")
+  TBFATU006           TBFATU006?  @relation(fields: [SACADORAVALIST], references: [CODCLI], onDelete: NoAction, onUpdate: NoAction, map: "FKTBCTRC002_TBFATU006")
+
+  @@id([CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI, DESDOBRO, NUMSEQRECEB], map: "PKTBCTRC002")
+  @@index([CODEMP, CODCLI, DTRECEBI, DATPRORROGA], map: "INDTBCTRC002_CODCLI")
+  @@index([CODFILIALBORDERO, NUMBORDERO], map: "INDTBCTRC002_CODFILIALBORDERO")
+  @@index([CODEMP, DTRECEBI], map: "INDTBCTRC002_DTRECEBI")
+  @@index([DTRECEBI], map: "INDTBCTRC002_DTRECEBI2")
+  @@index([CODFILIALBORDERO, CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI, DESDOBRO, NUMSEQRECEB], map: "INDTBCTRC002_GFN_001")
+  @@index([DTRECEBI, CODFILIALBORDERO, CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI, DESDOBRO, NUMSEQRECEB], map: "INDTBCTRC002_GFN_002")
+  @@index([CODEMP, NOSSONUM], map: "INDTBCTRC002_NOSSONUM")
+  @@index([NUMBORDERO], map: "INDTBCTRC002_NUMBORDERO")
+  @@index([FILIALDOCTODEV, CODDOCUMDEV, NUMDOCTODEV, CODCLIDEV, DESDOBRODEV, NUMSEQDEV, ORIGEMDOCTODEV], map: "INDTBCTRC002_NUMDOCTODEV")
+  @@schema("dbo")
+}
+
+/// TBCTRC003 - Receitas de Centro de Custo (Associados por Parcela ou Título)
+model TBCTRC003 {
+  CODEMP      String    @db.Char(2)
+  CODDOCUM    String    @db.Char(3)
+  NUMDOCTO    String    @db.Char(8)
+  SERIE       String    @default(" ", map: "DF__TBCTRC003__SERIE__7A8729A3") @db.Char(5)
+  CODCLI      String    @db.Char(9)
+  DESDOBRO    String    @db.Char(2)
+  NUMSEQRECEB String    @db.Char(2)
+  SEQCCUSTO   String    @db.Char(6)
+  CONTESTO    String    @db.Char(12)
+  CCUSTO      String?   @db.Char(10)
+  VALRECEITA  Decimal   @db.Decimal(28, 14)
+  CODHIST     String?   @db.Char(3)
+  CODORDEM    String?   @db.Char(12)
+  SEQORDEM    String?   @db.Char(3)
+
+  TBFATU006   TBFATU006 @relation(fields: [CODCLI], references: [CODCLI], onUpdate: NoAction, map: "FKTBCTRC003_TBFATU006_01")
+  TBGENE023   TBGENE023 @relation(fields: [CODEMP, CONTESTO], references: [CODEMP, CONTESTO], onUpdate: NoAction, map: "FKTBCTRC003_TBGENE023_01")
+
+  @@id([CODEMP, CODDOCUM, NUMDOCTO, SERIE, CODCLI, DESDOBRO, NUMSEQRECEB, SEQCCUSTO], map: "PKTBCTRC003")
+  @@schema("dbo")
+}
+
+/// TBFATU006 - Cliente
+model TBFATU006 {
+  CODCLI                    String       @id(map: "PKTBFATU006") @db.Char(9)
+  RAZSOCCLI                 String       @db.Char(80)
+  NOMFANTASCLI              String?      @db.Char(40)
+  TIPFISJUR                 String       @db.Char(1)
+  NUMCGCCPFCLI              String       @db.Char(14)
+  ENDCLI                    String       @db.Char(40)
+  NUMENDCLI                 String       @db.Char(6)
+  COMPLENDCLI               String?      @db.VarChar(60)
+  BAIRROCLI                 String?      @db.Char(30)
+  CIDADECLI                 String       @db.Char(30)
+  CODUF                     String       @db.Char(2)
+  CEPCLI                    String       @db.Char(10)
+  DATULTCOMP                DateTime?    @db.DateTime
+  DATATU                    DateTime     @db.DateTime
+  DATCADAST                 DateTime     @db.DateTime
+  TELCLI                    String?      @db.Char(12)
+  FAXCLI                    String?      @db.Char(12)
+  RAMALCLI                  String?      @db.Char(4)
+  STACLI                    String?      @db.Char(1)
+  STASITUFIN                String?      @db.Char(1)
+  CODREGVENDA               String?      @db.Char(2)
+  CODREGCOB                 String?      @db.Char(2)
+  CODTIPCLI                 String?      @db.Char(2)
+  CODLIMCRED                String?      @db.Char(2)
+  CODMEIOTRANSP             String?      @db.Char(2)
+  INSCRMUNIC                String?      @db.Char(15)
+  EMAIL                     String?      @db.Char(35)
+  CONTACONTABIL             String       @default("0", map: "DF__TBFATU006__CONTA__6339AFF7") @db.Char(14)
+  CODCLASSIFICABCVEND       String?      @db.Char(1)
+  CODCPAGTO                 String?      @db.Char(3)
+  PERCCOMISSAO1             Decimal?     @db.Decimal(28, 14)
+  CODTABPRECO               String?      @db.Char(3)
+  PAGFRETE                  String?      @db.Char(1)
+  POSICAOPLANOCONTA         String?      @db.Char(12)
+  STAEXPORT                 String?      @default("N", map: "DF__TBFATU006__STAEX__642DD430") @db.Char(1)
+  CONTACORRENTECLI          String?      @db.Char(15)
+  DIGTOCONTACORRENTECLI     String?      @db.Char(3)
+  CTACREDITO                String?      @db.Char(12)
+  SUBGRUPOCLI               String?      @db.Char(12)
+  CTAADIANTCLI              String?      @db.Char(12)
+  EMAIL2                    String?      @db.VarChar(250)
+  HOMEPAGE                  String?      @db.Char(70)
+  STACOMPLETADO             String?      @default("S", map: "DF__TBFATU006__STACO__6521F869") @db.Char(1)
+  STAACEITABAIXAOUTROSCLI   String?      @db.Char(1)
+  CODTRANSP                 String?      @db.Char(3)
+  STABAIXADEVOUTROSCLI      String?      @default("N", map: "DF__TBFATU006__STABA__66161CA2") @db.Char(1)
+  STACONTRIBUINTEPIS        String?      @db.Char(1)
+  STACONTRIBUINTECOFINS     String?      @db.Char(1)
+  DATFUNDACAOCLI            DateTime?    @db.DateTime
+  CODMOTIVOBLOQ             String?      @db.Char(2)
+  CODMOTIVOBLOQMANUAL       String?      @db.Char(2)
+  CODTIPGARANTIACLI         String?      @db.Char(2)
+  VALGARANTIACLI            Decimal?     @db.Decimal(28, 14)
+  TIPUSOMATERIAL            String?      @db.Char(1)
+  CODNATUOPER               String?      @db.Char(6)
+  CODMUNICIPIODEST          String?      @db.Char(5)
+  CODVEND                   String?      @db.Char(6)
+  CODBANCO                  String?      @db.Char(6)
+  CODAGENCIA                String?      @db.Char(10)
+  TIPCOBRANCA               String?      @db.Char(1)
+  STAENVIOEQUIFAX           String?      @db.Char(1)
+  CONTATOCLI                String?      @db.Char(40)
+  INSCRESTA                 String?      @db.Char(20)
+  CELCONTATO                String?      @db.Char(15)
+  PERCDESCDEFAULT           Decimal?     @db.Decimal(28, 14)
+  STAUTILDEVRELATPPB        String?      @db.Char(1)
+  STAOPTANTESIMPLES         String?      @default("N", map: "DF__TBFATU006__STAOP__670A40DB") @db.Char(1)
+  CODGRUPOCLI               String?      @db.Char(6)
+  CATEGORIACLI               String?      @db.Char(1)
+  NUMINSCRINSS              String?      @db.Char(12)
+  NUMINSCRPISPASEP          String?      @db.Char(11)
+  NUMINSCRSUFRAMA           String?      @db.Char(9)
+  CEPCXPOSTAL               String?      @db.Char(8)
+  CXPOSTAL                  String?      @db.Char(8)
+  CODMUNICIPIO              String?      @db.Char(7)
+  CODPAIS                   String?      @db.Char(5)
+  VALORKM                   Decimal?     @db.Decimal(28, 14)
+  CODMOVFISCDEFAULT         String?      @db.Char(3)
+  USER_IDCMDEFAULT          String?      @db.Char(10)
+  DATCADASTCMDEFAULT        DateTime?    @db.DateTime
+  INSCRESTA_ST              String?      @db.Char(15)
+  STAORGAOPUBL              String?      @db.Char(1)
+  EMAILENVIONFE             String?      @db.VarChar(500)
+  CODTRANSPREDESPACHO       String?      @db.Char(3)
+  PAGFRETEREDESPACHO        String?      @db.Char(1)
+  CODCANALVENDA             String?      @db.Char(3)
+  CODREGRADESC              String?      @db.Char(3)
+  STAPRODUTORRURAL          String?      @default("N", map: "DF__TBFATU006__STAPR__2DC9388C") @db.Char(1)
+  EMAILENVIOCOBRANCA        String?      @db.Char(250)
+  SUBGRUPOENTRADA           String?      @db.Char(12)
+  CODGRUPOENTRADA           String?      @db.Char(6)
+  CATEGORIAENTRADA          String?      @db.Char(1)
+  IDESTRANGEIRO             String?      @db.Char(20)
+  STAPISCOFINSPAUTA         String?      @default("N", map: "DF__TBFATU006__STAPI__027CB799") @db.Char(1)
+  STAPAUTAREDUZIDA          String?      @default("C", map: "DF__TBFATU006__STAPA__0370DBD2") @db.Char(1)
+  CODMOVFISCDEFAULT_KLE     String?      @db.Char(3)
+  INDIEDEST                 String?      @db.Char(1)
+  LAYOUTDANFE               String?      @db.Char(100)
+  STAAVISOCOBRANC           String?      @default("N", map: "DF__TBFATU006__STAAV__3EA9DD95") @db.Char(1)
+  STABLOQUEIOINAD           String?      @default("S", map: "DF__TBFATU006__STABL__658EA08C") @db.Char(1)
+  STAGERACOMISSAO           String       @default("S", map: "DF__TBFATU006__STAGE__64506390") @db.Char(1)
+  RECBOLEMAILAVISO          String?      @db.Char(1)
+  STASEPARAPARCPCC          String?      @db.Char(1)
+  STASEPARAPARCINSS         String?      @db.Char(1)
+  INFORMACOESPAGTO          String?      @db.Char(2)
+  CODCPAGTOCOMEX            String?      @db.Char(3)
+  STASEPARAPARCIRPF         String?      @db.Char(1)
+  SITUACAO_CNPJ             String?      @db.VarChar(20)
+  DAT_SITUACAO_CNPJ         DateTime?    @db.DateTime
+  DAT_CONSULTA_CNPJ         DateTime?    @db.DateTime
+  MOTIVO_SITUACAO_CNPJ      String?      @db.VarChar(100)
+  SEPARAPORFIFO             String?      @default("N", map: "DF__TBFATU006__SEPAR__59F39C05") @db.Char(1)
+  CONTROLATEOR              String?      @db.Char(1)
+  STASUSPIPI                String?      @default("N", map: "DF__TBFATU006__STASU__662F55B8") @db.Char(1)
+  DTVIGSUSPIPI              DateTime?    @db.DateTime
+  EXIGECERTQUALIDEMISSAONF  String?      @default("N", map: "DF_TBFATU006_EXIGECERTQUALIDEMISSAONF") @db.Char(1)
+  EXIGENUMPEDITECLI         String?      @db.Char(1)
+  METODOENVIO               String?      @default("E", map: "DF_TBFATU006_METODOENVIO") @db.Char(1)
+  EMAILENVLAUDOQUALID       String?      @db.VarChar(250)
+
+  TBCOMP009                 TBCOMP009?   @relation(fields: [CODCPAGTO], references: [CODCPAGTO], onDelete: NoAction, onUpdate: NoAction, map: "FKTBFATU006_TBCOMP009_01")
+  TBCTRC001                 TBCTRC001[]
+  TBCTRC002                 TBCTRC002[]
+  TBCTRC003                 TBCTRC003[]
+
+  @@index([CODVEND, CODCLI], map: "INDTBFATU006_CODVEND")
+  @@index([CODCLI, CONTACONTABIL, NUMCGCCPFCLI], map: "INDTBFATU006_GFN_001")
+  @@index([NUMCGCCPFCLI], map: "INDTBFATU006_NUMCGCCPFCLI")
+  @@index([RAZSOCCLI], map: "INDTBFATU006_RAZSOCCLI")
+  @@index([STACLI, CODCLI, CODMUNICIPIO, CODVEND], map: "INDTBFATU006_STACLI")
+  @@schema("dbo")
+}
+
+/// TBGENE010 - Índices de Conversão de Moeda - Mestre
+model TBGENE010 {
+  CODINDICE   String  @id(map: "PKTBGENE010") @db.Char(3)
+  DATCADAST   DateTime @db.DateTime
+  DESINDICE   String  @db.Char(30)
+  STAINDICE   String? @default("S", map: "DF__TBGENE010__STAIN__361CF0BD") @db.Char(1)
+  STACONVERTE String? @default("S", map: "DF__TBGENE010__STACO__371114F6") @db.Char(1)
+  CODINDBCB   String? @db.VarChar(3)
+
+  @@schema("dbo")
+}
+
+/// TBGENE015 - Bancos
+model TBGENE015 {
+  CODEMP             String      @db.Char(2)
+  CODBANCO           String      @db.Char(6)
+  NOMBANCO           String      @db.Char(40)
+  NUMBANCO           String      @db.Char(10)
+  OBSBANCO           String?     @db.Text
+  STABANCO           String      @db.Char(1)
+  DATATU             DateTime    @db.DateTime
+  DATCADAST          DateTime    @db.DateTime
+  CODMODDOC          String?     @db.Char(2)
+  CODMODCHEQUE       String?     @db.Char(2)
+  LOTESEQSISPAG      Int?
+  LOTESEQCNAB        Int?
+  DIRETARQSISPAG     String?     @db.VarChar(300)
+  DIRETARQCNAB       String?     @db.VarChar(300)
+  SEQNOSSONUMREC     String?     @db.Char(20)
+  EXTARQCNAB         String?     @default("TXT", map: "DF__TBGENE015__EXTAR__418EA369") @db.Char(3)
+  CAMINHOLOGOBANCO   String?     @db.Char(100)
+  MODELOBOLETO       String?     @db.Char(1)
+  NOSSONUMINI        String?     @db.Char(20)
+  NOSSONUMFIM        String?     @db.Char(20)
+  CODCONVENIO        String?     @db.Char(20)
+  STAUSAIMPRCHEQUE   String?     @db.Char(1)
+  ENVBOLEMAILAVISO   String?     @db.Char(1)
+  CODBANCOVINCFINANC String?     @db.Char(6)
+  NOMBANCO_BOLETO    String?     @db.VarChar(40)
+  DIG_VERIFICADOR    String?     @db.VarChar(3)
+  CNPJBANCO          String?     @db.Char(14)
+  CODPAIS            String?     @db.Char(5)
+  INSCRESTA          String?     @db.Char(20)
+  CODMUNICIPIO       String?     @db.Char(7)
+  ENDERECO           String?     @db.Char(60)
+  NUMEND             String?     @db.Char(6)
+  COMPLEND           String?     @db.Char(60)
+  BAIRROEND          String?     @db.Char(60)
+  CODUF              String?     @db.Char(2)
+
+  TBGENE016          TBGENE016[]
+
+  @@id([CODEMP, CODBANCO], map: "PKTBGENE015")
+  @@schema("dbo")
+}
+
+/// TBGENE016 - Agências
+model TBGENE016 {
+  CODEMP                    String      @db.Char(2)
+  CODBANCO                  String      @db.Char(6)
+  CODAGENCIA                String      @db.Char(10)
+  NOMAGENCIA                String      @db.Char(40)
+  ENDAGENCIA                String      @db.Char(50)
+  NUMENDAGENCIA             String      @db.Char(6)
+  COMPLENDAGENCIA           String?     @db.Char(30)
+  BAIRROAGENCIA             String      @db.Char(40)
+  CIDADEAGENCIA             String      @db.Char(30)
+  CODUF                     String      @db.Char(2)
+  CEPAGENCIA                String      @db.Char(10)
+  TELAGENCIA                String      @db.Char(12)
+  FAXAGENCIA                String?     @db.Char(12)
+  RAMALAGENCIA              String?     @db.Char(4)
+  CONTATOAGENCIA            String?     @db.Char(20)
+  NUMCTACORRENTE            String      @db.Char(15)
+  STAGENCIA                 String      @db.Char(1)
+  DATATU                    DateTime    @db.DateTime
+  DATCADAST                 DateTime    @db.DateTime
+  NUMSEQCHEQUE              String?     @db.Char(10)
+  NUMSEQDOC                 String?     @db.Char(10)
+  DIGCTACORRENTE            String?     @db.Char(2)
+  CTACONTABIL               String?     @db.Char(12)
+  SLDCTACORRENTE            Decimal?    @db.Decimal(28, 14)
+  STACOMPLETADO             String?     @default("S", map: "DF__TBGENE016__STACO__446B1014") @db.Char(1)
+  ESPECIEDOCBOLETO          String?     @db.Char(8)
+  ACEITEBOLETO              String?     @db.Char(5)
+  USOBANCOBOLETO            String?     @db.Char(10)
+  CARTEIRABOLETO            String?     @db.Char(8)
+  ESPECIEMOEDABOLETO        String?     @db.Char(3)
+  CODCEDENTEBOLETO          String?     @db.Char(20)
+  CODBAIXABOLETO            String?     @db.Char(6)
+  NUMLININSTRUCOESBOLETO    Int?
+  NUMCOLINSTRUCOESBOLETO    Int?
+  INSTRUCOESBOLETO          String?     @db.Text
+  DESCEDENTEBOLETO          String?     @db.Char(80)
+  LOCALPAGAMENTO            String?     @db.Text
+  VALJUROSDIA               Decimal?    @db.Decimal(28, 14)
+  STAGERALIVROCAIXA         String?     @db.Char(1)
+  VALTARIFA                 Decimal?    @default(0, map: "DF__TBGENE016__VALTA__455F344D") @db.Decimal(28, 14)
+  CODCONVENIOCBR            String?     @db.Char(20)
+  PERCMULTA                 Decimal?    @default(0, map: "DF__TBGENE016__PERCM__46535886") @db.Decimal(28, 14)
+  CTADESCONTO               String?     @db.Char(12)
+  STACONTADEVOLUCAO         String?     @default("N", map: "DF__TBGENE016__STACO__2F1C8421") @db.Char(1)
+  DATULTBLOQUEIO            DateTime?   @db.DateTime
+  CATEGORIA                 String?     @db.Char(1)
+  CODGRUPO                  String?     @db.Char(6)
+  SUBGRUPO                  String?     @db.Char(12)
+  DESCCARTEIRA              String?     @db.Char(40)
+  QTDMAXPARC                Int?
+  VALMINPARC                Decimal?    @db.Decimal(28, 14)
+  STAVAREJO                 String?     @db.Char(1)
+  FLCXPRAZOCOMP             Int?
+  FLCXPRAZOBANC             Int?
+  TIPNOSSONUM               String?     @db.Char(1)
+  API_REGISTRARONLINEVIAAPI String?     @db.VarChar(1)
+  API_STAQRCODEPIX          String?     @db.VarChar(1)
+  API_AMBIENTE              String?     @db.VarChar(1)
+  API_CLIENTID              String?     @db.VarChar(500)
+  API_CHAVESECRETA          String?     @db.VarChar(500)
+  API_TOKEN                 String?     @db.VarChar(500)
+  API_SALVARLOGS            String?     @db.VarChar(1)
+  TIPOCHAVEPIX              String?     @db.VarChar(1)
+  CHAVEPIX                  String?     @db.VarChar(200)
+  API_CERTPFX               Bytes?
+  API_CERTCRT               Bytes?
+  API_CERTKEY               Bytes?
+  API_DATVENCTOCRT          DateTime?   @db.DateTime
+  COOPERATIVA               String?     @db.VarChar(10)
+  POSTO                     String?     @db.VarChar(10)
+  CODIGO_BENEFICIARIO       String?     @db.VarChar(20)
+  API_USERNAME              String?     @db.VarChar(100)
+  API_CODIGO_ACESSO         String?     @db.VarChar(100)
+  DIASPROTESTO              Int?
+  DIASLIMITEPAG             Int?
+
+  TBGENE015                 TBGENE015   @relation(fields: [CODEMP, CODBANCO], references: [CODEMP, CODBANCO], onDelete: Cascade, map: "FKTBGENE016_TBGENE015_01")
+
+  @@id([CODEMP, CODBANCO, CODAGENCIA], map: "PKTBGENE016")
+  @@index([CODEMP], map: "INDTBGENE016_GFN_001")
+  @@schema("dbo")
+}
+
+/// TBGENE023 - Contas Contábeis
+model TBGENE023 {
+  CODEMP              String      @db.Char(2)
+  CONTESTO            String      @db.Char(12)
+  CODDIGITOCONTA      String?     @db.Char(1)
+  PRIORIDADE          Int?
+  DESCCONTA           String?     @db.Char(40)
+  CODPERCRAT          String?     @db.Char(5)
+  TIPDESP             String?     @db.Char(1)
+  ACEITACC            String?     @default("S", map: "DF__TBGENE023__ACEIT__5A5A5133") @db.Char(1)
+  STACONTABILIZA      String?     @default("S", map: "DF__TBGENE023__STACO__5B4E756C") @db.Char(1)
+  CODHIST             String?     @db.Char(3)
+  CODCATEGORIACONTA   String?     @db.Char(1)
+  DATCADAST           DateTime?   @db.DateTime
+  VALSALDODEVINI      Decimal?    @db.Decimal(28, 14)
+  VALSALDOCREINI      Decimal?    @db.Decimal(28, 14)
+  VALSALDODEVATU      Decimal?    @db.Decimal(28, 14)
+  VALSALDOCREATU      Decimal?    @db.Decimal(28, 14)
+  DATULTLANCTO        DateTime?   @db.DateTime
+  STACONTA            String?     @db.Char(1)
+  TIPCONT             String?     @db.Char(1)
+  CODDOCUMEMISSAO     String?     @db.Char(3)
+  NUMDOCUMCPOEMISSAO  String?     @db.Char(30)
+  CODHISTBAIXA        String?     @db.Char(5)
+  CODDOCUMBAIXA       String?     @db.Char(3)
+  NUMDOCUMCPOBAIXA    String?     @db.Char(30)
+  STAOBRIGAPLANO      String?     @db.Char(1)
+  INDNATUREZACONTA    String?     @db.Char(1)
+  STACTAATIVOIMOB     String?     @default("N", map: "DF__TBGENE023__STACT__5C4299A5") @db.Char(1)
+  PERCDEPREC          Decimal?    @db.Decimal(28, 14)
+  CTADEPRECATIVO      String?     @db.Char(12)
+  CONTREDUZ           Int?
+  INDNATUCONTASPED    String?     @db.Char(2)
+  CODCONTAREFSPED     String?     @db.Char(30)
+  CODFILIALRESUM      String?     @db.Char(2)
+  CODCONTARESUM       String?     @db.Char(12)
+  CTADESPDEPRECATIVO  String?     @db.Char(12)
+  CODEVENTODEPREC     String?     @db.Char(5)
+  STASUBCONTA         String?     @db.Char(1)
+  CONTAPAI            String?     @db.Char(12)
+  NATUSUBCONTA        Int?
+  POSSUISUBCONTAS     String?     @db.Char(1)
+  CODIDT              String?     @db.Char(6)
+
+  TBCOMP008           TBCOMP008[]
+  TBCTRC003           TBCTRC003[]
+
+  @@id([CODEMP, CONTESTO], map: "PKTBGENE023")
+  @@index([CODEMP, CONTESTO, ACEITACC], map: "INDTBGENE023_ACEITACC")
+  @@index([CODEMP, CONTESTO, TIPCONT], map: "INDTBGENE023_CODEMP_TIPCONT")
+  @@index([CODEMP, STAOBRIGAPLANO], map: "INDTBGENE023_STAOBRIGAPLANO")
+  @@schema("dbo")
+}
+
+/// TBFLCX001 - Grupo
+model TBFLCX001 {
+  CATEGORIA String      @db.Char(1)
+  CODGRUPO  String      @db.Char(6)
+  DESGRUPO  String      @db.Char(30)
+  STAGRUPO  String      @db.Char(1)
+
+  TBFLCX002 TBFLCX002[]
+
+  @@id([CATEGORIA, CODGRUPO], map: "PKTBFLCX001")
+  @@schema("dbo")
+}
+
+/// TBFLCX002 - SubGrupo
+model TBFLCX002 {
+  CATEGORIA         String      @db.Char(1)
+  CODGRUPO          String      @db.Char(6)
+  SUBGRUPO          String      @db.Char(12)
+  DESCSUBGRUPO      String      @db.Char(30)
+  BASECALCSUBGRUPO  String?     @db.Char(1)
+  PERCSUBGRUPO      Decimal?    @db.Decimal(28, 14)
+  CALCSUBGRUPO      String?     @db.Char(12)
+  GERAFLUXO         String?     @default("S", map: "DF__TBFLCX002__GERAF__056BD0D8") @db.Char(1)
+  CTAGRUPO          String?     @db.Char(2)
+
+  TBCTRC001         TBCTRC001[]
+  TBFLCX001         TBFLCX001   @relation(fields: [CATEGORIA, CODGRUPO], references: [CATEGORIA, CODGRUPO], onUpdate: NoAction, map: "FKTBFLCX002_TBFLCX001_01")
+
+  @@id([CATEGORIA, CODGRUPO, SUBGRUPO], map: "PKTBFLCX002")
+  @@index([SUBGRUPO, CATEGORIA], map: "INDTBFLCX002_SUBGRUPO")
+  @@schema("dbo")
+}
