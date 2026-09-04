@@ -115,6 +115,32 @@ async function removeTabelasObsoletas(oConn, sBanco) {
    return iRemovidas;
 } // removeTabelasObsoletas
 
+/**
+ * Marca como consultados os dias que já têm movimento gravado.
+ *
+ * extrato_dia nasceu depois de movimento_banco. Sem esta carga, uma base que
+ * já tinha extrato ficaria com a tabela vazia e o sistema tentaria buscar na
+ * instituição períodos que ele já possui — repetindo a chamada a cada abertura
+ * de tela, e falhando em ambientes de homologação, que só respondem para
+ * janelas específicas.
+ *
+ * A afirmação é segura no sentido usado: dia com movimento gravado é,
+ * necessariamente, dia que já foi consultado. O contrário não vale — dia sem
+ * movimento pode não ter sido consultado nunca —, então nada é inferido para
+ * os dias vazios.
+ *
+ * @param {import('mysql2/promise').Connection} oConn
+ * @returns {Promise<number>} Quantidade de dias marcados
+ */
+async function preencheDiasConsultados(oConn) {
+   const [oResultado] = await oConn.query(
+      `INSERT IGNORE INTO extrato_dia (id_conta, dat_dia)
+       SELECT DISTINCT id_conta, dat_movimento
+         FROM movimento_banco`
+   );
+
+   return oResultado.affectedRows ?? 0;
+} // preencheDiasConsultados
 
 /**
  * Remove as colunas que não fazem mais parte do modelo.
@@ -217,6 +243,10 @@ async function main() {
       console.log('Conferindo tabelas obsoletas...');
       const iTabelas = await removeTabelasObsoletas(oConn, sBanco);
       console.log(iTabelas === 0 ? '  nenhuma tabela pendente.' : `  ${iTabelas} tabela(s) removida(s).`);
+
+      console.log('Marcando dias já cobertos pelo extrato gravado...');
+      const iDias = await preencheDiasConsultados(oConn);
+      console.log(iDias === 0 ? '  nada a marcar.' : `  ${iDias} dia(s) marcado(s) como consultado(s).`);
    } finally {
       await oConn.end();
    }

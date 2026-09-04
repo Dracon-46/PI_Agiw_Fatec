@@ -43,6 +43,15 @@ export const ORIGEM_API = 'API';
 export const MAX_DIAS_POR_CHAMADA = 31;
 
 /**
+ * Máximo de chamadas à instituição em uma única busca.
+ *
+ * Um período todo descoberto vira uma ou duas faixas; um período salpicado de
+ * buracos (extrato antigo gravado dia sim, dia não) vira dezenas. Sem teto,
+ * abrir a tela dispararia uma rajada contra o gateway do banco.
+ */
+export const MAX_FAIXAS_POR_BUSCA = 8;
+
+/**
  * Monta o código determinístico de um movimento.
  *
  * Data, documento, sentido e valor identificam a linha do extrato: a mesma
@@ -240,6 +249,7 @@ export function recortaPeriodo(aMovimentos, sDataInicio, sDataFim) {
  */
 async function buscaEGrava(oProvider, oConta, aFaixas) {
    const aAvisos = [];
+   const aFalhas = [];
    let iGravados = 0;
 
    for (const oFaixa of aFaixas) {
@@ -273,10 +283,24 @@ async function buscaEGrava(oProvider, oConta, aFaixas) {
             );
          }
       } catch (oErro) {
-         aAvisos.push(
-            `Não foi possível ler ${sInicioBr} a ${sFimBr} na API: ${oErro.message}`
-         );
+         // Acumula em vez de emitir na hora: um período com muitos buracos
+         // gera muitas faixas, e uma mensagem por faixa afogaria a tela
+         aFalhas.push({ sInicioBr, sFimBr, sMotivo: oErro.message });
       }
+   }
+
+   if (aFalhas.length === 1) {
+      aAvisos.push(
+         `Não foi possível ler ${aFalhas[0].sInicioBr} a ${aFalhas[0].sFimBr} na API: ` +
+            aFalhas[0].sMotivo
+      );
+   } else if (aFalhas.length > 1) {
+      // O motivo costuma ser o mesmo em todas; mostrar um basta para agir
+      aAvisos.push(
+         `Não foi possível ler ${aFalhas.length} trecho(s) do período na API ` +
+            `(de ${aFalhas[0].sInicioBr} a ${aFalhas[aFalhas.length - 1].sFimBr}). ` +
+            `Motivo: ${aFalhas[0].sMotivo}`
+      );
    }
 
    return { iGravados, aAvisos };
@@ -334,14 +358,23 @@ export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = 
          const aTodasPendencias = [...aPendencias, ...aPendenciasConta];
 
          if (aTodasPendencias.length === 0) {
-            const { aAvisos: aAvisosBusca } = await buscaEGrava(
-               oProvider,
-               oConta,
-               agrupaEmFaixas(aDiasFaltantes)
-            );
+            const aTodasFaixas = agrupaEmFaixas(aDiasFaltantes);
+            const aFaixas = aTodasFaixas.slice(0, MAX_FAIXAS_POR_BUSCA);
+
+            const { aAvisos: aAvisosBusca } = await buscaEGrava(oProvider, oConta, aFaixas);
             aAvisos.push(...aAvisosBusca);
             bApiConsultada = true;
-            iDiasBuscados = aDiasFaltantes.length;
+            iDiasBuscados = aFaixas.reduce(
+               (iSoma, oFaixa) => iSoma + listaDiasDoPeriodo(paraBr(oFaixa.sInicioIso), paraBr(oFaixa.sFimIso)).length,
+               0
+            );
+
+            if (aTodasFaixas.length > aFaixas.length) {
+               aAvisos.push(
+                  `O período tem ${aTodasFaixas.length} trechos ainda não consultados; ` +
+                     `${aFaixas.length} foram buscados agora. Busque novamente para continuar.`
+               );
+            }
          } else {
             aAvisos.push(
                `Integração com ${oProvider.getName()} incompleta: ${aTodasPendencias.join(' ')} ` +
