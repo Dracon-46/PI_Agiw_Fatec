@@ -16,7 +16,6 @@ const LOGO_AGIW = '/logo-agiw.png';
 
 /** Itens do menu lateral do módulo financeiro */
 const ITENS_MENU = [
-   { sChave: 'baixar', sRotulo: 'Baixar', Icone: Wallet },
    { sChave: 'conciliacao', sRotulo: 'Conciliação Bancária', Icone: LayoutList },
    { sChave: 'excluir', sRotulo: 'Excluir', Icone: Trash2 },
    { sChave: 'estorno', sRotulo: 'Estorno', Icone: Undo2 },

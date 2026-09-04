@@ -11,9 +11,6 @@ export const ORIGEM_CONCILIACAO = 'Conciliação';
 /** Origem dos lançamentos gerados por transferência entre contas */
 export const ORIGEM_TRANSFERENCIA = 'Transferência';
 
-/** Origem dos lançamentos gerados pela baixa de um título */
-export const ORIGEM_BAIXA_TITULO = 'Baixa de Título';
-
 /**
  * Origens nascidas dentro do módulo de conciliação.
  *
@@ -23,7 +20,7 @@ export const ORIGEM_BAIXA_TITULO = 'Baixa de Título';
  * lançamentos vindos do Contas a Pagar/Receber pertencem ao Satis e não podem
  * ser removidos por aqui.
  */
-export const ORIGENS_EXCLUIVEIS = [ORIGEM_CONCILIACAO, ORIGEM_TRANSFERENCIA, ORIGEM_BAIXA_TITULO];
+export const ORIGENS_EXCLUIVEIS = [ORIGEM_CONCILIACAO, ORIGEM_TRANSFERENCIA];
 
 /**
  * Gera o código de um novo lançamento originado na conciliação.
@@ -62,8 +59,7 @@ export async function listaLancamentosPeriodo(iIdConta, sDataInicioBr, sDataFimB
               l.cod_subgrupo AS codSubgrupo,
               l.cod_conta_contabil AS codContaContabil,
               l.sta_conciliado AS staConciliado,
-              l.cod_transferencia AS codTransferencia,
-              l.cod_titulo AS codTitulo
+              l.cod_transferencia AS codTransferencia
          FROM lancamento_sistema l
          INNER JOIN conta_corrente c ON c.id_conta = l.id_conta
         WHERE l.id_conta = :idConta
@@ -111,8 +107,7 @@ export async function listaLancamentosConta(iIdConta) {
               l.cod_subgrupo AS codSubgrupo,
               l.cod_conta_contabil AS codContaContabil,
               l.sta_conciliado AS staConciliado,
-              l.cod_transferencia AS codTransferencia,
-              l.cod_titulo AS codTitulo
+              l.cod_transferencia AS codTransferencia
          FROM lancamento_sistema l
          INNER JOIN conta_corrente c ON c.id_conta = l.id_conta
         WHERE l.id_conta = :idConta
@@ -184,12 +179,12 @@ export async function insereLancamento(iIdConta, oLancamento) {
          (id_conta, cod_lancamento, dat_movimento, dat_compensacao, num_documento,
           des_historico, val_movimento, b_entrada, tip_origem, tip_documento,
           cod_subgrupo, cod_conta_contabil, sta_conciliado,
-          cod_transferencia, cod_titulo)
+          cod_transferencia)
        VALUES
          (:idConta, :codLancamento, :datMovimento, :datCompensacao, :numDocumento,
           :desHistorico, :valMovimento, :bEntrada, :tipOrigem, :tipDocumento,
           :codSubgrupo, :codContaContabil, :staConciliado,
-          :codTransferencia, :codTitulo)
+          :codTransferencia)
        ON DUPLICATE KEY UPDATE
          dat_movimento = VALUES(dat_movimento),
          dat_compensacao = VALUES(dat_compensacao),
@@ -201,8 +196,7 @@ export async function insereLancamento(iIdConta, oLancamento) {
          tip_documento = VALUES(tip_documento),
          cod_subgrupo = VALUES(cod_subgrupo),
          cod_conta_contabil = VALUES(cod_conta_contabil),
-         cod_transferencia = VALUES(cod_transferencia),
-         cod_titulo = VALUES(cod_titulo)`,
+         cod_transferencia = VALUES(cod_transferencia)`,
       {
          idConta: iIdConta,
          codLancamento: sCodigo,
@@ -218,7 +212,6 @@ export async function insereLancamento(iIdConta, oLancamento) {
          codContaContabil: oLancamento.codContaContabil || null,
          staConciliado: oLancamento.staConciliado ? 1 : 0,
          codTransferencia: oLancamento.codTransferencia || null,
-         codTitulo: oLancamento.codTitulo || null,
       }
    );
 
@@ -236,7 +229,6 @@ export async function insereLancamento(iIdConta, oLancamento) {
       codContaContabil: oLancamento.codContaContabil || null,
       staConciliado: Boolean(oLancamento.staConciliado),
       codTransferencia: oLancamento.codTransferencia || null,
-      codTitulo: oLancamento.codTitulo || null,
    };
 } // insereLancamento
 
@@ -254,8 +246,7 @@ export async function excluiLancamento(iIdConta, sCodLancamento) {
    const aLinhas = await query(
       `SELECT sta_conciliado AS staConciliado,
               tip_origem AS tipOrigem,
-              cod_transferencia AS codTransferencia,
-              cod_titulo AS codTitulo
+              cod_transferencia AS codTransferencia
          FROM lancamento_sistema
         WHERE id_conta = :idConta AND cod_lancamento = :codLancamento`,
       { idConta: iIdConta, codLancamento: sCodLancamento }
@@ -315,7 +306,7 @@ export async function excluiLancamento(iIdConta, sCodLancamento) {
       { idConta: iIdConta, codLancamento: sCodLancamento }
    );
 
-   return { bExcluido: true, sMotivo: '', codTitulo: oLancamento.codTitulo ?? null };
+   return { bExcluido: true, sMotivo: '' };
 } // excluiLancamento
 
 /**

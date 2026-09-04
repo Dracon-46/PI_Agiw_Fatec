@@ -210,8 +210,6 @@ CREATE TABLE IF NOT EXISTS lancamento_sistema (
   -- Identificador comum às duas pernas de uma transferência entre contas
   -- (item 6.1.3.8 — ação 2): o débito e o crédito compartilham o mesmo código.
   cod_transferencia VARCHAR(80)   NULL,
-  -- Título que originou o lançamento na baixa (item 6.1.3.8 — ação 3)
-  cod_titulo       VARCHAR(80)    NULL,
   dat_importacao   DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id_lancamento),
   UNIQUE KEY uk_lanc_cod (id_conta, cod_lancamento),
@@ -221,82 +219,58 @@ CREATE TABLE IF NOT EXISTS lancamento_sistema (
 ) ENGINE=InnoDB;
 
 -- --------------------------------------------------------------------------
--- Movimentos do extrato bancário.
+-- Extrato bancário copiado da instituição.
 --
--- A tabela tem dois papéis, distinguidos por tip_origem:
+-- A grade "Movimentos no Banco" lê DESTA tabela: a API é consultada uma única
+-- vez por dia de extrato (ver extrato_dia) e o dado passa a ser nosso. As APIs
+-- têm janela limitada — o BB não devolve nada além de 5 anos —, então sem a
+-- cópia local a conciliação de períodos antigos seria impossível.
 --
---   'API'     — o extrato NÃO é copiado. A grade "Movimentos no Banco" exibe
---               sempre o que a instituição devolve na consulta; aqui fica só
---               o que a API não sabe responder: se o movimento foi conciliado
---               e se o usuário o removeu da grade (item 6.1.3.8 — ação 4).
---               Histórico e documento ficam nulos, porque vêm da API.
+-- A chave é o cod_movimento determinístico (data + documento + sentido + valor
+-- + ocorrência): reconsultar um período já gravado atualiza, não duplica.
 --
---   'ARQUIVO' — importação de OFX/CSV/TXT (item 6.1.3.3). Aqui o registro é
---               guardado por inteiro: o arquivo é a única fonte, não há a que
---               voltar para reler o histórico.
---
--- A chave é o cod_movimento determinístico (data + documento + sentido +
--- valor): a mesma linha do extrato produz sempre o mesmo código, então o
--- estado reencontra o movimento a cada consulta.
+-- Não há exclusão: o item 6.1.3.8 permite excluir apenas registros do ERP.
+-- Extrato do banco é fato consumado e não se apaga.
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS movimento_banco (
   id_movimento     BIGINT         NOT NULL AUTO_INCREMENT,
   id_conta         INT            NOT NULL,
-  cod_movimento    VARCHAR(120)   NOT NULL,
-  tip_origem       ENUM('API','ARQUIVO') NOT NULL DEFAULT 'API',
+  cod_movimento    VARCHAR(160)   NOT NULL,
   dat_movimento    DATE           NOT NULL,
   val_movimento    DECIMAL(18,2)  NOT NULL,
   b_entrada        TINYINT(1)     NOT NULL,
-  -- Preenchidos só na origem ARQUIVO; na origem API vêm da instituição
   des_historico    VARCHAR(500)   NULL,
   num_documento    VARCHAR(40)    NULL,
+  -- Código do TIPO de transação na instituição (ex.: 03584 no Bradesco).
+  -- Identifica a natureza do lançamento, não a transação: repete-se entre
+  -- movimentos distintos e por isso não serve de chave.
+  cod_lancamento_banco VARCHAR(40) NULL,
   sta_conciliado   TINYINT(1)     NOT NULL DEFAULT 0,
-  -- Exclusão lógica: apagar a linha faria o movimento reaparecer na próxima
-  -- leitura da API, porque o extrato da instituição continua o mesmo.
-  b_excluido       TINYINT(1)     NOT NULL DEFAULT 0,
   dat_atualizacao  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id_movimento),
   UNIQUE KEY uk_mov_cod (id_conta, cod_movimento),
   KEY ix_mov_periodo (id_conta, dat_movimento),
-  KEY ix_mov_origem (id_conta, tip_origem),
   CONSTRAINT fk_mov_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- --------------------------------------------------------------------------
--- Títulos em aberto (associação / baixa) — estrutura para Satis
+-- Dias de extrato já consultados na instituição.
+--
+-- Sem este registro não haveria como distinguir "dia sem movimento" de "dia
+-- nunca consultado": os dois chegam da API como lista vazia, e o sistema
+-- repetiria a mesma consulta para sempre.
+--
+-- A gravação acontece DEPOIS dos movimentos do dia: falha no meio deixa o dia
+-- pendente e a próxima busca refaz a consulta.
 -- --------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS titulo_aberto (
-  id_titulo      BIGINT         NOT NULL AUTO_INCREMENT,
-  id_conta       INT            NULL,
-  cod_titulo     VARCHAR(80)    NOT NULL,
-  dat_emissao    DATE           NULL,
-  dat_vencimento DATE           NOT NULL,
-  nom_emitente   VARCHAR(160)   NOT NULL,
-  des_historico  VARCHAR(500)   NULL,
-  val_titulo     DECIMAL(18,2)  NOT NULL,
-  val_multa      DECIMAL(18,2)  NOT NULL DEFAULT 0,
-  val_juros      DECIMAL(18,2)  NOT NULL DEFAULT 0,
-  val_desconto   DECIMAL(18,2)  NOT NULL DEFAULT 0,
-  tip_documento  VARCHAR(20)    NULL,
-  num_documento  VARCHAR(40)    NULL,
-  num_parcela    VARCHAR(10)    NULL,
-  -- Nosso número do boleto na instituição. É a chave das rotas de cobrança
-  -- (consulta e baixa); sem ela o título só pode ser baixado localmente.
-  num_boleto     VARCHAR(20)    NULL,
-  tip_movimento  ENUM('Entrada','Saída') NOT NULL,
-  tip_origem     VARCHAR(60)    NOT NULL,
-  -- Situação da baixa (item 6.1.3.8 — ação 3). Um título baixado sai da
-  -- relação de títulos em aberto e passa a ter lançamento no extrato Satis.
-  sta_baixado    TINYINT(1)     NOT NULL DEFAULT 0,
-  dat_baixa      DATE           NULL,
-  val_pago       DECIMAL(18,2)  NULL,
-  val_tarifa     DECIMAL(18,2)  NOT NULL DEFAULT 0,
-  cod_lancamento_baixa VARCHAR(80) NULL,
-  PRIMARY KEY (id_titulo),
-  UNIQUE KEY uk_titulo_cod (cod_titulo),
-  KEY ix_titulo_aberto (id_conta, sta_baixado, dat_vencimento),
-  CONSTRAINT fk_titulo_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE SET NULL
+CREATE TABLE IF NOT EXISTS extrato_dia (
+  id_conta     INT      NOT NULL,
+  dat_dia      DATE     NOT NULL,
+  dat_consulta DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id_conta, dat_dia),
+  CONSTRAINT fk_extrato_dia_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
 
 -- --------------------------------------------------------------------------
 -- Auditoria de ações (item 6.5 das sugestões do documento da equipe)
@@ -318,22 +292,3 @@ CREATE TABLE IF NOT EXISTS auditoria (
   CONSTRAINT fk_auditoria_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- --------------------------------------------------------------------------
--- Arquivos de extrato enviados pelo usuário (OFX, CSV, TXT)
--- Guarda o rastro da importação por arquivo (item 6.1.3.3).
--- --------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS arquivo_importado (
-  id_arquivo     BIGINT        NOT NULL AUTO_INCREMENT,
-  id_conta       INT           NOT NULL,
-  nom_arquivo    VARCHAR(260)  NOT NULL,
-  tip_formato    VARCHAR(10)   NOT NULL,
-  num_bytes      BIGINT        NOT NULL DEFAULT 0,
-  qtd_lidos      INT           NOT NULL DEFAULT 0,
-  qtd_importados INT           NOT NULL DEFAULT 0,
-  qtd_ignorados  INT           NOT NULL DEFAULT 0,
-  dat_importacao DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  nom_usuario    VARCHAR(80)   NOT NULL DEFAULT 'INFTEC',
-  PRIMARY KEY (id_arquivo),
-  KEY ix_arquivo_conta (id_conta, dat_importacao),
-  CONSTRAINT fk_arquivo_conta FOREIGN KEY (id_conta) REFERENCES conta_corrente (id_conta) ON DELETE CASCADE
-) ENGINE=InnoDB;

@@ -122,9 +122,9 @@ async function leExtratoDaApi(oConta, oPeriodo) {
       tipConta: oConta.tip_conta,
    });
 
-   const bRecorta = (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
-
    // O mesmo recorte da tela: a instituição pode ignorar as datas enviadas
+   const bRecorta = true;
+
    return aBrutos
       .map((oMovimento) => {
          const nEntrada = oMovimento.valEntrada ?? 0;

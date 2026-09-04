@@ -1,50 +1,53 @@
 // ============================================================================
-// extratoBanco.js - Leitura unificada do extrato de uma conta
+// extratoBanco.js - Leitura do extrato de uma conta
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
 // A grade "Movimentos no Banco" e o relatório do item 6.2 precisam exatamente
 // do mesmo extrato — o relatório imprime "os registros exibidos nas grades".
 // Ter duas leituras diferentes faria o papel divergir da tela.
 //
-// O extrato tem duas fontes, conforme o item 6.1.3.3:
-//   - a API da instituição, consultada a cada chamada (nada é copiado);
-//   - os arquivos OFX/CSV/TXT importados, esses sim gravados no MySQL.
+// O extrato é GRAVADO no MySQL na primeira leitura e, a partir daí, servido de
+// lá. A instituição só é consultada para os dias que ainda não temos:
 //
-// Sobre os dois aplica-se o estado local: conciliado e excluído da grade.
+//   1. o período pedido é quebrado em dias;
+//   2. extrato_dia diz quais já foram consultados;
+//   3. os que faltam viram faixas contíguas e vão à API, uma faixa por vez;
+//   4. o que volta é gravado e os dias são marcados como cobertos;
+//   5. a grade é montada lendo o MySQL — sempre, inclusive no caminho novo.
+//
+// Duas razões para isso, e nenhuma é desempenho apenas: as APIs têm janela
+// limitada (o BB não devolve nada além de 5 anos), então sem cópia local a
+// conciliação de períodos antigos ficaria impossível; e reconsultar o mesmo
+// período a cada abertura de tela gasta cota do gateway à toa.
 // ============================================================================
 
 import { BankProviderFactory } from '../providers/BankProviderFactory.js';
 import {
-   aplicaEstadoNosMovimentos,
-   carregaEstadoMovimentos,
-   listaMovimentosArquivo,
-   registraEstadoMovimentos,
+   gravaMovimentos,
+   listaDiasConsultados,
+   listaMovimentosPeriodo,
+   marcaDiasConsultados,
 } from './repositories/movimentoRepository.js';
 import { comparaDatas } from '../utils/formatters.js';
+import { separaComponentesData } from './conciliacao/valorUtils.js';
 
 /** Identificação da origem devolvida à tela */
 export const ORIGEM_API = 'API';
 
 /**
- * Indica se o extrato deve ser recortado pelo período informado.
+ * Máximo de dias enviados à instituição em uma única chamada.
  *
- * Ligado é o comportamento do item 6.1.3.3 e o correto em produção. Em
- * homologação o recorte atrapalha: o sandbox do Bradesco só ACEITA a janela
- * 06/11/2024-20/11/2024 na consulta, mas RESPONDE sempre out/2024 a jan/2025 —
- * recortar deixaria um único movimento na grade.
- *
- * @returns {boolean}
+ * O limite mais apertado entre os bancos integrados é o do Banco do Brasil, de
+ * 31 dias por consulta. Fatiar aqui evita que uma faixa maior seja recusada.
  */
-export function recortaPorPeriodo() {
-   return (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
-} // recortaPorPeriodo
+export const MAX_DIAS_POR_CHAMADA = 31;
 
 /**
- * Monta o código determinístico de um movimento da API.
+ * Monta o código determinístico de um movimento.
  *
  * Data, documento, sentido e valor identificam a linha do extrato: a mesma
- * linha gera sempre o mesmo código, e é por ele que o estado local (conciliado
- * / excluído) reencontra o movimento em cada consulta.
+ * linha gera sempre o mesmo código, e é por ele que reconsultar um período já
+ * gravado atualiza o registro em vez de duplicá-lo.
  *
  * O "codigoLancamento" do Bradesco NÃO serve sozinho: ele identifica o TIPO da
  * transação (ex.: 03584 = rendimento) e se repete entre movimentos distintos.
@@ -65,6 +68,13 @@ function montaCodigoMovimento(oMovimento, sCodConta, iIndice, bEntrada, nValor) 
       bEntrada ? 'E' : 'S',
       String(Math.round(nValor * 100)),
       oMovimento.codigoLancamento || '',
+      // Discriminador da ocorrência. Sem ele, dois movimentos de mesmo dia,
+      // documento, sentido e valor produzem a mesma chave e um sobrescreve o
+      // outro na gravação — perda silenciosa de movimento. Acontece de
+      // verdade: o Itaú devolve liquidações repetidas do mesmo título.
+      // Quando o banco fornece identificador próprio de transação (o BB o faz
+      // na v2), é ele que entra; senão, a posição na resposta.
+      oMovimento.idTransacao || String(iIndice),
    ].join('-');
 } // montaCodigoMovimento
 
@@ -91,22 +101,116 @@ export function normalizaMovimentosDoProvider(aBrutos, sCodConta) {
          bEntrada,
          staConciliado: false,
          codigoLancamento: oMovimento.codigoLancamento || '',
+         idTransacao: oMovimento.idTransacao || '',
       };
    });
 } // normalizaMovimentosDoProvider
 
+// ───────── Cobertura por dia ─────────
+
 /**
- * Mantém apenas os movimentos dentro do período pedido (item 6.1.3.3).
+ * Converte DD/MM/AAAA para AAAA-MM-DD.
+ * @param {string} sDataBr
+ * @returns {string} String vazia quando não for interpretável
+ */
+function paraIso(sDataBr) {
+   const oPartes = separaComponentesData(sDataBr);
+   return oPartes ? `${oPartes.sAno}-${oPartes.sMes}-${oPartes.sDia}` : '';
+} // paraIso
+
+/**
+ * Converte AAAA-MM-DD para DD/MM/AAAA.
+ * @param {string} sDataIso
+ * @returns {string}
+ */
+function paraBr(sDataIso) {
+   const [sAno, sMes, sDia] = String(sDataIso).slice(0, 10).split('-');
+   return sAno && sMes && sDia ? `${sDia}/${sMes}/${sAno}` : '';
+} // paraBr
+
+/**
+ * Relaciona todos os dias de um período, em AAAA-MM-DD.
+ * @param {string} sDataInicioBr
+ * @param {string} sDataFimBr
+ * @returns {string[]} Vazio quando o período é inválido ou invertido
+ */
+export function listaDiasDoPeriodo(sDataInicioBr, sDataFimBr) {
+   const sIni = paraIso(sDataInicioBr);
+   const sFim = paraIso(sDataFimBr);
+   if (!sIni || !sFim || sIni > sFim) {
+      return [];
+   }
+
+   const aDias = [];
+   const dtAtual = new Date(`${sIni}T00:00:00`);
+   const dtFim = new Date(`${sFim}T00:00:00`);
+
+   while (dtAtual <= dtFim) {
+      aDias.push(dtAtual.toISOString().slice(0, 10));
+      dtAtual.setDate(dtAtual.getDate() + 1);
+   }
+
+   return aDias;
+} // listaDiasDoPeriodo
+
+/**
+ * Agrupa dias soltos em faixas contíguas, cada uma com no máximo
+ * MAX_DIAS_POR_CHAMADA dias.
+ *
+ * Buscar dia a dia multiplicaria as chamadas; buscar tudo de uma vez estouraria
+ * o limite do banco. A faixa contígua é o meio-termo: um intervalo por buraco.
+ *
+ * @param {string[]} aDiasIso Dias ordenados
+ * @returns {Array<{ sInicioIso: string, sFimIso: string }>}
+ */
+export function agrupaEmFaixas(aDiasIso) {
+   const aFaixas = [];
+   if (aDiasIso.length === 0) {
+      return aFaixas;
+   }
+
+   let sInicio = aDiasIso[0];
+   let sAnterior = aDiasIso[0];
+   let iTamanho = 1;
+
+   const ehDiaSeguinte = (sA, sB) => {
+      const dt = new Date(`${sA}T00:00:00`);
+      dt.setDate(dt.getDate() + 1);
+      return dt.toISOString().slice(0, 10) === sB;
+   };
+
+   for (let iPos = 1; iPos < aDiasIso.length; iPos += 1) {
+      const sDia = aDiasIso[iPos];
+      if (ehDiaSeguinte(sAnterior, sDia) && iTamanho < MAX_DIAS_POR_CHAMADA) {
+         sAnterior = sDia;
+         iTamanho += 1;
+         continue;
+      }
+      aFaixas.push({ sInicioIso: sInicio, sFimIso: sAnterior });
+      sInicio = sDia;
+      sAnterior = sDia;
+      iTamanho = 1;
+   }
+
+   aFaixas.push({ sInicioIso: sInicio, sFimIso: sAnterior });
+   return aFaixas;
+} // agrupaEmFaixas
+
+/**
+ * Mantém apenas os movimentos dentro do período pedido.
+ *
+ * Diferente do desenho anterior, o recorte aqui não é opcional: o que sai da
+ * API vai ser GRAVADO, e gravar movimento de fora da faixa marcaria como
+ * coberto um dia que não foi consultado de verdade. Ambientes de homologação
+ * devolvem datas fora do pedido (o sandbox do Bradesco responde sempre
+ * out/2024 a jan/2025), e é justamente esse lixo que não pode entrar na base.
+ *
  * @param {Array<object>} aMovimentos
  * @param {string} sDataInicio DD/MM/AAAA
  * @param {string} sDataFim DD/MM/AAAA
  * @returns {{ aDentro: Array<object>, iFora: number }}
  */
 export function recortaPeriodo(aMovimentos, sDataInicio, sDataFim) {
-   if (!recortaPorPeriodo()) {
-      return { aDentro: aMovimentos, iFora: 0 };
-   }
-
    const aDentro = [];
    let iFora = 0;
 
@@ -126,80 +230,136 @@ export function recortaPeriodo(aMovimentos, sDataInicio, sDataFim) {
 } // recortaPeriodo
 
 /**
- * Lê o extrato completo de uma conta: API + arquivos importados.
+ * Busca na instituição as faixas de dias que ainda não temos e grava o
+ * resultado.
  *
- * Nunca lança por falha da instituição — a importação por arquivo (item
- * 6.1.3.3) tem de continuar utilizável quando a API está fora ou não
- * contratada. O motivo volta em `sAviso` para a tela mostrar.
- *
- * @param {object} oConta Conta corrente já carregada do MySQL
- * @param {string} sDataInicio DD/MM/AAAA
- * @param {string} sDataFim DD/MM/AAAA
- * @returns {Promise<{ aMovimentos: Array<object>, sAviso: string, bApiConsultada: boolean }>}
+ * @param {object} oProvider
+ * @param {object} oConta
+ * @param {Array<{ sInicioIso: string, sFimIso: string }>} aFaixas
+ * @returns {Promise<{ iGravados: number, aAvisos: string[] }>}
  */
-export async function leExtratoDaConta(oConta, sDataInicio, sDataFim) {
+async function buscaEGrava(oProvider, oConta, aFaixas) {
    const aAvisos = [];
-   let aDaApi = [];
-   let bApiConsultada = false;
+   let iGravados = 0;
 
-   try {
-      const oProvider = BankProviderFactory.createProvider(oConta.slugProvider);
+   for (const oFaixa of aFaixas) {
+      const sInicioBr = paraBr(oFaixa.sInicioIso);
+      const sFimBr = paraBr(oFaixa.sFimIso);
 
-      if (oProvider.isConfigured()) {
-         const aBrutos = await oProvider.fetchExtrato(sDataInicio, sDataFim, {
+      try {
+         const aBrutos = await oProvider.fetchExtrato(sInicioBr, sFimBr, {
             codAgencia: oConta.codAgencia,
             numContaCorrente: oConta.numContaCorrente,
             tipConta: oConta.tipConta,
          });
 
          const aNormalizados = normalizaMovimentosDoProvider(aBrutos, oConta.codConta);
-         const { aDentro, iFora } = recortaPeriodo(aNormalizados, sDataInicio, sDataFim);
-         aDaApi = aDentro;
-         bApiConsultada = true;
+         const { aDentro, iFora } = recortaPeriodo(aNormalizados, sInicioBr, sFimBr);
+
+         iGravados += await gravaMovimentos(oConta.idConta, aDentro);
+
+         // Só marca os dias depois de gravar: falha no meio deixa o dia
+         // pendente e a próxima busca refaz a consulta
+         await marcaDiasConsultados(
+            oConta.idConta,
+            listaDiasDoPeriodo(sInicioBr, sFimBr)
+         );
 
          if (iFora > 0) {
             aAvisos.push(
-               `${oProvider.getName()} devolveu ${aNormalizados.length} movimento(s); ` +
-                  `${iFora} estão fora de ${sDataInicio} a ${sDataFim} e foram descartados. ` +
-                  'Ambientes de homologação costumam ignorar as datas enviadas.'
+               `${oProvider.getName()} devolveu ${iFora} movimento(s) fora de ` +
+                  `${sInicioBr} a ${sFimBr}; foram descartados. Ambientes de ` +
+                  'homologação costumam ignorar as datas enviadas.'
             );
          }
-      } else {
-         const aPendencias =
-            typeof oProvider.verificaConfiguracao === 'function'
-               ? oProvider.verificaConfiguracao()
-               : [];
+      } catch (oErro) {
          aAvisos.push(
-            aPendencias.length > 0
-               ? `Integração com ${oProvider.getName()} incompleta: ${aPendencias.join(' ')}`
-               : `Integração com ${oProvider.getName()} não configurada. ` +
-                 'Use "Importar arquivo" com o OFX do internet banking.'
+            `Não foi possível ler ${sInicioBr} a ${sFimBr} na API: ${oErro.message}`
          );
       }
-   } catch (oErro) {
-      aAvisos.push(`Não foi possível ler o extrato na API: ${oErro.message}`);
    }
 
-   // Movimentos de arquivo já estão no MySQL com o estado aplicado
-   const aDoArquivo = await listaMovimentosArquivo(
-      oConta.idConta,
-      recortaPorPeriodo() ? { sDataInicioBr: sDataInicio, sDataFimBr: sDataFim } : {}
-   );
+   return { iGravados, aAvisos };
+} // buscaEGrava
 
-   const oEstado = await carregaEstadoMovimentos(oConta.idConta);
-   const aDaApiComEstado = aplicaEstadoNosMovimentos(aDaApi, oEstado);
+/**
+ * Lê o extrato de uma conta no período, consultando a instituição apenas para
+ * os dias que ainda não estão gravados.
+ *
+ * Nunca lança por falha da instituição: o que já está no MySQL continua
+ * disponível para conciliar mesmo com a API fora do ar. O motivo volta em
+ * `sAviso` para a tela mostrar.
+ *
+ * @param {object} oConta Conta corrente já carregada do MySQL
+ * @param {string} sDataInicio DD/MM/AAAA
+ * @param {string} sDataFim DD/MM/AAAA
+ * @param {object} [oOpcoes]
+ * @param {boolean} [oOpcoes.bForcaApi] Reconsulta o período inteiro, ignorando
+ *        o que já está gravado. Usado pelo botão "Atualizar extrato".
+ * @returns {Promise<{ aMovimentos: Array<object>, sAviso: string,
+ *                     bApiConsultada: boolean, iDiasBuscados: number }>}
+ */
+export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = {}) {
+   const aAvisos = [];
+   let bApiConsultada = false;
+   let iDiasBuscados = 0;
 
-   if (aDaApiComEstado.length > 0) {
-      await registraEstadoMovimentos(oConta.idConta, aDaApiComEstado);
+   const aDiasPeriodo = listaDiasDoPeriodo(sDataInicio, sDataFim);
+
+   if (aDiasPeriodo.length === 0) {
+      return {
+         aMovimentos: [],
+         sAviso: `Período inválido: ${sDataInicio} a ${sDataFim}.`,
+         bApiConsultada: false,
+         iDiasBuscados: 0,
+      };
    }
 
-   // Um mesmo movimento pode chegar pelas duas vias quando o usuário importa
-   // o OFX de um período que a API também cobre; o da API prevalece
-   const oCodigosApi = new Set(aDaApiComEstado.map((oItem) => oItem.codMovimento));
-   const aMovimentos = [
-      ...aDaApiComEstado,
-      ...aDoArquivo.filter((oItem) => !oCodigosApi.has(oItem.codMovimento)),
-   ].sort((oA, oB) => comparaDatas(oA.datMovimento, oB.datMovimento));
+   // ---------- 1. o que ainda falta buscar ----------
+   const oJaConsultados = oOpcoes.bForcaApi
+      ? new Set()
+      : await listaDiasConsultados(oConta.idConta, sDataInicio, sDataFim);
 
-   return { aMovimentos, sAviso: aAvisos.join(' '), bApiConsultada };
+   const aDiasFaltantes = aDiasPeriodo.filter((sDia) => !oJaConsultados.has(sDia));
+
+   // ---------- 2. consulta a instituição só para os buracos ----------
+   if (aDiasFaltantes.length > 0) {
+      try {
+         const oProvider = BankProviderFactory.createProvider(oConta.slugProvider);
+
+         const aPendencias =
+            typeof oProvider.verificaConfiguracao === 'function' ? oProvider.verificaConfiguracao() : [];
+         const aPendenciasConta =
+            typeof oProvider.verificaConta === 'function' ? oProvider.verificaConta(oConta) : [];
+         const aTodasPendencias = [...aPendencias, ...aPendenciasConta];
+
+         if (aTodasPendencias.length === 0) {
+            const { aAvisos: aAvisosBusca } = await buscaEGrava(
+               oProvider,
+               oConta,
+               agrupaEmFaixas(aDiasFaltantes)
+            );
+            aAvisos.push(...aAvisosBusca);
+            bApiConsultada = true;
+            iDiasBuscados = aDiasFaltantes.length;
+         } else {
+            aAvisos.push(
+               `Integração com ${oProvider.getName()} incompleta: ${aTodasPendencias.join(' ')} ` +
+                  'A grade mostra apenas o extrato já gravado.'
+            );
+         }
+      } catch (oErro) {
+         aAvisos.push(`Não foi possível consultar a instituição: ${oErro.message}`);
+      }
+   }
+
+   // ---------- 3. a grade sai sempre do MySQL ----------
+   const aMovimentos = await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
+
+   return {
+      aMovimentos,
+      sAviso: aAvisos.join(' '),
+      bApiConsultada,
+      iDiasBuscados,
+   };
 } // leExtratoDaConta

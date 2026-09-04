@@ -31,11 +31,6 @@ const COLUNAS_INCREMENTAIS = [
    },
    {
       sTabela: 'lancamento_sistema',
-      sColuna: 'cod_titulo',
-      sDefinicao: 'VARCHAR(80) NULL AFTER cod_transferencia',
-   },
-   {
-      sTabela: 'lancamento_sistema',
       sColuna: 'tip_documento',
       sDefinicao: 'VARCHAR(10) NULL AFTER tip_origem',
    },
@@ -52,13 +47,8 @@ const COLUNAS_INCREMENTAIS = [
    { sTabela: 'banco', sColuna: 'url_logo', sDefinicao: 'VARCHAR(300) NULL AFTER cor_texto' },
    {
       sTabela: 'movimento_banco',
-      sColuna: 'b_excluido',
-      sDefinicao: 'TINYINT(1) NOT NULL DEFAULT 0 AFTER sta_conciliado',
-   },
-   {
-      sTabela: 'movimento_banco',
-      sColuna: 'tip_origem',
-      sDefinicao: "ENUM('API','ARQUIVO') NOT NULL DEFAULT 'API' AFTER cod_movimento",
+      sColuna: 'cod_lancamento_banco',
+      sDefinicao: 'VARCHAR(40) NULL AFTER num_documento',
    },
    {
       sTabela: 'movimento_banco',
@@ -70,31 +60,61 @@ const COLUNAS_INCREMENTAIS = [
       sColuna: 'num_documento',
       sDefinicao: 'VARCHAR(40) NULL AFTER des_historico',
    },
-   { sTabela: 'titulo_aberto', sColuna: 'dat_emissao', sDefinicao: 'DATE NULL AFTER cod_titulo' },
-   {
-      sTabela: 'titulo_aberto',
-      sColuna: 'des_historico',
-      sDefinicao: 'VARCHAR(500) NULL AFTER nom_emitente',
-   },
-   { sTabela: 'titulo_aberto', sColuna: 'num_boleto', sDefinicao: 'VARCHAR(20) NULL AFTER num_parcela' },
-   { sTabela: 'titulo_aberto', sColuna: 'sta_baixado', sDefinicao: 'TINYINT(1) NOT NULL DEFAULT 0' },
-   { sTabela: 'titulo_aberto', sColuna: 'dat_baixa', sDefinicao: 'DATE NULL' },
-   { sTabela: 'titulo_aberto', sColuna: 'val_pago', sDefinicao: 'DECIMAL(18,2) NULL' },
-   { sTabela: 'titulo_aberto', sColuna: 'val_tarifa', sDefinicao: 'DECIMAL(18,2) NOT NULL DEFAULT 0' },
-   { sTabela: 'titulo_aberto', sColuna: 'cod_lancamento_baixa', sDefinicao: 'VARCHAR(80) NULL' },
 ];
 
 /**
  * Colunas que deixaram de existir.
  *
- * movimento_banco deixou de ser cópia do extrato da API: histórico e documento
- * agora só são preenchidos na importação por arquivo. As colunas de rastro da
- * importação e do código de lançamento do banco não têm mais uso.
+ * O extrato do banco passou a ser gravado por inteiro, então movimento_banco
+ * não distingue mais origem (tip_origem) nem esconde linha (b_excluido) — o
+ * item 6.1.3.8 só permite excluir registro do ERP. E a baixa de título saiu do
+ * módulo, levando junto cod_titulo.
  */
 const COLUNAS_REMOVIDAS = [
-   { sTabela: 'movimento_banco', sColuna: 'cod_lancamento_banco' },
+   { sTabela: 'movimento_banco', sColuna: 'tip_origem' },
+   { sTabela: 'movimento_banco', sColuna: 'b_excluido' },
    { sTabela: 'movimento_banco', sColuna: 'dat_importacao' },
+   { sTabela: 'lancamento_sistema', sColuna: 'cod_titulo' },
 ];
+
+/**
+ * Tabelas que saíram do modelo.
+ *
+ * titulo_aberto sustentava a ação "Baixar Título", removida do módulo;
+ * arquivo_importado guardava o rastro da importação por arquivo, também
+ * removida. O DROP apaga os dados dessas tabelas em definitivo.
+ */
+const TABELAS_REMOVIDAS = ['titulo_aberto', 'arquivo_importado'];
+
+/**
+ * Remove as tabelas que não fazem mais parte do modelo.
+ * @param {import('mysql2/promise').Connection} oConn
+ * @param {string} sBanco Nome do schema
+ * @returns {Promise<number>} Quantidade de tabelas removidas
+ */
+async function removeTabelasObsoletas(oConn, sBanco) {
+   let iRemovidas = 0;
+
+   for (const sTabela of TABELAS_REMOVIDAS) {
+      const [aLinhas] = await oConn.query(
+         `SELECT COUNT(*) AS total
+            FROM information_schema.tables
+           WHERE table_schema = ? AND table_name = ?`,
+         [sBanco, sTabela]
+      );
+
+      if (Number(aLinhas[0]?.total ?? 0) === 0) {
+         continue;
+      }
+
+      await oConn.query(`DROP TABLE \`${sTabela}\``);
+      console.log(`  - tabela ${sTabela} removida`);
+      iRemovidas += 1;
+   }
+
+   return iRemovidas;
+} // removeTabelasObsoletas
+
 
 /**
  * Remove as colunas que não fazem mais parte do modelo.
@@ -193,6 +213,10 @@ async function main() {
             ? '  nenhuma coluna pendente.'
             : `  ${iCriadas} coluna(s) acrescentada(s), ${iRemovidas} removida(s).`
       );
+
+      console.log('Conferindo tabelas obsoletas...');
+      const iTabelas = await removeTabelasObsoletas(oConn, sBanco);
+      console.log(iTabelas === 0 ? '  nenhuma tabela pendente.' : `  ${iTabelas} tabela(s) removida(s).`);
    } finally {
       await oConn.end();
    }

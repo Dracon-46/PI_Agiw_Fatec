@@ -17,7 +17,6 @@ export const ACAO_LANCAMENTO_INCLUIDO = 'LANCAMENTO_INCLUIDO';
 export const ACAO_LANCAMENTO_EXCLUIDO = 'LANCAMENTO_EXCLUIDO';
 export const ACAO_MOVIMENTO_EXCLUIDO = 'MOVIMENTO_EXCLUIDO';
 export const ACAO_IMPORTACAO_API = 'IMPORTACAO_API';
-export const ACAO_IMPORTACAO_ARQUIVO = 'IMPORTACAO_ARQUIVO';
 export const ACAO_BLOQUEIO = 'BLOQUEIO_PERIODO';
 export const ACAO_DESBLOQUEIO = 'DESBLOQUEIO_PERIODO';
 export const ACAO_EXPORTACAO = 'EXPORTACAO';
@@ -33,7 +32,6 @@ export const ROTULOS_ACAO = {
    [ACAO_LANCAMENTO_EXCLUIDO]: 'Lançamento excluído',
    [ACAO_MOVIMENTO_EXCLUIDO]: 'Movimento excluído',
    [ACAO_IMPORTACAO_API]: 'Importação via API',
-   [ACAO_IMPORTACAO_ARQUIVO]: 'Importação por arquivo',
    [ACAO_BLOQUEIO]: 'Bloqueio de período',
    [ACAO_DESBLOQUEIO]: 'Desbloqueio de período',
    [ACAO_EXPORTACAO]: 'Exportação de relatório',
@@ -178,61 +176,3 @@ export async function resumeAuditoriaPorAcao(iIdConta) {
    }));
 } // resumeAuditoriaPorAcao
 
-/**
- * Registra o envio de um arquivo de extrato e devolve o identificador.
- * @param {object} oArquivo
- * @returns {Promise<void>}
- */
-export async function registraArquivoImportado(oArquivo) {
-   try {
-      await query(
-         `INSERT INTO arquivo_importado
-            (id_conta, nom_arquivo, tip_formato, num_bytes, qtd_lidos, qtd_importados, qtd_ignorados, nom_usuario)
-          VALUES
-            (:idConta, :nomArquivo, :tipFormato, :numBytes, :qtdLidos, :qtdImportados, :qtdIgnorados, :nomUsuario)`,
-         {
-            idConta: oArquivo.idConta,
-            nomArquivo: String(oArquivo.nomArquivo ?? '').slice(0, 260),
-            tipFormato: oArquivo.tipFormato,
-            numBytes: oArquivo.numBytes ?? 0,
-            qtdLidos: oArquivo.qtdLidos ?? 0,
-            qtdImportados: oArquivo.qtdImportados ?? 0,
-            qtdIgnorados: oArquivo.qtdIgnorados ?? 0,
-            nomUsuario: oArquivo.nomUsuario || 'INFTEC',
-         }
-      );
-   } catch (oErro) {
-      console.error('[auditoriaRepository] Falha ao registrar arquivo:', oErro.message);
-   }
-} // registraArquivoImportado
-
-/**
- * Lista o histórico de arquivos enviados para uma conta.
- * @param {number} iIdConta
- * @returns {Promise<Array<object>>}
- */
-export async function listaArquivosImportados(iIdConta) {
-   const aLinhas = await query(
-      `SELECT nom_arquivo AS nomArquivo,
-              tip_formato AS tipFormato,
-              num_bytes AS numBytes,
-              qtd_lidos AS qtdLidos,
-              qtd_importados AS qtdImportados,
-              qtd_ignorados AS qtdIgnorados,
-              dat_importacao AS datImportacao,
-              nom_usuario AS nomUsuario
-         FROM arquivo_importado
-        WHERE id_conta = :idConta
-     ORDER BY dat_importacao DESC
-        LIMIT 50`,
-      { idConta: iIdConta }
-   );
-
-   return aLinhas.map((oLinha) => ({
-      ...oLinha,
-      numBytes: Number(oLinha.numBytes),
-      qtdLidos: Number(oLinha.qtdLidos),
-      qtdImportados: Number(oLinha.qtdImportados),
-      qtdIgnorados: Number(oLinha.qtdIgnorados),
-   }));
-} // listaArquivosImportados

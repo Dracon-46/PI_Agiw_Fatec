@@ -285,6 +285,27 @@ export class ItauProvider extends BankProvider {
       return aPendencias;
    }
 
+   /**
+    * Verifica se a conta informada tem o que a API exige para ser consultada.
+    *
+    * Agência, conta e DAC são obrigatórios em /francesas, mas podem vir do
+    * cadastro da conta OU do .env — por isso a conferência é por conta, e não
+    * global. Antes ela não existia: o provider se declarava configurado só com
+    * as credenciais, a conta aparecia como pronta na tela inicial e o erro só
+    * surgia na hora de buscar o extrato.
+    *
+    * @param {object|null} oConta Conta corrente cadastrada
+    * @returns {string[]} Lista vazia quando a conta pode ser consultada
+    */
+   verificaConta(oConta) {
+      try {
+         this._resolveIdentificacao(oConta);
+         return [];
+      } catch (oErro) {
+         return [oErro.message];
+      }
+   }
+
    // ───────── Autenticação ─────────
 
    /**
@@ -863,16 +884,23 @@ export class ItauProvider extends BankProvider {
 
       return aMovimentacoes
          .filter((oMov) => ehLiquidacao(oMov))
-         .map((oMov) => {
+         .map((oMov, iIndice) => {
             const nLiquido = leValorItau(oMov.valorLiquidoLancado);
             const nValor = Math.abs(nLiquido || leValorItau(oMov.valorTitulo));
 
-            // A data do movimento vem no registro; o dia consultado é a
-            // reserva, já que a consulta é sempre de um único dia
+            // A data que vale é a do DIA CONSULTADO: /movimentacoes?data=X
+            // devolve, por definição, as movimentações de X.
+            //
+            // "dataMovimentacao" do registro só é usada quando coincide com o
+            // dia consultado. O sandbox devolve um valor fixo (03/05/2022) para
+            // qualquer data pedida, e confiar nele fazia todo movimento nascer
+            // fora do período — o recorte de extratoBanco.js descartava tudo e
+            // a grade ficava vazia sem erro aparente.
             const oPartes = separaComponentesData(oMov.dataMovimentacao);
-            const sData = oPartes
+            const sDataRegistro = oPartes
                ? `${oPartes.sDia}/${oPartes.sMes}/${oPartes.sAno}`
-               : sDataPadrao;
+               : '';
+            const sData = sDataRegistro === sDataPadrao ? sDataRegistro : sDataPadrao;
 
             return {
                datMovimento: sData,
@@ -881,6 +909,15 @@ export class ItauProvider extends BankProvider {
                // por ele que a conciliação automática casa título e movimento
                numDocumento: String(oMov.seuNumero ?? oMov.nossoNumero ?? ''),
                codigoLancamento: String(oMov.codigoStatus ?? ''),
+               // A API não expõe id de transação. Duas liquidações de mesmo
+               // título, dia e valor são indistinguíveis pelos campos de
+               // negócio, então a posição na resposta do dia entra na chave —
+               // é o que impede que uma sobrescreva a outra ao serem gravadas.
+               idTransacao: [
+                  String(oMov.nossoNumero ?? ''),
+                  sDataConsulta,
+                  String(iIndice),
+               ].join('-'),
                // Liquidação é sempre crédito; um líquido negativo indicaria
                // estorno, e aí o valor vai para a saída
                valEntrada: nLiquido < 0 ? null : nValor,

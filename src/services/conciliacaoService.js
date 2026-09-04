@@ -97,7 +97,7 @@ export async function removeContaCorrenteApi(sCodConta) {
  * @param {string} sCodConta Código da conta corrente
  * @param {string} sDataInicio Data inicial (DD/MM/AAAA)
  * @param {string} sDataFim Data final (DD/MM/AAAA)
- * @returns {Promise<{ lancamentos: Array, titulos: Array, conta: object, saldos: object }>}
+ * @returns {Promise<{ lancamentos: Array, conta: object, saldos: object }>}
  */
 export async function buscaLancamentosSistema(sCodConta, sDataInicio, sDataFim) {
    const oParams = new URLSearchParams({
@@ -109,14 +109,17 @@ export async function buscaLancamentosSistema(sCodConta, sDataInicio, sDataFim) 
 } // buscaLancamentosSistema
 
 /**
- * Importa o extrato bancário do período via API do banco.
+ * Lê o extrato bancário do período.
+ *
+ * O servidor consulta a instituição apenas para os dias que ainda não estão
+ * gravados; o resto sai do MySQL.
  * @param {string} sSlugBanco Slug do provider (ex.: "bradesco")
  * @param {string} sCodConta Código da conta corrente
  * @param {string} sDataInicio Data inicial (DD/MM/AAAA)
  * @param {string} sDataFim Data final (DD/MM/AAAA)
  * @returns {Promise<{ movimentos: Array, resumo: object, origem: string, aviso?: string }>}
  */
-export async function importaExtratoBanco(sSlugBanco, sCodConta, sDataInicio, sDataFim) {
+export async function buscaExtratoBanco(sSlugBanco, sCodConta, sDataInicio, sDataFim) {
    const oParams = new URLSearchParams({
       banco: sSlugBanco,
       conta: sCodConta,
@@ -124,7 +127,7 @@ export async function importaExtratoBanco(sSlugBanco, sCodConta, sDataInicio, sD
       dataFim: sDataFim,
    });
    return requisitaJson(`/api/bank/extrato?${oParams}`);
-} // importaExtratoBanco
+} // buscaExtratoBanco
 
 /**
  * Solicita ao servidor a conciliação automática do período.
@@ -201,23 +204,6 @@ export async function gravaConciliacaoApi(sCodConta, aLancamentos, aMovimentos, 
    });
 } // gravaConciliacaoApi
 
-/**
- * Envia um arquivo de extrato (OFX, CSV ou TXT) para importação.
- * @param {string} sCodConta
- * @param {File} oArquivo Arquivo escolhido pelo usuário
- * @returns {Promise<{ movimentos: Array, resumo: object, mensagem: string }>}
- */
-export async function enviaArquivoExtrato(sCodConta, oArquivo) {
-   const oFormulario = new FormData();
-   oFormulario.append('conta', sCodConta);
-   oFormulario.append('arquivo', oArquivo);
-
-   // Sem Content-Type manual: o navegador precisa definir o boundary
-   return requisitaJson('/api/bank/extrato/arquivo', {
-      method: 'POST',
-      body: oFormulario,
-   });
-} // enviaArquivoExtrato
 
 /**
  * Grava (ou remove) o bloqueio de período da conta — item 6.1.3.1.
@@ -233,16 +219,6 @@ export async function gravaBloqueioApi(sCodConta, sDatBloqueio) {
    });
 } // gravaBloqueioApi
 
-/**
- * Exclui um movimento do extrato bancário — item 6.1.3.8, ação 4.
- * @param {string} sCodConta
- * @param {string} sCodMovimento
- * @returns {Promise<{ ok: boolean, mensagem: string }>}
- */
-export async function excluiMovimentoApi(sCodConta, sCodMovimento) {
-   const oParams = new URLSearchParams({ conta: sCodConta, movimento: sCodMovimento });
-   return requisitaJson(`/api/conciliacao/movimentos?${oParams}`, { method: 'DELETE' });
-} // excluiMovimentoApi
 
 /**
  * Gera uma transferência entre contas — item 6.1.3.8, ação 2.
@@ -257,34 +233,7 @@ export async function criaTransferenciaApi(oTransferencia) {
    });
 } // criaTransferenciaApi
 
-/**
- * Lista os títulos em aberto até a data informada — item 6.1.3.8, ação 3.
- * @param {string} sCodConta
- * @param {string} sDataLimite Vencimento máximo (DD/MM/AAAA)
- * @param {'Entrada'|'Saída'|''} [sTipo] Restringe o sentido
- * @returns {Promise<{ titulos: Array, resumo: object }>}
- */
-export async function buscaTitulosAbertos(sCodConta, sDataLimite, sTipo = '') {
-   const oParams = new URLSearchParams({ conta: sCodConta, dataLimite: sDataLimite });
-   if (sTipo) {
-      oParams.set('tipo', sTipo);
-   }
-   return requisitaJson(`/api/conciliacao/titulos?${oParams}`);
-} // buscaTitulosAbertos
 
-/**
- * Realiza a baixa de um ou mais títulos — item 6.1.3.8, ação 3.
- * @param {string} sCodConta
- * @param {Array<object>} aBaixas Documentos com data e valores informados
- * @returns {Promise<{ lancamentos: Array, resumo: object, mensagem: string }>}
- */
-export async function baixaTitulosApi(sCodConta, aBaixas) {
-   return requisitaJson('/api/conciliacao/titulos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conta: sCodConta, baixas: aBaixas }),
-   });
-} // baixaTitulosApi
 
 /**
  * Consulta a situação de um boleto na instituição (cobrança).

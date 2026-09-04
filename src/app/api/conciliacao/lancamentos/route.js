@@ -21,10 +21,6 @@ import {
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
 import { calculaSaldoAnteriorBanco } from '../../../../lib/repositories/movimentoRepository.js';
-import {
-   listaTitulosAbertos,
-   reabreTituloPorLancamento,
-} from '../../../../lib/repositories/tituloRepository.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,38 +81,24 @@ export async function GET(oRequisicao) {
          );
       }
 
-      // Os lançamentos do sistema SEMPRE respeitam o período (item 6.1.3.2:
-      // o botão Buscar "traz os lançamentos e movimentos já registrados no
-      // Satis" do período informado). Aqui a base é nossa e as datas são
-      // confiáveis, então o recorte é legítimo.
-      // As duas grades precisam cobrir a mesma janela, senão a conferência
-      // fica impossível. Quando BANK_FILTRA_PERIODO=false o extrato do banco
-      // não é recortado (o sandbox ignora as datas), então o lado do sistema
-      // também não pode ser — caso contrário sobrariam movimentos do banco
-      // sem nenhum lançamento correspondente à vista.
-      const bRecortaPeriodo =
-         (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
+      // Item 6.1.3.2: o botão Buscar "traz os lançamentos e movimentos já
+      // registrados no Satis" do período informado.
+      //
+      // As duas grades cobrem sempre a mesma janela. Antes havia a chave
+      // BANK_FILTRA_PERIODO para desligar o recorte, porque o extrato vinha
+      // vivo da API e o sandbox ignorava as datas pedidas. Agora o extrato é
+      // gravado e lido do MySQL pelo período, então o recorte é sempre o
+      // mesmo dos dois lados e a chave deixou de existir.
+      const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
 
-      const aLancamentos = bRecortaPeriodo
-         ? await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-         : await listaLancamentosConta(oConta.idConta);
+      const [nSaldoAnterior, nSaldoAnteriorBanco] = await Promise.all([
+         calculaSaldoAnterior(oConta.idConta, sDataInicio),
+         calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
+      ]);
 
-      // Saldo anterior é o acumulado ANTES da primeira linha da grade. Sem
-      // recorte a grade traz o extrato inteiro, então não há nada antes dela:
-      // somar o período anterior contaria os mesmos movimentos duas vezes.
-      const [nSaldoAnterior, nSaldoAnteriorBanco] = bRecortaPeriodo
-         ? await Promise.all([
-              calculaSaldoAnterior(oConta.idConta, sDataInicio),
-              calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
-           ])
-         : [0, 0];
-
-      // Títulos abertos até o fim do período: alimentam a ação "Baixar Título"
-      const aTitulos = await listaTitulosAbertos(oConta.idConta, { sDataLimiteBr: sDataFim });
 
       return NextResponse.json({
          lancamentos: aLancamentos,
-         titulos: aTitulos,
          conta: oConta,
          saldos: {
             // Bloco do sistema — mantido na raiz por compatibilidade com a tela
@@ -260,18 +242,10 @@ export async function DELETE(oRequisicao) {
          return NextResponse.json({ erro: oResultado.sMotivo }, { status: 409 });
       }
 
-      // Excluir a baixa devolve o título à relação de títulos em aberto,
-      // caso contrário ele desapareceria do Contas a Pagar/Receber sem ter
-      // sido efetivamente quitado
-      let iTitulosReabertos = 0;
-      if (oResultado.codTitulo) {
-         iTitulosReabertos = await reabreTituloPorLancamento(sCodLancamento);
-      }
 
       const sDetalhe = oResultado.codTransferencia
          ? `Transferência ${oResultado.codTransferencia} excluída: ${oResultado.iPernasExcluidas} lançamento(s) removido(s) nas duas contas.`
-         : `Lançamento ${sCodLancamento} excluído da conciliação.` +
-           (iTitulosReabertos > 0 ? ` Título ${oResultado.codTitulo} devolvido para "em aberto".` : '');
+         : `Lançamento ${sCodLancamento} excluído da conciliação.`;
 
       await registraAuditoria({
          idConta: oConta.idConta,
@@ -284,7 +258,6 @@ export async function DELETE(oRequisicao) {
       return NextResponse.json({
          ok: true,
          codTransferencia: oResultado.codTransferencia ?? null,
-         iTitulosReabertos,
          mensagem: sDetalhe,
       });
    } catch (oErro) {

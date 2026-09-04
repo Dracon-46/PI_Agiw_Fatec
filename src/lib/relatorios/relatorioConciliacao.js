@@ -20,6 +20,9 @@ export const FORMATO_XLSX = 'xlsx';
 export const FORMATO_CSV = 'csv';
 export const FORMATO_PDF = 'pdf';
 
+/** OFX — formato padrão de troca de extrato entre banco e contabilidade */
+export const FORMATO_OFX = 'ofx';
+
 /**
  * Escopos de exportação — item 6.2: "exportar os extratos (bancário ou Satis)".
  */
@@ -513,3 +516,116 @@ ${sTabelas}
 </body>
 </html>`;
 } // geraHtmlImpressao
+
+// ───────── OFX ─────────
+
+/**
+ * Converte DD/MM/AAAA para o carimbo de data do OFX (AAAAMMDD).
+ * @param {string} sDataBr
+ * @returns {string}
+ */
+function dataOfx(sDataBr) {
+   const [sDia, sMes, sAno] = String(sDataBr ?? '').split('/');
+   return sAno && sMes && sDia ? `${sAno}${sMes}${sDia}` : '';
+} // dataOfx
+
+/**
+ * Escapa os caracteres que o SGML do OFX interpreta como marcação.
+ * @param {string} sTexto
+ * @returns {string}
+ */
+function escapaOfx(sTexto) {
+   return String(sTexto ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+} // escapaOfx
+
+/**
+ * Gera o extrato em OFX (Open Financial Exchange).
+ *
+ * É o formato que os bancos publicam para troca de extrato, e o que a
+ * contabilidade consegue importar direto — diferente do xlsx e do CSV, que são
+ * leitura humana. A versão 1.0.2 (SGML) é a suportada pelos ERPs brasileiros;
+ * o OFX 2.x é XML puro e tem adoção bem menor por aqui.
+ *
+ * Um arquivo OFX descreve UMA conta, então o escopo "ambos" não se aplica:
+ * cada extrato sai em seu próprio arquivo.
+ *
+ * @param {object} oDados Mesmo formato de geraExcel
+ * @returns {string} Conteúdo do arquivo
+ */
+export function geraOfx(oDados) {
+   const aBlocos = montaBlocos(oDados);
+   const oBloco = aBlocos[0] ?? { aItens: [], nSaldoAnterior: 0 };
+   const oConta = oDados.oConta ?? {};
+
+   const sDataInicio = dataOfx(oDados.sDataInicio);
+   const sDataFim = dataOfx(oDados.sDataFim);
+   const sAgora = dataOfx(oDados.sDataEmissao) || sDataFim;
+
+   const oTotais = calculaTotais(oBloco.aItens, oBloco.nSaldoAnterior);
+
+   const aTransacoes = oBloco.aItens.map((oItem) => {
+      const nValor = Number(oItem.valMovimento) || 0;
+      // Débito vai com sinal negativo, como manda o formato
+      const sValor = (oItem.bEntrada ? nValor : -nValor).toFixed(2);
+      const sCodigo = oItem.codLancamento || oItem.codMovimento || '';
+
+      return [
+         '<STMTTRN>',
+         `<TRNTYPE>${oItem.bEntrada ? 'CREDIT' : 'DEBIT'}`,
+         `<DTPOSTED>${dataOfx(oItem.datMovimento)}`,
+         `<TRNAMT>${sValor}`,
+         `<FITID>${escapaOfx(sCodigo)}`,
+         oItem.numDocumento ? `<CHECKNUM>${escapaOfx(oItem.numDocumento)}` : '',
+         `<MEMO>${escapaOfx(oItem.desHistorico).slice(0, 255)}`,
+         '</STMTTRN>',
+      ]
+         .filter(Boolean)
+         .join('\n');
+   });
+
+   return [
+      'OFXHEADER:100',
+      'DATA:OFXSGML',
+      'VERSION:102',
+      'SECURITY:NONE',
+      'ENCODING:USASCII',
+      'CHARSET:1252',
+      'COMPRESSION:NONE',
+      'OLDFILEUID:NONE',
+      'NEWFILEUID:NONE',
+      '',
+      '<OFX>',
+      '<SIGNONMSGSRSV1><SONRS>',
+      '<STATUS><CODE>0<SEVERITY>INFO</STATUS>',
+      `<DTSERVER>${sAgora}`,
+      '<LANGUAGE>POR',
+      '</SONRS></SIGNONMSGSRSV1>',
+      '<BANKMSGSRSV1><STMTTRNRS>',
+      '<TRNUID>1',
+      '<STATUS><CODE>0<SEVERITY>INFO</STATUS>',
+      '<STMTRS>',
+      '<CURDEF>BRL',
+      '<BANKACCTFROM>',
+      `<BANKID>${escapaOfx(oConta.codBanco ?? '')}`,
+      `<BRANCHID>${escapaOfx(oConta.codAgencia ?? '')}`,
+      `<ACCTID>${escapaOfx(oConta.numContaCorrente ?? '')}`,
+      `<ACCTTYPE>${oConta.tipConta === 'cp' ? 'SAVINGS' : 'CHECKING'}`,
+      '</BANKACCTFROM>',
+      '<BANKTRANLIST>',
+      `<DTSTART>${sDataInicio}`,
+      `<DTEND>${sDataFim}`,
+      ...aTransacoes,
+      '</BANKTRANLIST>',
+      '<LEDGERBAL>',
+      `<BALAMT>${(oTotais.valSaldoFinal ?? 0).toFixed(2)}`,
+      `<DTASOF>${sDataFim}`,
+      '</LEDGERBAL>',
+      '</STMTRS>',
+      '</STMTTRNRS></BANKMSGSRSV1>',
+      '</OFX>',
+      '',
+   ].join('\n');
+} // geraOfx

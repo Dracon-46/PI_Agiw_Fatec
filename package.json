@@ -9,24 +9,19 @@
     "start": "next start",
     "lint": "next lint",
     "db:init": "node scripts/init-db.mjs",
-    "db:seed": "node scripts/seed-demo.mjs",
-    "db:seed:limpar": "node scripts/seed-demo.mjs --limpar",
     "db:erp": "node scripts/seed-erp.mjs",
     "db:erp:limpar": "node scripts/seed-erp.mjs --limpar",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:itau": "node scripts/diag-itau.mjs",
-    "diag:safra": "node scripts/diag-safra.mjs"
+    "diag:safra": "node scripts/diag-safra.mjs",
+    "diag:bb": "node scripts/diag-bb.mjs"
   },
   "dependencies": {
-    "all": "^0.0.0",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.383.0",
     "mysql2": "^3.23.3",
     "next": "^14.2.3",
-    "primeflex": "^3.3.1",
-    "primeicons": "^7.0.0",
-    "primereact": "^10.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

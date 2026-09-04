@@ -4,9 +4,12 @@ Projeto Banco · Ticket 37060 · **Agiw Sistemas**
 
 Módulo que confronta a movimentação financeira registrada no Satis com o
 extrato da instituição bancária, permitindo conciliar, estornar, lançar,
-transferir entre contas, baixar títulos e bloquear períodos já fechados.
+transferir entre contas e bloquear períodos já fechados.
 
 Implementa o *Documento de Visão — Projeto Banco* (`docs/37060_Documento_Projeto Banco.pdf`).
+
+Explicação do código (camadas, fluxos e decisões de projeto):
+[`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
 ---
 
@@ -17,7 +20,7 @@ Implementa o *Documento de Visão — Projeto Banco* (`docs/37060_Documento_Proj
 | Interface | Next.js 14 (App Router) + React 18 |
 | API | Route Handlers do Next.js |
 | Banco | MySQL / MariaDB (`mysql2`) |
-| Relatórios | ExcelJS (xlsx), CSV e HTML de impressão (PDF) |
+| Relatórios | ExcelJS (xlsx), CSV, HTML de impressão (PDF) e OFX |
 | Integração bancária | Strategy + Factory por banco (`src/providers/`) |
 
 ---
@@ -29,7 +32,7 @@ npm install
 
 cp .env.example .env      # preencha MYSQL_* e as credenciais dos bancos
 npm run db:init           # cria o schema e reconcilia colunas novas
-npm run db:seed           # massa de testes (4 contas com cenário completo)
+npm run db:erp            # preenche o extrato do ERP a partir da API do banco
 
 npm run dev               # http://localhost:3000
 ```
@@ -47,10 +50,10 @@ com usuário `root` sem senha.
 | `npm run db:init` | Aplica `database/schema.sql` e reconcilia as colunas |
 | `npm run db:erp` | Preenche o extrato do ERP a partir da API do banco |
 | `npm run db:erp:limpar` | Remove os lançamentos gerados por `db:erp` |
-| `npm run db:seed` | Massa de exemplo (não usa API; para tela sem credencial) |
-| `npm run db:seed:limpar` | Remove apenas a massa de exemplo |
 | `npm run diag:safra` | Diagnostica a integração Safra ponta a ponta |
 | `npm run diag:bradesco` | Diagnostica a integração Bradesco |
+| `npm run diag:itau` | Diagnostica a integração Itaú |
+| `npm run diag:bb` | Diagnostica a integração Banco do Brasil |
 
 ---
 
@@ -63,7 +66,9 @@ sistema e data do último bloqueio. Permite cadastrar, **alterar** e remover
 contas, que ficam no MySQL.
 
 Só aparecem as contas cujo banco tem a integração configurada: sem credencial
-não há extrato a importar, e exibi-las levaria o usuário direto a um erro.
+não há extrato, e exibi-las levaria o usuário direto a um erro. A conferência
+é por conta: credencial global válida com agência/conta incompleta também
+reprova.
 
 ### Tela de conciliação (itens 6.1.2 e 6.1.3)
 
@@ -71,15 +76,19 @@ não há extrato a importar, e exibi-las levaria o usuário direto a um erro.
 - **Grades lado a lado** com saldo anterior, entradas, saídas e saldo final
 - **Seleção com trava de status:** não é possível misturar conciliados e não
   conciliados na mesma seleção
-- **Conciliar / Desfazer:** exigem diferença zero entre as somatórias
-- **Auto conciliar:** correspondência exata 1‑para‑1 e agrupamento por somatória
-  (vários lançamentos que fecham um único movimento do banco)
-- **Importar extrato:** a grade do banco é sempre o retorno vivo da API — o
-  extrato não é copiado para o MySQL. Do nosso banco vem só o estado que a API
-  não sabe responder (conciliado, excluído da grade). Arquivos OFX / CSV / TXT
-  são a exceção: não há a que voltar para reler, então ficam gravados por
-  inteiro. Concluída a importação, os pares de mesma data e valor já vêm
-  selecionados
+- **Conciliar / Estorno:** exigem diferença zero entre as somatórias
+- **Auto conciliar:** quatro passadas, da correspondência mais forte para a
+  mais fraca — 1:1 exata, N:1 (vários lançamentos fechando um movimento),
+  1:N (um lançamento para vários movimentos) e N:N (os dois lados em conjunto)
+- **Extrato gravado, API consultada uma vez:** o extrato da instituição é
+  copiado para o MySQL na primeira leitura. A cada busca o sistema confere
+  quais dias já tem e consulta o banco **apenas para os que faltam** — sem
+  isso, períodos antigos ficariam inacessíveis (o BB não devolve nada além de
+  5 anos) e cada abertura de tela gastaria cota do gateway. Concluída a busca,
+  os pares de mesma data e valor já vêm selecionados
+- **Período limitado a 60 dias:** intervalos maiores são recusados com aviso —
+  conferir dois meses de uma vez já não é conciliação, e o custo cai no
+  gateway do banco
 - **Bloqueio de período:** gravado em `conta_corrente`, recusa lançamentos e
   baixas em data já fechada. Exige a permissão `conciliacao.bloqueio`,
   conferida no servidor — a tela apenas reflete o que a rota autoriza
@@ -92,22 +101,21 @@ não há extrato a importar, e exibi-las levaria o usuário direto a um erro.
 
 ### Menu do botão direito (item 6.1.3.8)
 
-Clicar com o botão direito em qualquer grade abre as quatro ações previstas,
+Clicar com o botão direito em qualquer grade abre as ações previstas,
 aproveitando os dados da linha sob o cursor:
 
 1. **Novo Lançamento** — lançamento avulso no extrato do sistema
 2. **Nova Transferência entre Contas** — gera o débito e o crédito
    simultaneamente; as duas pernas compartilham um código e são excluídas juntas
-3. **Baixar Título** — lista os títulos a pagar e a receber em aberto até a data
-   do movimento, aceita data, multa, juros, desconto e tarifa por documento,
-   marca o título como baixado e gera o lançamento correspondente
-4. **Excluir Registro** — respeita as travas: nada conciliado é excluído, e na
-   grade de lançamentos apenas os originados na própria conciliação
+3. **Excluir Registro** — respeita as travas: nada conciliado é excluído, e
+   somente lançamentos do ERP originados na própria conciliação. O extrato do
+   banco não é editável: ele é o registro da instituição
 
 ### Relatórios (item 6.2)
 
 Botão **Exportar** com duas escolhas: *qual* extrato (Satis, banco ou os dois) e
-*em que* formato (Excel, CSV ou PDF). O arquivo reproduz o que está na tela — os
+*em que* formato (Excel, CSV, PDF ou **OFX**, o padrão bancário que a
+contabilidade importa direto). O arquivo reproduz o que está na tela — os
 filtros de situação são aplicados e descritos no cabeçalho — e sempre traz saldo
 inicial, movimentos, saldo final e os totais de entradas, saídas, conciliado e
 não conciliado.
@@ -121,7 +129,7 @@ recebe a sessão do Satis. As permissões ficam em `usuario_permissao`:
 | --- | --- |
 | `conciliacao.bloqueio` | Fechar e reabrir período (item 6.1.3.1) |
 | `conciliacao.conciliar` | Conciliar e estornar (itens 6.1.3.6 e 6.1.3.7) |
-| `conciliacao.lancamento` | Lançar, transferir e baixar título (item 6.1.3.8) |
+| `conciliacao.lancamento` | Lançar e transferir entre contas (item 6.1.3.8) |
 
 `INFTEC` tem as três; `OPERADOR` concilia e lança, mas não fecha o período.
 
@@ -134,8 +142,7 @@ de lançamento e transferência.
 ### Auditoria
 
 Trilha de todas as ações do módulo (conciliação, estorno, bloqueio, lançamento,
-exclusão, importação, exportação), com filtro por ação e período, e o histórico
-de arquivos de extrato enviados.
+exclusão, exportação), com filtro por ação e período.
 
 ---
 
@@ -147,32 +154,12 @@ Cada banco é uma classe que estende `BankProvider` e é registrada na
 | Banco | Situação |
 | --- | --- |
 | **Bradesco** | Extrato de conta corrente via OAuth2 + mTLS. Exige certificado de cliente (`.crt` + `.key`) do portal do desenvolvedor. |
-| **Safra** | Autenticação OAuth2 (`grant_type=password`) **funcionando** contra o gateway de homologação. Cobrança (consulta, baixa e instrução de boleto) implementada conforme o *Kit Welcome API COB V3.0*. O extrato de conta corrente é um produto contratado à parte — o caminho fica em `SAFRA_EXTRATO_PATH` e o provider já trata a resposta; sem liberação, a API devolve 404 e o sistema orienta a usar a importação por arquivo. |
+| **Safra** | Autenticação OAuth2 (`grant_type=password`) **funcionando** contra o gateway de homologação. Cobrança (consulta, baixa e instrução de boleto) implementada conforme o *Kit Welcome API COB V3.0*. O extrato de conta corrente é um produto contratado à parte — o caminho fica em `SAFRA_EXTRATO_PATH` e o provider já trata a resposta; sem liberação, a API devolve 404 e o sistema informa a pendência. |
 | **Itaú** | Extrato da carteira de cobrança (*API Boletos — Extrato Boleto Cobrança*) **funcionando** no sandbox: OAuth2 `client_credentials`, `/francesas` e `/francesas/{id}/movimentacoes`. A conciliação importa apenas as **liquidações**, o único evento da francesa que credita a conta. Débitos (TED, PIX, tarifas avulsas) exigem a API de Conta Corrente, ainda não contratada. Produção pede `private_key_jwt` + mTLS. Diagnóstico: `npm run diag:itau`. |
-| **Banco do Brasil** | Estrutura pronta, aguardando a documentação e as credenciais. |
+| **Banco do Brasil** | Extrato de conta corrente (*API Extratos v2*) implementado: OAuth2 `client_credentials`, paginação e separação de lançamentos, saldos e limites pelo `indicadorTipoLancamento`. Autenticação **validada** contra o gateway de homologação. O extrato exige mTLS com certificado A1 e-CNPJ cadastrado no Portal Developers. Diagnóstico: `npm run diag:bb`. |
 
-Enquanto uma API não está liberada, a importação por **arquivo OFX/CSV/TXT**
-atende o mesmo fluxo, conforme previsto no item 6.1.3.3.
-
----
-
-## Massa de testes
-
-`npm run db:seed` cria quatro contas (Bradesco, Itaú, Banco do Brasil e Safra),
-cada uma com um cenário completo e **datas relativas ao dia da execução**, de
-modo que a massa nunca envelhece. A geração é determinística e idempotente.
-
-Por conta:
-
-| Cenário | Para exercitar |
-| --- | --- |
-| 6 pares idênticos | Auto conciliação 1‑para‑1 |
-| 1 movimento dividido em 2 parcelas | Auto conciliação por somatória |
-| 1 par já conciliado | Filtros de situação e botão *Desfazer* |
-| Tarifas e pendências dos dois lados | Conciliação manual e *Novo Lançamento* |
-| 4 títulos vencidos (2 fecham com o banco) | Ação *Baixar Título* |
-| 2 títulos a vencer | Recorte por data limite na baixa |
-| 4 contas cadastradas | Ação *Transferência entre Contas* |
+Sem a API liberada, a conta não aparece na tela inicial: sem extrato não há o
+que conciliar, e exibi-la levaria direto a um erro.
 
 ---
 

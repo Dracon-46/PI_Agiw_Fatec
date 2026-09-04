@@ -51,7 +51,14 @@ const FORMATOS = [
       bNovaAba: false,
    },
    {
-      sChave: 'pdf',
+      sChave: "ofx",
+      sRotulo: "OFX (.ofx)",
+      sDescricao: "Padrão bancário; importa direto na contabilidade",
+      Icone: FileText,
+      bNovaAba: false,
+   },
+   {
+      sChave: "pdf",
       sRotulo: 'PDF (impressão)',
       sDescricao: 'Abre a página pronta para salvar em PDF',
       Icone: Printer,

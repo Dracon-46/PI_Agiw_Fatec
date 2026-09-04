@@ -10,15 +10,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-   baixaTitulosApi,
    buscaLancamentosSistema,
    criaTransferenciaApi,
    excluiLancamentoApi,
-   excluiMovimentoApi,
    executaConciliacaoAutomatica,
    gravaBloqueioApi,
    gravaConciliacaoApi,
-   importaExtratoBanco,
+   buscaExtratoBanco,
    incluiLancamentoApi,
 } from '../services/conciliacaoService.js';
 import { calculaDiferenca } from '../utils/subsetSum.js';
@@ -29,6 +27,30 @@ import {
    temPeriodoPadraoFixo,
 } from '../utils/configPeriodo.js';
 import { ORIGEM_CONCILIACAO } from '../utils/origens.js';
+
+/**
+ * Período máximo, em dias, aceito na busca da conciliação.
+ *
+ * Conferir mais de dois meses de extrato de uma vez não é operação de
+ * conciliação, é relatório — e o custo cai no gateway do banco, que cobra por
+ * janela consultada e impõe os próprios limites (31 dias no BB).
+ */
+export const MAX_DIAS_PERIODO = 60;
+
+/**
+ * Indica se o intervalo ultrapassa o período máximo permitido.
+ * @param {string} sDataInicio DD/MM/AAAA
+ * @param {string} sDataFim DD/MM/AAAA
+ * @returns {boolean}
+ */
+export function excedePeriodoMaximo(sDataInicio, sDataFim) {
+   const iMilissegundos = comparaDatas(sDataFim, sDataInicio);
+   if (!Number.isFinite(iMilissegundos)) {
+      return false;
+   }
+   // +1 porque o intervalo inclui as duas pontas
+   return Math.floor(iMilissegundos / 86400000) + 1 > MAX_DIAS_PERIODO;
+} // excedePeriodoMaximo
 
 /** Situações possíveis da seleção corrente nas grades */
 export const SELECAO_VAZIA = null;
@@ -177,7 +199,6 @@ export function useConciliacao(oConta, notifica) {
 
    const [aLancamentos, setLancamentos] = useState([]);
    const [aMovimentos, setMovimentos] = useState([]);
-   const [aTitulos, setTitulos] = useState([]);
    const [oSaldos, setSaldos] = useState({ valSaldoAnterior: 0, valSaldoFinal: 0 });
 
    const [aSelLancamentos, setSelLancamentos] = useState([]);
@@ -212,7 +233,7 @@ export function useConciliacao(oConta, notifica) {
          try {
             const [oSistema, oExtrato] = await Promise.all([
                buscaLancamentosSistema(oConta.codConta, oPeriodo.sDataInicio, oPeriodo.sDataFim),
-               importaExtratoBanco(oConta.slugProvider, oConta.codConta, oPeriodo.sDataInicio, oPeriodo.sDataFim),
+               buscaExtratoBanco(oConta.slugProvider, oConta.codConta, oPeriodo.sDataInicio, oPeriodo.sDataFim),
             ]);
             if (!bAtivo) {
                return;
@@ -221,7 +242,6 @@ export function useConciliacao(oConta, notifica) {
             const aMovimentosLidos = oExtrato.movimentos ?? [];
 
             setLancamentos(aLancamentosLidos);
-            setTitulos(oSistema.titulos ?? []);
             setSaldos(oSistema.saldos ?? { valSaldoAnterior: 0, valSaldoFinal: 0 });
             setMovimentos(aMovimentosLidos);
 
@@ -275,13 +295,21 @@ export function useConciliacao(oConta, notifica) {
          notifica('A data inicial não pode ser posterior à data final.', 'alerta');
          return;
       }
+      if (excedePeriodoMaximo(sDataInicio, sDataFim)) {
+         notifica(
+            `O período da conciliação é limitado a ${MAX_DIAS_PERIODO} dias. ` +
+               'Reduza o intervalo e busque novamente.',
+            'alerta'
+         );
+         return;
+      }
 
       setCarregando(true);
       try {
          // Os lançamentos vêm da nossa base; o extrato, sempre da API do banco
          const [oRetorno, oExtrato] = await Promise.all([
             buscaLancamentosSistema(oConta.codConta, sDataInicio, sDataFim),
-            importaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim).catch(
+            buscaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim).catch(
                (oErro) => {
                   notifica(oErro.message, 'alerta');
                   return { movimentos: [] };
@@ -294,7 +322,6 @@ export function useConciliacao(oConta, notifica) {
 
          setLancamentos(aLancamentosLidos);
          setMovimentos(aMovimentosLidos);
-         setTitulos(oRetorno.titulos ?? []);
          setSaldos(oRetorno.saldos ?? { valSaldoAnterior: 0, valSaldoFinal: 0 });
          // O bloqueio pode ter sido alterado em outra sessão; a busca é o
          // momento natural de trazer o valor corrente da base
@@ -307,7 +334,7 @@ export function useConciliacao(oConta, notifica) {
 
          if (aLancamentosLidos.length + aMovimentosLidos.length === 0) {
             notifica(
-               'Nenhum lançamento ou movimento no período. Use "Importar Extrato" para buscar no banco.',
+               'Nenhum lançamento ou movimento no período.',
                'info'
             );
          }
@@ -329,7 +356,7 @@ export function useConciliacao(oConta, notifica) {
 
       setImportando(true);
       try {
-         const oRetorno = await importaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim);
+         const oRetorno = await buscaExtratoBanco(oConta.slugProvider, oConta.codConta, sDataInicio, sDataFim);
          const aImportados = oRetorno.movimentos ?? [];
 
          // O extrato é o retorno vivo da API: a grade passa a ser exatamente
@@ -917,19 +944,15 @@ export function useConciliacao(oConta, notifica) {
             return;
          }
 
-         // Movimentos do banco também são excluídos no MySQL: antes a remoção
-         // valia só na sessão e o registro voltava ao clicar em Buscar
+         // O extrato do banco não é editável: ele é o retrato do que a
+         // instituição registrou, e apagar uma linha ali faria a conciliação
+         // fechar contra um extrato que não existe. Só o lado do ERP é nosso.
          if (sGrade !== 'lancamento') {
-            try {
-               const oRetorno = await excluiMovimentoApi(oConta.codConta, oRegistro.codMovimento);
-               setMovimentos((aAtuais) =>
-                  aAtuais.filter((oItem) => oItem.codMovimento !== oRegistro.codMovimento)
-               );
-               limpaSelecao();
-               notifica(oRetorno.mensagem, 'sucesso');
-            } catch (oErro) {
-               notifica(oErro.message, 'erro');
-            }
+            notifica(
+               'Movimento do banco não pode ser excluído: o extrato é o registro da instituição. ' +
+                  'Somente lançamentos do sistema podem ser removidos.',
+               'erro'
+            );
             return;
          }
 
@@ -984,37 +1007,6 @@ export function useConciliacao(oConta, notifica) {
       [oConta, notifica]
    );
 
-   /**
-    * Baixa um ou mais títulos, gerando os lançamentos no extrato do sistema
-    * (item 6.1.3.8 — ação 3).
-    * @param {Array<object>} aBaixas Títulos com data e valores informados
-    * @returns {Promise<boolean>} true quando as baixas são gravadas
-    */
-   const baixaTitulos = useCallback(
-      async (aBaixas) => {
-         if (!oConta) {
-            notifica('Selecione a conta corrente antes de baixar títulos.', 'alerta');
-            return false;
-         }
-
-         try {
-            const oRetorno = await baixaTitulosApi(oConta.codConta, aBaixas);
-            setLancamentos((aAtuais) => [...aAtuais, ...(oRetorno.lancamentos ?? [])]);
-
-            // Os títulos baixados saem da relação de títulos em aberto
-            const oBaixados = new Set(aBaixas.map((oItem) => oItem.codTitulo));
-            setTitulos((aAtuais) => aAtuais.filter((oItem) => !oBaixados.has(oItem.codTitulo)));
-
-            limpaSelecao();
-            notifica(oRetorno.mensagem, 'sucesso');
-            return true;
-         } catch (oErro) {
-            notifica(oErro.message, 'erro');
-            return false;
-         }
-      },
-      [oConta, limpaSelecao, notifica]
-   );
 
    /**
     * Marca lançamentos e movimentos como conciliados após a associação
@@ -1050,7 +1042,6 @@ export function useConciliacao(oConta, notifica) {
       // Dados
       aLancamentos,
       aMovimentos,
-      aTitulos,
       oSaldos,
       oSaldosPorLado,
       bCarregando,
@@ -1082,7 +1073,6 @@ export function useConciliacao(oConta, notifica) {
       conciliaAutomaticamente,
       incluiLancamento,
       criaTransferencia,
-      baixaTitulos,
       excluiRegistro,
       associaLancamento,
    };

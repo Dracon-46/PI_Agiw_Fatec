@@ -4,10 +4,12 @@
 //
 // Implementa o botão "Conciliação automática" (item 6.1.3.3 do documento de
 // visão): o sistema localiza Movimento/Lançamento idêntico e concilia.
-// A busca ocorre em duas passadas:
-//   1ª) correspondência 1-para-1 por valor, sentido e data;
-//   2ª) agrupamento N-para-1, quando vários lançamentos do sistema somam
-//       o valor de um único movimento do banco (e vice-versa).
+// A busca ocorre em quatro passadas, da correspondência mais forte para a mais
+// fraca — cada registro casado sai das seguintes:
+//   1ª) 1-para-1 exata, por valor, sentido e data;
+//   2ª) N-para-1: vários lançamentos do ERP somam um movimento do banco;
+//   3ª) 1-para-N: um lançamento do ERP corresponde a vários movimentos;
+//   4ª) N-para-N: os dois lados são conjuntos e as somas batem.
 //
 // Módulo executado apenas no servidor (API Route) — não acessa o DOM.
 // ============================================================================
@@ -63,6 +65,127 @@ function montaGrupo(aLancamentos, aMovimentos, sTipo) {
       bEntrada: Boolean(aMovimentos[0]?.bEntrada),
    };
 } // montaGrupo
+
+/** Máximo de registros agrupados no mesmo lado em uma correspondência N:N */
+export const TAMANHO_MAXIMO_LADO = 4;
+
+/** Teto de combinações avaliadas na busca N:N, para não travar a requisição */
+const LIMITE_COMBINACOES_NN = 20000;
+
+/**
+ * Gera as combinações de tamanho exato de uma lista, respeitando um teto.
+ * @param {Array<object>} aItens
+ * @param {number} iTamanho
+ * @param {number} iLimite Máximo de combinações devolvidas
+ * @returns {Array<Array<object>>}
+ */
+function geraCombinacoes(aItens, iTamanho, iLimite) {
+   const aResultado = [];
+   const aAtual = [];
+
+   const percorre = (iPosicao) => {
+      if (aResultado.length >= iLimite) {
+         return;
+      }
+      if (aAtual.length === iTamanho) {
+         aResultado.push(aAtual.slice());
+         return;
+      }
+      for (let iPos = iPosicao; iPos < aItens.length; iPos += 1) {
+         aAtual.push(aItens[iPos]);
+         percorre(iPos + 1);
+         aAtual.pop();
+         if (aResultado.length >= iLimite) {
+            return;
+         }
+      }
+   };
+
+   percorre(0);
+   return aResultado;
+} // geraCombinacoes
+
+/**
+ * Soma o valor de uma lista, em centavos.
+ * @param {Array<object>} aItens
+ * @returns {number}
+ */
+function somaCentavos(aItens) {
+   return aItens.reduce((iSoma, oItem) => iSoma + converteParaCentavos(oItem.valMovimento), 0);
+} // somaCentavos
+
+/**
+ * Localiza correspondências em que os DOIS lados são conjuntos.
+ *
+ * É o que sobra depois das passadas anteriores: vários lançamentos no ERP que
+ * o banco liquidou em vários movimentos, sem que nenhum lado seja explicado
+ * por um único registro do outro — três notas pagas em duas transferências,
+ * por exemplo.
+ *
+ * A busca combina os movimentos de dois a TAMANHO_MAXIMO_LADO e, para cada
+ * soma, procura o conjunto de lançamentos que a fecha. Conjunto de um item só
+ * em qualquer lado já foi resolvido antes, então aqui os dois têm ao menos
+ * dois registros.
+ *
+ * @param {object} oContexto
+ * @returns {Array<object>} Grupos localizados
+ */
+function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, oMovUsados, iJanelaDias }) {
+   const aGrupos = [];
+   let iAvaliadas = 0;
+
+   for (let iTamanho = 2; iTamanho <= TAMANHO_MAXIMO_LADO; iTamanho += 1) {
+      const aMovLivres = aMovPendentes.filter((oItem) => !oMovUsados.has(oItem.codMovimento));
+      if (aMovLivres.length < iTamanho) {
+         break;
+      }
+
+      for (const aConjuntoMov of geraCombinacoes(aMovLivres, iTamanho, LIMITE_COMBINACOES_NN)) {
+         if (iAvaliadas >= LIMITE_COMBINACOES_NN) {
+            return aGrupos;
+         }
+         iAvaliadas += 1;
+
+         // Um item pode ter sido consumido por uma combinação anterior
+         if (aConjuntoMov.some((oItem) => oMovUsados.has(oItem.codMovimento))) {
+            continue;
+         }
+
+         // Todo o conjunto precisa ter o mesmo sentido: misturar entrada com
+         // saída faria a soma fechar por compensação, não por correspondência
+         const bEntrada = Boolean(aConjuntoMov[0].bEntrada);
+         if (aConjuntoMov.some((oItem) => Boolean(oItem.bEntrada) !== bEntrada)) {
+            continue;
+         }
+
+         const aCandidatos = aLancPendentes.filter(
+            (oLancamento) =>
+               !oLancUsados.has(oLancamento.codLancamento) &&
+               Boolean(oLancamento.bEntrada) === bEntrada &&
+               aConjuntoMov.some((oMovimento) => saoCompativeis(oLancamento, oMovimento, iJanelaDias))
+         );
+
+         if (aCandidatos.length < 2) {
+            continue;
+         }
+
+         const aConjuntoLanc = encontraConjuntoPorSoma(aCandidatos, somaCentavos(aConjuntoMov) / 100, {
+            obtemValor: (oItem) => oItem.valMovimento,
+         });
+
+         // Um lançamento sozinho fechando N movimentos é a 3ª passada
+         if (!aConjuntoLanc || aConjuntoLanc.length < 2) {
+            continue;
+         }
+
+         aConjuntoLanc.forEach((oItem) => oLancUsados.add(oItem.codLancamento));
+         aConjuntoMov.forEach((oItem) => oMovUsados.add(oItem.codMovimento));
+         aGrupos.push(montaGrupo(aConjuntoLanc, aConjuntoMov, 'AGRUPADA_NN'));
+      }
+   }
+
+   return aGrupos;
+} // casaConjuntoComConjunto
 
 /**
  * Executa a conciliação automática entre os lançamentos do sistema e os
@@ -134,6 +257,43 @@ export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes 
          aGrupos.push(montaGrupo(aConjunto, [oMovimento], 'AGRUPADA'));
       }
    }
+
+   // ---------- 3ª passada: 1 lançamento -> N movimentos ----------
+   // O espelho da 2ª: uma única despesa no ERP que o banco debitou em parcelas.
+   for (const oLancamento of aLancPendentes) {
+      if (oLancUsados.has(oLancamento.codLancamento)) {
+         continue;
+      }
+
+      const aCandidatos = aMovPendentes.filter(
+         (oItem) => !oMovUsados.has(oItem.codMovimento) && saoCompativeis(oLancamento, oItem, iJanelaDias)
+      );
+
+      if (aCandidatos.length < 2) {
+         continue;
+      }
+
+      const aConjunto = encontraConjuntoPorSoma(aCandidatos, oLancamento.valMovimento, {
+         obtemValor: (oItem) => oItem.valMovimento,
+      });
+
+      if (aConjunto && aConjunto.length > 1) {
+         aConjunto.forEach((oItem) => oMovUsados.add(oItem.codMovimento));
+         oLancUsados.add(oLancamento.codLancamento);
+         aGrupos.push(montaGrupo([oLancamento], aConjunto, 'AGRUPADA'));
+      }
+   }
+
+   // ---------- 4ª passada: N lançamentos -> N movimentos ----------
+   aGrupos.push(
+      ...casaConjuntoComConjunto({
+         aLancPendentes,
+         aMovPendentes,
+         oLancUsados,
+         oMovUsados,
+         iJanelaDias,
+      })
+   );
 
    return {
       aGrupos,

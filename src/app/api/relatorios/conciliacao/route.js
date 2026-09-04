@@ -21,6 +21,7 @@ import {
    ESCOPO_BANCO,
    ESCOPO_SISTEMA,
    FORMATO_CSV,
+   FORMATO_OFX,
    FORMATO_PDF,
    FORMATO_XLSX,
    descreveFiltroStatus,
@@ -28,13 +29,14 @@ import {
    geraCsv,
    geraExcel,
    geraHtmlImpressao,
+   geraOfx,
 } from '../../../../lib/relatorios/relatorioConciliacao.js';
 import { formataDataBr } from '../../../../utils/formatters.js';
 
 export const dynamic = 'force-dynamic';
 
 /** Formatos aceitos pelo parâmetro "formato" */
-const FORMATOS_VALIDOS = [FORMATO_XLSX, FORMATO_CSV, FORMATO_PDF];
+const FORMATOS_VALIDOS = [FORMATO_XLSX, FORMATO_CSV, FORMATO_PDF, FORMATO_OFX];
 
 /** Rótulos de escopo exibidos no cabeçalho do relatório */
 const ROTULOS_ESCOPO = {
@@ -185,6 +187,20 @@ export async function GET(oRequisicao) {
                'Content-Type': 'text/csv; charset=utf-8',
                'Content-Disposition': `attachment; filename="${montaNomeArquivo(oConta, 'csv', sEscopo)}"`,
                'Cache-Control': 'no-store',
+            },
+         });
+      }
+
+      // ---------- OFX ----------
+      // Um arquivo OFX descreve UMA conta, então o escopo "ambos" não se
+      // aplica: nesse caso sai o extrato do banco, que é o que a
+      // contabilidade espera receber nesse formato.
+      if (sFormato === FORMATO_OFX) {
+         return new Response(geraOfx({ ...oDados, sEscopo: sEscopo === ESCOPO_AMBOS ? ESCOPO_BANCO : sEscopo }), {
+            headers: {
+               "Content-Type": "application/x-ofx; charset=utf-8",
+               "Content-Disposition": `attachment; filename="${montaNomeArquivo(oConta, "ofx", sEscopo)}"`,
+               "Cache-Control": "no-store",
             },
          });
       }

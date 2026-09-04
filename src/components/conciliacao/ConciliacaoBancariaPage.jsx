@@ -13,14 +13,12 @@ import {
    ArrowLeftRight,
    CheckCircle2,
    Download,
-   HandCoins,
    Lock,
    PlusCircle,
    Search,
    ShieldCheck,
    Trash2,
    Unlock,
-   Upload,
    Zap,
 } from 'lucide-react';
 import { AppShell } from '../layout/AppShell.jsx';
@@ -31,7 +29,6 @@ import { CampoData } from '../comum/CampoData.jsx';
 import { MenuContexto } from '../comum/MenuContexto.jsx';
 import { ModalNovoLancamento } from './ModalNovoLancamento.jsx';
 import { ModalTransferencia } from './ModalTransferencia.jsx';
-import { ModalBaixarTitulo } from './ModalBaixarTitulo.jsx';
 import { MenuExportar } from './MenuExportar.jsx';
 import { FiltroGrade, aplicaFiltrosGrade } from '../comum/FiltroGrade.jsx';
 import { PERM_BLOQUEIO } from '../../utils/permissoes.js';
@@ -190,7 +187,6 @@ export function ConciliacaoBancariaPage() {
    const [sDatBloqueioEdicao, setDatBloqueioEdicao] = useState('');
    const [bLancamentoAberto, setLancamentoAberto] = useState(false);
    const [bTransferenciaAberta, setTransferenciaAberta] = useState(false);
-   const [bBaixaAberta, setBaixaAberta] = useState(false);
    // O menu de exportação também é acionado pelo item "Exportar" da lateral
    const [bExportarAberto, setExportarAberto] = useState(false);
    const [oMovimentoBase, setMovimentoBase] = useState(null);
@@ -274,12 +270,6 @@ export function ConciliacaoBancariaPage() {
       setTransferenciaAberta(true);
    } // abreTransferencia
 
-   /** Abre a caixa de baixa de títulos (item 6.1.3.8 — ação 3). */
-   function abreBaixaTitulo() {
-      setMovimentoBase(resolveMovimentoBase());
-      setBaixaAberta(true);
-   } // abreBaixaTitulo
-
    /**
     * Abre o menu do botão direito sobre a linha apontada.
     * @param {import('react').MouseEvent} oEvento
@@ -312,10 +302,6 @@ export function ConciliacaoBancariaPage() {
          abreTransferencia();
          return;
       }
-      if (sChave === 'baixa') {
-         abreBaixaTitulo();
-         return;
-      }
       if (sChave === 'excluir' && oRegistro) {
          await oConc.excluiRegistro(oRegistro, sGrade);
       }
@@ -331,7 +317,6 @@ export function ConciliacaoBancariaPage() {
     */
    function trataMenuLateral(sChave) {
       const oAcoes = {
-         baixar: abreBaixaTitulo,
          conciliacao: oConc.buscaMovimentos,
          excluir: excluiSelecionados,
          estorno: oConc.desfazConciliacao,
@@ -340,7 +325,7 @@ export function ConciliacaoBancariaPage() {
          ajuda: () =>
             notifica(
                'Selecione lançamentos e movimentos com a mesma situação; a conciliação exige diferença zero. ' +
-                  'O botão direito nas grades abre as ações de lançamento, transferência, baixa e exclusão.',
+                  'O botão direito nas grades abre as ações de lançamento, transferência e exclusão.',
                'info'
             ),
       };
@@ -365,7 +350,6 @@ export function ConciliacaoBancariaPage() {
             bDesabilitado: aContas.length < 2,
             sMotivo: 'Cadastre ao menos duas contas para transferir entre elas.',
          },
-         { sChave: 'baixa', sRotulo: 'Baixar Título', Icone: HandCoins },
          {
             sChave: 'excluir',
             sRotulo: 'Excluir Registro',
@@ -454,15 +438,6 @@ export function ConciliacaoBancariaPage() {
                         <Search size={14} />
                         Buscar
                      </button>
-                     <button
-                        type="button"
-                        className="btn btn-secundario"
-                        onClick={oConc.importaExtrato}
-                        disabled={oConc.bImportando}
-                     >
-                        <Upload size={14} />
-                        {oConc.bImportando ? 'Importando...' : 'Importar Extrato'}
-                     </button>
                   </div>
 
                   <div className="filtro-bloqueio">
@@ -537,7 +512,7 @@ export function ConciliacaoBancariaPage() {
                         className="btn btn-neutro btn-pequeno"
                         onClick={oConc.desfazConciliacao}
                      >
-                        Desfazer
+                        Estorno
                      </button>
                      <button
                         type="button"
@@ -572,15 +547,6 @@ export function ConciliacaoBancariaPage() {
                      >
                         <ArrowLeftRight size={13} />
                         Transferência
-                     </button>
-                     <button
-                        type="button"
-                        className="btn btn-secundario btn-pequeno"
-                        onClick={abreBaixaTitulo}
-                        title="Busca títulos a pagar e a receber em aberto"
-                     >
-                        <HandCoins size={13} />
-                        Baixar Título
                      </button>
                      <button
                         type="button"
@@ -798,7 +764,7 @@ export function ConciliacaoBancariaPage() {
                >
                   {aMovVisiveis.length === 0 ? (
                      <div className="grade-vazia">
-                        Nenhum movimento importado. Use &quot;Importar Extrato&quot; para buscar o período.
+                        Nenhum movimento do banco no período.
                      </div>
                   ) : (
                      <table className="grade">
@@ -889,18 +855,6 @@ export function ConciliacaoBancariaPage() {
             aoConfirmar={oConc.criaTransferencia}
             aoFechar={() => {
                setTransferenciaAberta(false);
-               setMovimentoBase(null);
-            }}
-         />
-
-         <ModalBaixarTitulo
-            aberto={bBaixaAberta}
-            sCodConta={oContaSelecionada?.codConta}
-            sDataMovimento={oMovimentoBase?.datMovimento || oConc.sDataFim}
-            oResumoSelecao={oConc.oTotais.oSistema}
-            aoConfirmar={oConc.baixaTitulos}
-            aoFechar={() => {
-               setBaixaAberta(false);
                setMovimentoBase(null);
             }}
          />

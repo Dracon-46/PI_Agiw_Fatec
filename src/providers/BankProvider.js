@@ -68,6 +68,21 @@ export class BankProvider {
   }
 
   /**
+   * Verifica se uma conta corrente específica pode ser consultada.
+   *
+   * Separado de isConfigured(): as credenciais são globais (do .env), mas o
+   * que identifica a conta na API — agência, conta, DAC — vem do cadastro.
+   * Um provider com credencial válida e conta incompleta está "configurado"
+   * e mesmo assim não consegue buscar o extrato daquela conta.
+   *
+   * @param {object|null} oConta Conta corrente cadastrada
+   * @returns {string[]} Pendências; lista vazia quando a conta está pronta
+   */
+  verificaConta(oConta) {
+    return [];
+  }
+
+  /**
    * Limpa caches internos (tokens, agents, etc).
    */
   clearCache() {

@@ -1,135 +1,38 @@
 // ============================================================================
-// movimentoRepository.js - Movimentos do extrato bancário
+// movimentoRepository.js - Extrato bancário gravado no MySQL
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// A tabela atende as duas formas de obter extrato previstas no item 6.1.3.3,
-// distinguidas por tip_origem:
+// O extrato da instituição é COPIADO para cá. A grade "Movimentos no Banco" lê
+// desta tabela, não da API: a consulta externa acontece uma única vez por dia
+// de extrato, e a partir daí o dado é nosso.
 //
-//   'API'     O extrato NÃO é copiado. A grade mostra sempre o que a
-//             instituição devolve na hora; aqui fica só o que a API não sabe
-//             responder — se o movimento foi conciliado e se o usuário o
-//             removeu da grade (item 6.1.3.8 — ação 4).
+// Isso resolve dois problemas do desenho anterior, em que a grade era sempre o
+// retorno vivo da API:
+//   - as APIs têm janela limitada (o BB devolve no máximo 5 anos, o Itaú
+//     consulta um dia por vez). Movimento de 2022 simplesmente deixaria de ser
+//     consultável, e a conciliação de períodos antigos ficaria impossível;
+//   - cada abertura de tela repetia as mesmas chamadas ao banco, sem
+//     necessidade e contando contra os limites de uso do gateway.
 //
-//   'ARQUIVO' Importação de OFX/CSV/TXT. Aqui o registro é guardado por
-//             inteiro: o arquivo é a única fonte, não há a que voltar para
-//             reler o histórico.
+// Quem sabe o que já foi consultado é a tabela extrato_dia: ela guarda um
+// registro por DIA coberto. Sem ela não haveria como distinguir "dia sem
+// movimento" de "dia nunca consultado" — os dois chegariam como lista vazia.
 //
-// A chave é o cod_movimento determinístico (data + documento + sentido +
-// valor): a mesma linha do extrato gera sempre o mesmo código, então o estado
-// reencontra o movimento a cada consulta.
+// A chave do movimento é o cod_movimento determinístico montado em
+// extratoBanco.js: a mesma linha do extrato produz sempre o mesmo código, então
+// reconsultar um período já gravado atualiza em vez de duplicar.
 // ============================================================================
 
 import { dataBrParaMysql, dataMysqlParaBr, query } from '../db.js';
 
-/** Movimento lido da API do banco a cada consulta */
-export const ORIGEM_API = 'API';
-
-/** Movimento importado de arquivo OFX/CSV/TXT */
-export const ORIGEM_ARQUIVO = 'ARQUIVO';
-
 /**
- * Carrega o estado local dos movimentos de uma conta.
+ * Lista os movimentos do extrato bancário no período.
  * @param {number} iIdConta
- * @returns {Promise<Map<string, { bConciliado: boolean, bExcluido: boolean }>>}
- */
-export async function carregaEstadoMovimentos(iIdConta) {
-   const aLinhas = await query(
-      `SELECT cod_movimento AS codMovimento,
-              sta_conciliado AS staConciliado,
-              b_excluido AS bExcluido
-         FROM movimento_banco
-        WHERE id_conta = :idConta`,
-      { idConta: iIdConta }
-   );
-
-   const oEstado = new Map();
-   for (const oLinha of aLinhas) {
-      oEstado.set(oLinha.codMovimento, {
-         bConciliado: Boolean(oLinha.staConciliado),
-         bExcluido: Boolean(oLinha.bExcluido),
-      });
-   }
-   return oEstado;
-} // carregaEstadoMovimentos
-
-/**
- * Aplica o estado local sobre os movimentos recém-lidos da API.
- *
- * Movimentos marcados como excluídos saem da lista; os demais recebem o
- * status de conciliação que já tinham.
- *
- * @param {Array<object>} aMovimentosApi Movimentos normalizados da API
- * @param {Map<string, object>} oEstado Retorno de carregaEstadoMovimentos
- * @returns {Array<object>}
- */
-export function aplicaEstadoNosMovimentos(aMovimentosApi, oEstado) {
-   const aVisiveis = [];
-
-   for (const oMovimento of aMovimentosApi) {
-      const oLocal = oEstado.get(oMovimento.codMovimento);
-      if (oLocal?.bExcluido) {
-         continue;
-      }
-      aVisiveis.push({ ...oMovimento, staConciliado: Boolean(oLocal?.bConciliado) });
-   }
-
-   return aVisiveis;
-} // aplicaEstadoNosMovimentos
-
-/**
- * Garante que exista a linha de estado de um movimento.
- *
- * Guarda também data e valor, usados apenas para calcular o saldo anterior do
- * lado do banco quando a janela consultada não alcança o histórico completo.
- *
- * @param {number} iIdConta
- * @param {object} oMovimento
- * @returns {Promise<void>}
- */
-async function garanteEstado(iIdConta, oMovimento) {
-   const sDat = dataBrParaMysql(oMovimento.datMovimento);
-   if (!sDat) {
-      return;
-   }
-
-   await query(
-      `INSERT INTO movimento_banco
-         (id_conta, cod_movimento, tip_origem, dat_movimento, val_movimento,
-          b_entrada, sta_conciliado)
-       VALUES
-         (:idConta, :codMovimento, :tipOrigem, :datMovimento, :valMovimento,
-          :bEntrada, :staConciliado)
-       ON DUPLICATE KEY UPDATE
-         dat_movimento = VALUES(dat_movimento),
-         val_movimento = VALUES(val_movimento),
-         b_entrada = VALUES(b_entrada)`,
-      {
-         idConta: iIdConta,
-         codMovimento: oMovimento.codMovimento,
-         tipOrigem: ORIGEM_API,
-         datMovimento: sDat,
-         valMovimento: oMovimento.valMovimento,
-         bEntrada: oMovimento.bEntrada ? 1 : 0,
-         staConciliado: oMovimento.staConciliado ? 1 : 0,
-      }
-   );
-} // garanteEstado
-
-/**
- * Lista os movimentos importados de arquivo (OFX/CSV/TXT).
- *
- * Só a origem ARQUIVO é devolvida: os movimentos de API não são copiados para
- * o nosso banco e chegam à tela pela consulta ao provider.
- *
- * @param {number} iIdConta
- * @param {{ sDataInicioBr?: string, sDataFimBr?: string }} [oFiltro]
+ * @param {string} sDataInicioBr
+ * @param {string} sDataFimBr
  * @returns {Promise<Array<object>>}
  */
-export async function listaMovimentosArquivo(iIdConta, oFiltro = {}) {
-   const sInicio = dataBrParaMysql(oFiltro.sDataInicioBr);
-   const sFim = dataBrParaMysql(oFiltro.sDataFimBr);
-   const bRecorta = Boolean(sInicio && sFim);
-
+export async function listaMovimentosPeriodo(iIdConta, sDataInicioBr, sDataFimBr) {
    const aLinhas = await query(
       `SELECT m.cod_movimento AS codMovimento,
               c.cod_conta AS codConta,
@@ -138,17 +41,18 @@ export async function listaMovimentosArquivo(iIdConta, oFiltro = {}) {
               m.num_documento AS numDocumento,
               m.val_movimento AS valMovimento,
               m.b_entrada AS bEntrada,
-              m.sta_conciliado AS staConciliado
+              m.sta_conciliado AS staConciliado,
+              m.cod_lancamento_banco AS codigoLancamento
          FROM movimento_banco m
          INNER JOIN conta_corrente c ON c.id_conta = m.id_conta
         WHERE m.id_conta = :idConta
-          AND m.tip_origem = :tipOrigem
-          AND m.b_excluido = 0
-          ${bRecorta ? 'AND m.dat_movimento BETWEEN :dataInicio AND :dataFim' : ''}
+          AND m.dat_movimento BETWEEN :dataInicio AND :dataFim
      ORDER BY m.dat_movimento, m.id_movimento`,
-      bRecorta
-         ? { idConta: iIdConta, tipOrigem: ORIGEM_ARQUIVO, dataInicio: sInicio, dataFim: sFim }
-         : { idConta: iIdConta, tipOrigem: ORIGEM_ARQUIVO }
+      {
+         idConta: iIdConta,
+         dataInicio: dataBrParaMysql(sDataInicioBr),
+         dataFim: dataBrParaMysql(sDataFimBr),
+      }
    );
 
    return aLinhas.map((oLinha) => ({
@@ -157,111 +61,142 @@ export async function listaMovimentosArquivo(iIdConta, oFiltro = {}) {
       bEntrada: Boolean(oLinha.bEntrada),
       staConciliado: Boolean(oLinha.staConciliado),
       datMovimento: dataMysqlParaBr(oLinha.datMovimento),
+      desHistorico: oLinha.desHistorico ?? '',
+      numDocumento: oLinha.numDocumento ?? '',
    }));
-} // listaMovimentosArquivo
+} // listaMovimentosPeriodo
 
 /**
- * Grava (upsert) movimentos vindos de um arquivo OFX/CSV/TXT.
+ * Grava os movimentos lidos da instituição.
  *
- * Diferente da origem API, aqui o registro é guardado por inteiro — histórico
- * e documento inclusive —, porque o arquivo não pode ser reconsultado.
+ * O status de conciliação NÃO é tocado no update: ele é nosso, não do banco.
+ * Reconsultar um período já conciliado não pode desfazer a conciliação.
  *
  * @param {number} iIdConta
- * @param {Array<object>} aMovimentos
+ * @param {Array<object>} aMovimentos Movimentos já normalizados
  * @returns {Promise<number>} Quantidade gravada
  */
-export async function gravaMovimentosArquivo(iIdConta, aMovimentos) {
+export async function gravaMovimentos(iIdConta, aMovimentos) {
+   if (!Array.isArray(aMovimentos) || aMovimentos.length === 0) {
+      return 0;
+   }
+
    let iGravados = 0;
 
-   for (const oMov of aMovimentos) {
-      const sDat = dataBrParaMysql(oMov.datMovimento);
-      if (!sDat) {
+   for (const oMovimento of aMovimentos) {
+      const sDatMovimento = dataBrParaMysql(oMovimento.datMovimento);
+      if (!sDatMovimento) {
          continue;
       }
 
       await query(
          `INSERT INTO movimento_banco
-            (id_conta, cod_movimento, tip_origem, dat_movimento, val_movimento,
-             b_entrada, des_historico, num_documento, sta_conciliado)
+            (id_conta, cod_movimento, dat_movimento, des_historico, num_documento,
+             val_movimento, b_entrada, cod_lancamento_banco)
           VALUES
-            (:idConta, :codMovimento, :tipOrigem, :datMovimento, :valMovimento,
-             :bEntrada, :desHistorico, :numDocumento, :staConciliado)
+            (:idConta, :codMovimento, :datMovimento, :desHistorico, :numDocumento,
+             :valMovimento, :bEntrada, :codigoLancamento)
           ON DUPLICATE KEY UPDATE
             dat_movimento = VALUES(dat_movimento),
+            des_historico = VALUES(des_historico),
+            num_documento = VALUES(num_documento),
             val_movimento = VALUES(val_movimento),
             b_entrada = VALUES(b_entrada),
-            des_historico = VALUES(des_historico),
-            num_documento = VALUES(num_documento)`,
+            cod_lancamento_banco = VALUES(cod_lancamento_banco)`,
          {
             idConta: iIdConta,
-            codMovimento: oMov.codMovimento,
-            tipOrigem: ORIGEM_ARQUIVO,
-            datMovimento: sDat,
-            valMovimento: oMov.valMovimento,
-            bEntrada: oMov.bEntrada ? 1 : 0,
-            desHistorico: oMov.desHistorico || 'Movimento bancário',
-            numDocumento: oMov.numDocumento || '',
-            staConciliado: oMov.staConciliado ? 1 : 0,
+            codMovimento: oMovimento.codMovimento,
+            datMovimento: sDatMovimento,
+            desHistorico: (oMovimento.desHistorico ?? '').slice(0, 500),
+            numDocumento: (oMovimento.numDocumento ?? '').slice(0, 40),
+            valMovimento: Math.abs(Number(oMovimento.valMovimento) || 0),
+            bEntrada: oMovimento.bEntrada ? 1 : 0,
+            codigoLancamento: (oMovimento.codigoLancamento ?? '').slice(0, 40) || null,
          }
       );
+
       iGravados += 1;
    }
 
    return iGravados;
-} // gravaMovimentosArquivo
+} // gravaMovimentos
 
 /**
- * Saldo do extrato bancário antes da data inicial do período.
+ * Relaciona os dias do período que JÁ foram consultados na instituição.
+ * @param {number} iIdConta
+ * @param {string} sDataInicioBr
+ * @param {string} sDataFimBr
+ * @returns {Promise<Set<string>>} Dias em AAAA-MM-DD
+ */
+export async function listaDiasConsultados(iIdConta, sDataInicioBr, sDataFimBr) {
+   const aLinhas = await query(
+      `SELECT dat_dia AS datDia
+         FROM extrato_dia
+        WHERE id_conta = :idConta
+          AND dat_dia BETWEEN :dataInicio AND :dataFim`,
+      {
+         idConta: iIdConta,
+         dataInicio: dataBrParaMysql(sDataInicioBr),
+         dataFim: dataBrParaMysql(sDataFimBr),
+      }
+   );
+
+   return new Set(aLinhas.map((oLinha) => String(oLinha.datDia).slice(0, 10)));
+} // listaDiasConsultados
+
+/**
+ * Marca dias como já consultados na instituição.
  *
- * O item 6.1.2 exige que "ambos os extratos" tenham saldo anterior, entradas,
- * saídas e saldo final. Como só conhecemos os movimentos que já passaram pela
- * tela, o valor é o acumulado do que temos registrado — e não um saldo
- * contábil da instituição, que só a API de saldo poderia informar.
+ * Gravado DEPOIS dos movimentos: se a gravação falhar no meio, o dia continua
+ * pendente e a próxima busca refaz a consulta, em vez de dar o dia por
+ * coberto com o extrato incompleto.
  *
+ * @param {number} iIdConta
+ * @param {string[]} aDiasIso Dias em AAAA-MM-DD
+ * @returns {Promise<number>}
+ */
+export async function marcaDiasConsultados(iIdConta, aDiasIso) {
+   if (!Array.isArray(aDiasIso) || aDiasIso.length === 0) {
+      return 0;
+   }
+
+   let iMarcados = 0;
+
+   for (const sDia of aDiasIso) {
+      await query(
+         `INSERT INTO extrato_dia (id_conta, dat_dia)
+          VALUES (:idConta, :datDia)
+          ON DUPLICATE KEY UPDATE dat_consulta = CURRENT_TIMESTAMP`,
+         { idConta: iIdConta, datDia: sDia }
+      );
+      iMarcados += 1;
+   }
+
+   return iMarcados;
+} // marcaDiasConsultados
+
+/**
+ * Calcula o saldo do banco acumulado antes da data inicial.
  * @param {number} iIdConta
  * @param {string} sDataInicioBr
  * @returns {Promise<number>}
  */
 export async function calculaSaldoAnteriorBanco(iIdConta, sDataInicioBr) {
-   const sDataInicio = dataBrParaMysql(sDataInicioBr);
-   if (!sDataInicio) {
-      return 0;
-   }
-
    const aLinhas = await query(
       `SELECT COALESCE(SUM(CASE WHEN b_entrada = 1 THEN val_movimento ELSE -val_movimento END), 0) AS saldo
          FROM movimento_banco
         WHERE id_conta = :idConta
-          AND b_excluido = 0
           AND dat_movimento < :dataInicio`,
-      { idConta: iIdConta, dataInicio: sDataInicio }
+      { idConta: iIdConta, dataInicio: dataBrParaMysql(sDataInicioBr) }
    );
    return Number(aLinhas[0]?.saldo ?? 0);
 } // calculaSaldoAnteriorBanco
 
 /**
- * Registra o estado dos movimentos devolvidos pela API.
- * @param {number} iIdConta
- * @param {Array<object>} aMovimentos
- * @returns {Promise<number>} Quantidade de linhas de estado garantidas
- */
-export async function registraEstadoMovimentos(iIdConta, aMovimentos) {
-   let iGravados = 0;
-
-   for (const oMovimento of aMovimentos) {
-      await garanteEstado(iIdConta, oMovimento);
-      iGravados += 1;
-   }
-
-   return iGravados;
-} // registraEstadoMovimentos
-
-/**
- * Datas dos movimentos informados, lidas do estado local.
+ * Devolve a data de cada movimento informado, lida da base.
  *
- * A conferência do bloqueio (item 6.1.3.1) não pode confiar na data que a tela
- * envia. Aqui a data está disponível mesmo para movimentos de API: a linha de
- * estado guarda data, valor e sentido justamente para conferências como esta.
+ * Usada na conferência de período bloqueado: quem grava não pode aceitar a
+ * data que o navegador informou.
  *
  * @param {number} iIdConta
  * @param {string[]} aCodMovimentos
@@ -273,6 +208,7 @@ export async function listaDatasMovimentos(iIdConta, aCodMovimentos) {
    }
 
    const aLinhas = [];
+
    for (const sCodigo of aCodMovimentos) {
       const aResultado = await query(
          `SELECT cod_movimento AS codMovimento, dat_movimento AS datMovimento
@@ -292,11 +228,7 @@ export async function listaDatasMovimentos(iIdConta, aCodMovimentos) {
 } // listaDatasMovimentos
 
 /**
- * Grava o status de conciliação de um conjunto de movimentos do banco.
- *
- * A linha de estado é criada quando ainda não existir: o movimento pode ter
- * acabado de chegar da API e ser conciliado antes de qualquer outra gravação.
- *
+ * Grava o status de conciliação de um conjunto de movimentos.
  * @param {number} iIdConta
  * @param {string[]} aCodMovimentos
  * @param {boolean} bConciliado
@@ -308,6 +240,7 @@ export async function atualizaStatusMovimentos(iIdConta, aCodMovimentos, bConcil
    }
 
    let iAtualizados = 0;
+
    for (const sCodigo of aCodMovimentos) {
       const oResultado = await query(
          `UPDATE movimento_banco
@@ -320,46 +253,3 @@ export async function atualizaStatusMovimentos(iIdConta, aCodMovimentos, bConcil
 
    return iAtualizados;
 } // atualizaStatusMovimentos
-
-/**
- * Marca um movimento como excluído da grade.
- *
- * Item 6.1.3.8 — ação 4: para a grade de movimentos a única restrição é o
- * status de conciliado. A exclusão é lógica: apagar a linha faria o movimento
- * reaparecer na próxima leitura da API, já que o extrato continua lá.
- *
- * @param {number} iIdConta
- * @param {string} sCodMovimento
- * @returns {Promise<{ bExcluido: boolean, sMotivo: string }>}
- */
-export async function excluiMovimento(iIdConta, sCodMovimento) {
-   const aLinhas = await query(
-      `SELECT sta_conciliado AS staConciliado, b_excluido AS bExcluido
-         FROM movimento_banco
-        WHERE id_conta = :idConta AND cod_movimento = :codMovimento`,
-      { idConta: iIdConta, codMovimento: sCodMovimento }
-   );
-
-   const oMovimento = aLinhas[0];
-   if (!oMovimento) {
-      return { bExcluido: false, sMotivo: 'Movimento não localizado.' };
-   }
-   if (oMovimento.bExcluido) {
-      return { bExcluido: false, sMotivo: 'Movimento já foi excluído da grade.' };
-   }
-   if (oMovimento.staConciliado) {
-      return {
-         bExcluido: false,
-         sMotivo: 'Movimento conciliado não pode ser excluído. Estorne a conciliação antes.',
-      };
-   }
-
-   await query(
-      `UPDATE movimento_banco
-          SET b_excluido = 1
-        WHERE id_conta = :idConta AND cod_movimento = :codMovimento`,
-      { idConta: iIdConta, codMovimento: sCodMovimento }
-   );
-
-   return { bExcluido: true, sMotivo: '' };
-} // excluiMovimento

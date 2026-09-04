@@ -453,7 +453,11 @@ textarea {
    font-size: 11px;
    font-weight: 600;
    color: var(--cor-texto-secundario);
-   white-space: nowrap;
+   /* Rótulo de campo quebra em duas linhas quando precisa. Com "nowrap" os
+      rótulos longos da transferência ("Banco / Agência de saída (débito)")
+      estouravam a coluna do grid, que é minmax(0, 1fr). */
+   white-space: normal;
+   line-height: 1.3;
 }
 
 .campo-rotulo .obrigatorio {
@@ -730,8 +734,20 @@ textarea {
 
 .grade-wrapper {
    overflow-x: auto;
-   max-height: 320px;
+   /* Rolagem, não paginação: a conferência exige percorrer o extrato de ponta
+      a ponta, e paginar obrigaria a somar de cabeça entre as páginas.
+      A altura acompanha a janela para aproveitar telas grandes, com um piso
+      que mantém a grade utilizável em notebook. */
+   max-height: max(320px, calc(100vh - 420px));
    overflow-y: auto;
+}
+
+/* O cabeçalho acompanha a rolagem — sem isso, quem desce na grade perde a
+   referência de qual coluna está lendo. */
+.grade-wrapper .grade thead th {
+   position: sticky;
+   top: 0;
+   z-index: 2;
 }
 
 .grade {

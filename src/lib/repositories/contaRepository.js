@@ -27,6 +27,23 @@ export async function listaBancos() {
  */
 function mapeiaConta(oLinha, aProviders = []) {
    const oProvider = aProviders.find((oItem) => oItem.slug === oLinha.slugProvider);
+
+   // A credencial é global, mas agência/conta/DAC vêm do cadastro: uma conta
+   // só está pronta quando as duas pontas estão. Sem esta segunda conferência
+   // o Itaú aparecia como configurado e quebrava ao buscar o extrato.
+   let aPendenciasConta = [];
+   if (oProvider?.configured) {
+      try {
+         aPendenciasConta = BankProviderFactory.createProvider(oLinha.slugProvider).verificaConta({
+            codAgencia: oLinha.codAgencia,
+            numContaCorrente: oLinha.numContaCorrente,
+            tipConta: oLinha.tipConta,
+         });
+      } catch (oErro) {
+         aPendenciasConta = [oErro.message];
+      }
+   }
+
    return {
       idConta: oLinha.idConta,
       codConta: oLinha.codConta,
@@ -42,7 +59,8 @@ function mapeiaConta(oLinha, aProviders = []) {
       urlLogo: oLinha.urlLogo ?? '',
       valSaldoSistema: Number(oLinha.valSaldoSistema ?? 0),
       datUltimoBloqueio: dataMysqlParaBr(oLinha.datUltimoBloqueio),
-      bIntegracaoConfigurada: Boolean(oProvider?.configured),
+      bIntegracaoConfigurada: Boolean(oProvider?.configured) && aPendenciasConta.length === 0,
+      desPendenciaIntegracao: aPendenciasConta.join(' '),
       nomProvider: oProvider?.name ?? oLinha.nomBanco,
    };
 } // mapeiaConta
@@ -66,7 +84,16 @@ export async function listaContasCorrentes() {
               b.cor_banco AS corBanco,
               b.cor_texto AS corTexto,
               b.url_logo AS urlLogo,
-              c.val_saldo_sistema AS valSaldoSistema,
+              -- Saldo previsto = tudo que o ERP registrou na conta.
+              -- A coluna val_saldo_sistema é um valor informado no cadastro e
+              -- nunca acompanhou os lançamentos, então o cartão da tela
+              -- inicial (item 6.1.1) mostrava um número congelado.
+              COALESCE(
+                 (SELECT SUM(CASE WHEN l.b_entrada = 1 THEN l.val_movimento ELSE -l.val_movimento END)
+                    FROM lancamento_sistema l
+                   WHERE l.id_conta = c.id_conta),
+                 0
+              ) + c.val_saldo_sistema AS valSaldoSistema,
               c.dat_ultimo_bloqueio AS datUltimoBloqueio
          FROM conta_corrente c
          INNER JOIN banco b ON b.cod_banco = c.cod_banco
@@ -99,7 +126,16 @@ export async function buscaContaPorCodigo(sCodConta) {
               b.cor_banco AS corBanco,
               b.cor_texto AS corTexto,
               b.url_logo AS urlLogo,
-              c.val_saldo_sistema AS valSaldoSistema,
+              -- Saldo previsto = tudo que o ERP registrou na conta.
+              -- A coluna val_saldo_sistema é um valor informado no cadastro e
+              -- nunca acompanhou os lançamentos, então o cartão da tela
+              -- inicial (item 6.1.1) mostrava um número congelado.
+              COALESCE(
+                 (SELECT SUM(CASE WHEN l.b_entrada = 1 THEN l.val_movimento ELSE -l.val_movimento END)
+                    FROM lancamento_sistema l
+                   WHERE l.id_conta = c.id_conta),
+                 0
+              ) + c.val_saldo_sistema AS valSaldoSistema,
               c.dat_ultimo_bloqueio AS datUltimoBloqueio
          FROM conta_corrente c
          INNER JOIN banco b ON b.cod_banco = c.cod_banco

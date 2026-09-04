@@ -9,8 +9,7 @@
 import { NextResponse } from 'next/server';
 import { buscaContaPorCodigo } from '../../../lib/repositories/contaRepository.js';
 import {
-   ROTULOS_ACAO,
-   listaArquivosImportados,
+   ROTULOS_ACAO,
    listaAuditoria,
    resumeAuditoriaPorAcao,
 } from '../../../lib/repositories/auditoriaRepository.js';
@@ -49,13 +48,11 @@ export async function GET(oRequisicao) {
          iLimite,
       });
 
-      const aResumo = await resumeAuditoriaPorAcao(iIdConta);
-      const aArquivos = iIdConta ? await listaArquivosImportados(iIdConta) : [];
+      const aResumo = await resumeAuditoriaPorAcao(iIdConta);
 
       return NextResponse.json({
          eventos: aEventos,
-         resumo: aResumo,
-         arquivos: aArquivos,
+         resumo: aResumo,
          acoesDisponiveis: Object.entries(ROTULOS_ACAO).map(([sChave, sRotulo]) => ({
             tipAcao: sChave,
             desAcao: sRotulo,

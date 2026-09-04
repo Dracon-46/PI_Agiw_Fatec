@@ -13,7 +13,6 @@ export const ORIGEM_CONTAS_RECEBER = 'Contas a Receber';
 export const ORIGEM_CONTAS_PAGAR = 'Contas a Pagar';
 export const ORIGEM_CONCILIACAO = 'Conciliação';
 export const ORIGEM_TRANSFERENCIA = 'Transferência';
-export const ORIGEM_BAIXA_TITULO = 'Baixa de Título';
 
 /** Origens oferecidas na caixa "Novo Lançamento" */
 export const ORIGENS_LANCAMENTO = [
