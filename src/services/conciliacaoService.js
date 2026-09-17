@@ -39,7 +39,7 @@ export async function buscaContasCorrentes() {
 } // buscaContasCorrentes
 
 /**
- * Cadastra conta corrente no MySQL.
+ * Cadastra conta corrente no SQL Server.
  * @param {object} oDados
  * @returns {Promise<{ conta: object }>}
  */
@@ -82,7 +82,7 @@ export async function buscaSessao() {
 } // buscaSessao
 
 /**
- * Inativa conta corrente no MySQL.
+ * Inativa conta corrente no SQL Server.
  * @param {string} sCodConta
  * @returns {Promise<{ ok: boolean }>}
  */
@@ -112,7 +112,7 @@ export async function buscaLancamentosSistema(sCodConta, sDataInicio, sDataFim) 
  * Lê o extrato bancário do período.
  *
  * O servidor consulta a instituição apenas para os dias que ainda não estão
- * gravados; o resto sai do MySQL.
+ * gravados; o resto sai do SQL Server.
  * @param {string} sSlugBanco Slug do provider (ex.: "bradesco")
  * @param {string} sCodConta Código da conta corrente
  * @param {string} sDataInicio Data inicial (DD/MM/AAAA)

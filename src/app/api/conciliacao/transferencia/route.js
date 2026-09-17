@@ -17,7 +17,7 @@ import {
    ACAO_LANCAMENTO_INCLUIDO,
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
-import { dataBrParaMysql } from '../../../../lib/db.js';
+import { dataBrParaSql } from '../../../../lib/db.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,10 +41,10 @@ function verificaBloqueio(oConta, sDatMovimento) {
       return '';
    }
 
-   const sDatBloqueio = dataBrParaMysql(oConta.datUltimoBloqueio);
-   const sDatMovimentoMysql = dataBrParaMysql(sDatMovimento);
+   const sDatBloqueio = dataBrParaSql(oConta.datUltimoBloqueio);
+   const sDatMovimentoSql = dataBrParaSql(sDatMovimento);
 
-   if (sDatMovimentoMysql && sDatBloqueio && sDatMovimentoMysql <= sDatBloqueio) {
+   if (sDatMovimentoSql && sDatBloqueio && sDatMovimentoSql <= sDatBloqueio) {
       return (
          `A conta ${descreveConta(oConta)} está bloqueada para lançamentos até ` +
          `${oConta.datUltimoBloqueio}. Informe uma data posterior.`
@@ -88,7 +88,7 @@ export async function POST(oRequisicao) {
          { status: 400 }
       );
    }
-   if (!sDatMovimento || !dataBrParaMysql(sDatMovimento)) {
+   if (!sDatMovimento || !dataBrParaSql(sDatMovimento)) {
       return NextResponse.json({ erro: 'Informe a data da transferência.' }, { status: 400 });
    }
    if (!sDesHistorico) {
@@ -128,8 +128,8 @@ export async function POST(oRequisicao) {
       }
 
       const oResultado = await insereTransferencia({
-         iIdContaSaida: oContaSaida.idConta,
-         iIdContaEntrada: oContaEntrada.idConta,
+         oContaSaida,
+         oContaEntrada,
          sDatMovimento,
          sNumDocumento: oCorpo?.numDocumento,
          sDesHistorico,
@@ -140,7 +140,7 @@ export async function POST(oRequisicao) {
 
       // A auditoria registra as duas pontas, cada uma sob a sua conta
       await registraAuditoria({
-         idConta: oContaSaida.idConta,
+         oConta: oContaSaida,
          tipAcao: ACAO_LANCAMENTO_INCLUIDO,
          desEntidade: 'transferencia',
          codEntidade: oResultado.sCodTransferencia,
@@ -150,7 +150,7 @@ export async function POST(oRequisicao) {
          valReferencia: nValor,
       });
       await registraAuditoria({
-         idConta: oContaEntrada.idConta,
+         oConta: oContaEntrada,
          tipAcao: ACAO_LANCAMENTO_INCLUIDO,
          desEntidade: 'transferencia',
          codEntidade: oResultado.sCodTransferencia,

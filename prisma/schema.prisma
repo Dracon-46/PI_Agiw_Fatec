@@ -1,13 +1,22 @@
 // Schema Prisma gerado a partir do dicionário de dados real do sistema
 // ("Tabelas do sistema.txt" — saída de `prisma db pull` do banco SQL Server).
 //
-// Contém apenas as 14 tabelas solicitadas. Os campos, tipos, defaults e nomes
-// de constraint (map: "...") foram mantidos exatamente como no dicionário original.
-// Relacionamentos (@relation) foram mantidos SOMENTE entre tabelas presentes
-// neste subconjunto — relações para tabelas fora da lista (ex.: TBGENE009,
-// TBGENE032, TBFATU016, etc.) foram removidas porque essas tabelas não
-// fazem parte deste schema. As colunas FK correspondentes continuam
+// Contém um SUBCONJUNTO do BDAPRESENTACAO: as 14 tabelas do dicionário
+// original, as 5 tabelas do ERP que o módulo de Conciliação Bancária precisa
+// (TBCONB002, TBCONB006, TBGENE009, TBSENH005, TBSENH006) e as 2 tabelas
+// novas do módulo (TBCONB008, TBCONB009) — 21 no total, de ~1300 do banco.
+//
+// Os campos, tipos, defaults e nomes de constraint (map: "...") foram mantidos
+// exatamente como no banco. Relacionamentos (@relation) foram mantidos SOMENTE
+// entre tabelas presentes neste subconjunto — relações para tabelas fora da
+// lista (ex.: TBGENE032, TBFATU016, etc.) foram removidas porque essas tabelas
+// não fazem parte deste schema. As colunas FK correspondentes continuam
 // presentes como campos escalares comuns.
+//
+// AVISO: justamente por ser um subconjunto, NUNCA rode `prisma db push` nem
+// `prisma migrate` contra o BDAPRESENTACAO — o Prisma trataria as outras
+// ~1290 tabelas do ERP como sobra a ser removida. O DDL das tabelas novas
+// está em database/schema.sql e é aplicado por `npm run db:init`.
 
 generator client {
   provider = "prisma-client-js"
@@ -117,7 +126,12 @@ model TBCONB001 {
   CONTACHEQUE       String?     @db.Char(20)
   SEQMOVTOCONB      String      @default("001", map: "DF__TBCONB001__SEQMO__36BDA5E9") @db.Char(3)
   SEQMOVTOCONBRELAC String?     @db.Char(3)
-  SINAL             Int
+  /// CALCULADA pelo servidor: case TIPOMOVTO when 'S' then -1 else 1 end.
+  /// Serve para somar (SUM(VALMOVTO * SINAL)) e NUNCA pode ser gravada — o
+  /// SQL Server recusa a instrucao que a inclui no INSERT ou no UPDATE.
+  /// Declarada OPCIONAL por isso: no banco ela e NOT NULL, mas exigi-la aqui
+  /// obrigaria todo create a informar um valor que o servidor nao aceita.
+  SINAL             Int?
 
   TBCONB003         TBCONB003[]
 
@@ -714,5 +728,228 @@ model TBFLCX002 {
 
   @@id([CATEGORIA, CODGRUPO, SUBGRUPO], map: "PKTBFLCX002")
   @@index([SUBGRUPO, CATEGORIA], map: "INDTBFLCX002_SUBGRUPO")
+  @@schema("dbo")
+}
+
+// ============================================================================
+// Tabelas do ERP acrescentadas para o módulo de Conciliação Bancária
+// (Ticket 37060). Definições vindas de `prisma db pull` do BDAPRESENTACAO,
+// mantidas como no banco. Seguindo a política do topo deste arquivo, os
+// relacionamentos para tabelas fora do subconjunto foram removidos e as
+// colunas de chave estrangeira continuam como campos escalares.
+// ============================================================================
+
+/// TBCONB002 - Parâmetros e Fechamento da Conciliação Bancária
+/// ULTMESFECHCONC/ULTANOFECHCONC guardam o último período fechado (item
+/// 6.1.3.1 — bloqueio). O bloqueio por conta fica em TBGENE016.DATULTBLOQUEIO.
+model TBCONB002 {
+  CODEMP               String   @id(map: "PKTBCONB002") @db.Char(2)
+  ULTMESFECHCONC       String   @db.Char(2)
+  ULTANOFECHCONC       String   @db.Char(4)
+  STACONTCONB          String?  @default("N", map: "DF__TBCONB002__STACO__2022C2A6") @db.Char(10)
+  STAATUDATBAIXA       String?  @default("S", map: "DF__TBCONB002__STAAT__2116E6DF") @db.Char(1)
+  STAOBRIGACONCILIACAO String?  @db.Char(1)
+  CODDOCTRANSDEVCHEQUE String?  @db.Char(3)
+  CODDOCTRANSDEVDUPL   String?  @db.Char(3)
+  CODDOCTITULOCHEQUE   String?  @db.Char(3)
+  CODDOCTITULOTAXA     String?  @db.Char(3)
+  CODDOCREAPRESENTACAO String?  @db.Char(3)
+
+  @@schema("dbo")
+}
+
+/// TBCONB006 - Extrato Bancário Importado (grade "Movimentos no Banco")
+/// É a tabela que o ERP já usa para o extrato da instituição: STAMOVTO guarda
+/// a situação (N = não conciliado, C = conciliado manualmente, A = conciliado
+/// automaticamente) e NUMSEQCONC é a sequência que amarra os dois lados da
+/// conciliação. FITID/TRNTYPE/MEMO são os campos de OFX.
+model TBCONB006 {
+  CODEMP         String    @db.Char(2)
+  CODBANCO       String    @db.Char(6)
+  CODAGENCIA     String    @db.Char(10)
+  NUMSEQMOVTO    String    @db.Char(12)
+  CODCTACORRENTE String    @db.Char(15)
+  DATMOVTO       DateTime? @db.DateTime
+  HISTMOVTO      String?   @db.Char(60)
+  VALMOVTO       Decimal?  @db.Decimal(28, 14)
+  STAMOVTO       String?   @db.Char(1)
+  DATIMPORTACAO  DateTime? @db.DateTime
+  DATATU         DateTime? @db.DateTime
+  TIPOMOVTO      String?   @db.Char(1)
+  NUMSEQCONC     String?   @db.Char(6)
+  DOCUMENTO      String?   @db.Char(8)
+  HISTMOVTOEXIBE String?   @db.Char(60)
+  NOMEARQUIVO    String?   @db.Char(30)
+  NUMREGISTRO    Int?
+  FITID          String?   @db.VarChar(50)
+  TRNTYPE        String?   @db.VarChar(15)
+  MEMO           String?   @db.VarChar(256)
+
+  @@id([CODEMP, CODBANCO, CODAGENCIA, NUMSEQMOVTO, CODCTACORRENTE], map: "PKTBCONB006")
+  @@schema("dbo")
+}
+
+/// TBGENE009 - Tipos de Documento
+/// Alimenta a caixa "Novo Lançamento" (item 6.1.3.8 — ação 1); é o CODDOCUM
+/// que TBCONB001 exige na chave.
+model TBGENE009 {
+  CODDOCUM             String    @id(map: "PK") @db.Char(3)
+  DESDOCUM             String    @db.Char(50)
+  DATATU               DateTime  @db.DateTime
+  STADOCUM             String    @db.Char(1)
+  STAUSODOSISTEMA      String    @db.Char(1)
+  STANOTADEBCRED       String?   @default("N", map: "DF__TBGENE009__STANO__33408412") @db.Char(1)
+  CODGRUPODOCTO        String?   @db.Char(3)
+  CODREGFISCAL         String?   @db.Char(5)
+  CODDOCTOICMS         String?   @db.Char(2)
+  CODDOCTOISS          String?   @db.Char(2)
+  STAGERANUMERO        String?   @db.Char(1)
+  DOCLANCAIPI          String?   @default("S", map: "DF__TBGENE009__DOCLA__4F1F3F5F") @db.Char(1)
+  CODEVENTO_ENTR_CP    String?   @db.Char(5)
+  CODEVENTO_ENTR_CR    String?   @db.Char(5)
+  CODEVENTO_VARCAMB_CP String?   @db.Char(5)
+  CODEVENTO_VARCAMB_CR String?   @db.Char(5)
+  STAVARCAMBRC         String?   @default("S", map: "DF__TBGENE009__STAVA__5F56A449") @db.Char(1)
+
+  @@index([CODDOCUM, CODDOCTOICMS], map: "INDTBGENE009_CODDOCTOICMS")
+  @@index([CODDOCTOICMS], map: "INDTBGENE009_CODDOCTOICMS2")
+  @@schema("dbo")
+}
+
+/// TBSENH005 - Permissão do Usuário por Módulo
+/// É contra esta tabela que o item 6.1.3.1 ("verificar permissão de acesso")
+/// é conferido: ALTERACAO libera bloquear/desbloquear o período, INCLUSAO
+/// libera lançar, EXCLUSAO libera excluir.
+model TBSENH005 {
+  SISTEMA_ID   String  @db.Char(10)
+  CODEMP       String  @default("01", map: "DF__TBSENH005__CODEM__5A45429A") @db.Char(2)
+  USER_ID      String  @db.Char(10)
+  MODULO_ID    String  @db.Char(10)
+  INCLUSAO     String  @db.Char(1)
+  ALTERACAO    String  @db.Char(1)
+  CONSULTA     String  @db.Char(1)
+  EXCLUSAO     String  @db.Char(1)
+  IMPRESSAO    String  @db.Char(1)
+  TIPO         String  @db.Char(1)
+  CODMENU      String  @db.Char(5)
+  PROCATU      String? @default("A", map: "DF__TBSENH005__PROCA__5B3966D3") @db.Char(1)
+  INCLUSAOTMP  String? @default("N", map: "DF_TBSENH005_INCLUSAOTMP") @db.Char(1)
+  ALTERACAOTMP String? @default("N", map: "DF_TBSENH005_ALTERACAOTMP") @db.Char(1)
+  CONSULTATMP  String? @default("N", map: "DF_TBSENH005_CONSULTATMP") @db.Char(1)
+  IMPRESSAOTMP String? @default("N", map: "DF_TBSENH005_IMPRESSAOTMP") @db.Char(1)
+  EXCLUSAOTMP  String? @default("N", map: "DF_TBSENH005_EXCLUSAOTMP") @db.Char(1)
+  STAAPROVACAO String? @db.Char(1)
+  USER_ID_ADM1 String? @db.Char(10)
+  USER_ID_ADM2 String? @db.Char(10)
+
+  @@id([SISTEMA_ID, CODEMP, USER_ID, MODULO_ID], map: "PKTBSENH005")
+  @@index([CODMENU], map: "INDTBSENH005_CODMENU")
+  @@index([CODEMP, MODULO_ID, USER_ID, ALTERACAO], map: "INDTBSENH005_MODULO_ID")
+  @@index([SISTEMA_ID, MODULO_ID], map: "INDTBSENH005_SISTEMAID_MODULO_ID")
+  @@index([SISTEMA_ID, USER_ID, MODULO_ID], map: "INDTBSENH005_SISTEMAID_USERID")
+  @@index([USER_ID, TIPO, MODULO_ID], map: "INDTBSENH005_USER_ID")
+  @@schema("dbo")
+}
+
+/// TBSENH006 - Usuários do Sistema
+/// O usuário corrente do módulo (USUARIO_ATUAL no .env, enquanto não há sessão
+/// do Satis) é conferido aqui: SUSPENSAO e BLOQUEIO barram o acesso.
+model TBSENH006 {
+  USER_ID                   String    @id(map: "PKTBSENH006") @db.Char(10)
+  NOMUSUARIO                String    @db.Char(30)
+  SENHA                     String    @db.Char(14)
+  TIPUSUARIO                String    @db.Char(1)
+  SUSPENSAO                 String    @db.Char(1)
+  BLOQUEIO                  String    @db.Char(1)
+  NUMNIVELCOMPRA            Int?      @default(1, map: "DF__TBSENH006__NUMNI__5E15D37E")
+  STALIBTODAREA             String?   @default("S", map: "DF__TBSENH006__STALI__5F09F7B7") @db.Char(1)
+  STALIBERAPEDVENDA         String?   @default("S", map: "DF__TBSENH006__STALI__5FFE1BF0") @db.Char(1)
+  CCUSTO                    String?   @db.Char(10)
+  PROCATU                   String?   @default("A", map: "DF__TBSENH006__PROCA__60F24029") @db.Char(1)
+  DATULTALT                 DateTime? @db.DateTime
+  ALTSENPROXLOG             String?   @db.Char(1)
+  EMAIL                     String?   @db.Char(70)
+  FONE                      String?   @db.Char(12)
+  FAX                       String?   @db.Char(12)
+  DEPARTAMENTO              String?   @db.Char(30)
+  STARECEMAILRESERVAPARCIAL String?   @default("N", map: "DF__TBSENH006__STARE__1C238250") @db.Char(1)
+  STARECEMAILSINF           String?   @default("N", map: "DF__TBSENH006__STARE__4C09364A") @db.Char(1)
+  CODGRUPOCOM               String?   @db.VarChar(4)
+  AREALIBPEDVENDA           String?   @db.Char(1)
+  CODGRCOMPRA               String?   @db.Char(2)
+  ASSINATURA                String?   @db.Char(100)
+  FUNCAO                    String?   @db.Char(50)
+  GESTORAPROVSC             String?   @default("S", map: "DF__TBSENH006__GESTO__654487C9") @db.Char(1)
+  RAMAL                     String?   @db.Char(3)
+  CPFUSUARIO                String?   @db.Char(14)
+  RGUSUARIO                 String?   @db.Char(12)
+  NUMIDENT                  String?   @db.Char(25)
+  STAENVIAEMAIL             String?   @default("N", map: "DF__TBSENH006__STAEN__433B1F36") @db.Char(1)
+  DATULTLOGIN               DateTime? @db.DateTime
+  APPULTLOGIN               String?   @db.VarChar(20)
+  HOSTULTLOGIN              String?   @db.VarChar(30)
+  LINKEXTERNO               String?   @db.VarChar(250)
+  EMAILPOWERBI              String?   @db.VarChar(250)
+  SENHAPOWERBI              String?   @db.VarChar(50)
+
+  @@schema("dbo")
+}
+
+// ============================================================================
+// Tabelas NOVAS do módulo (Ticket 37060).
+//
+// São as duas únicas coisas que o ERP não tem, porque nascem da leitura do
+// extrato por API — o ERP importava arquivo (TBCONB006.NOMEARQUIVO). Os nomes
+// seguem o padrão TBXXXX999 da Agiw, na sequência do módulo de conciliação
+// bancária (TBCONB001 a TBCONB007 já existem), e as colunas usam os prefixos
+// do padrão: COD código, DES descrição, DAT data, VAL valor, NUM número,
+// TIP tipo, STA situação.
+//
+// O DDL destas duas tabelas está em database/schema.sql e é aplicado por
+// `npm run db:init`. NUNCA use `prisma db push` nem `prisma migrate` contra o
+// BDAPRESENTACAO: este arquivo descreve um subconjunto do banco, e o Prisma
+// trataria as outras ~1290 tabelas do ERP como sobra a ser removida.
+// ============================================================================
+
+/// TBCONB008 - Dias de Extrato Consultados na API
+/// Sem este registro não haveria como distinguir "dia sem movimento" de "dia
+/// nunca consultado": os dois chegam da API como lista vazia, e o sistema
+/// repetiria a mesma consulta para sempre. A conta é identificada como em
+/// TBCONB006 (empresa + banco + agência + conta corrente).
+model TBCONB008 {
+  CODEMP         String   @db.Char(2)
+  CODBANCO       String   @db.Char(6)
+  CODAGENCIA     String   @db.Char(10)
+  CODCTACORRENTE String   @db.Char(15)
+  DATEXTRATO     DateTime @db.DateTime
+  DATCONSULTA    DateTime @db.DateTime
+  QTDMOVTO       Int?
+  NOMPROVIDER    String?  @db.Char(20)
+
+  @@id([CODEMP, CODBANCO, CODAGENCIA, CODCTACORRENTE, DATEXTRATO], map: "PKTBCONB008")
+  @@schema("dbo")
+}
+
+/// TBCONB009 - Auditoria da Conciliação Bancária
+/// Atende o item 6.5 das sugestões: registro de quem conciliou, quem bloqueou
+/// período, quem lançou ou excluiu. A chave é IDENTITY, e não uma sequência em
+/// CHAR como no resto do módulo, porque a trilha é gravada em concorrência —
+/// montar a sequência no cliente exigiria travar a tabela a cada evento.
+model TBCONB009 {
+  NUMSEQAUDIT    BigInt   @id(map: "PKTBCONB009") @default(autoincrement())
+  CODEMP         String   @db.Char(2)
+  DATEVENTO      DateTime @db.DateTime
+  USER_ID        String   @db.Char(10)
+  TIPACAO        String   @db.Char(20)
+  DESENTIDADE    String   @db.Char(20)
+  CODENTIDADE    String?  @db.VarChar(120)
+  DESDETALHE     String   @db.VarChar(600)
+  VALREFERENCIA  Decimal? @db.Decimal(28, 14)
+  CODBANCO       String?  @db.Char(6)
+  CODAGENCIA     String?  @db.Char(10)
+  CODCTACORRENTE String?  @db.Char(15)
+
+  @@index([CODEMP, DATEVENTO], map: "INDTBCONB009_DATEVENTO")
+  @@index([TIPACAO, DATEVENTO], map: "INDTBCONB009_TIPACAO")
   @@schema("dbo")
 }

@@ -147,7 +147,7 @@ export async function POST(oRequisicao) {
       });
 
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: ACAO_LANCAMENTO_INCLUIDO,
          desEntidade: 'boleto',
          codEntidade: sNumBoleto,

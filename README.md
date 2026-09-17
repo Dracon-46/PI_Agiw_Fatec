@@ -19,7 +19,7 @@ Explicação do código (camadas, fluxos e decisões de projeto):
 | --- | --- |
 | Interface | Next.js 14 (App Router) + React 18 |
 | API | Route Handlers do Next.js |
-| Banco | MySQL / MariaDB (`mysql2`) |
+| Banco | SQL Server — o banco do ERP (Prisma + adapter `mssql`) |
 | Relatórios | ExcelJS (xlsx), CSV, HTML de impressão (PDF) e OFX |
 | Integração bancária | Strategy + Factory por banco (`src/providers/`) |
 
@@ -30,16 +30,16 @@ Explicação do código (camadas, fluxos e decisões de projeto):
 ```bash
 npm install
 
-cp .env.example .env      # preencha MYSQL_* e as credenciais dos bancos
-npm run db:init           # cria o schema e reconcilia colunas novas
-npm run db:erp            # preenche o extrato do ERP a partir da API do banco
+cp .env.example .env      # preencha DB_* e as credenciais dos bancos
+npm run db:init           # cria as duas tabelas do módulo no banco do ERP
+npm run db:extrato        # opcional: carrega o extrato das contas configuradas
 
 npm run dev               # http://localhost:3000
 ```
 
-Precisa de um MySQL ou MariaDB rodando. Com XAMPP, basta iniciar o MySQL no
-painel de controle — o `.env.example` já vem apontado para `127.0.0.1:3306`
-com usuário `root` sem senha.
+Precisa de um SQL Server com o banco do ERP (`BDAPRESENTACAO`) acessível. O
+módulo trabalha dentro dele, sobre as tabelas do Satis — o `npm run db:init`
+confere se elas estão lá antes de criar as duas tabelas que são do módulo.
 
 ### Scripts
 
@@ -47,9 +47,8 @@ com usuário `root` sem senha.
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
 | `npm run build` / `npm start` | Build de produção e execução |
-| `npm run db:init` | Aplica `database/schema.sql` e reconcilia as colunas |
-| `npm run db:erp` | Preenche o extrato do ERP a partir da API do banco |
-| `npm run db:erp:limpar` | Remove os lançamentos gerados por `db:erp` |
+| `npm run db:init` | Confere as tabelas do ERP e cria `TBCONB008` e `TBCONB009` |
+| `npm run db:extrato` | Carrega o extrato das contas configuradas pelo caminho da tela |
 | `npm run diag:safra` | Diagnostica a integração Safra ponta a ponta |
 | `npm run diag:bradesco` | Diagnostica a integração Bradesco |
 | `npm run diag:itau` | Diagnostica a integração Itaú |
@@ -63,7 +62,7 @@ com usuário `root` sem senha.
 
 Cartão por conta corrente com o logotipo do banco, agência, saldo previsto no
 sistema e data do último bloqueio. Permite cadastrar, **alterar** e remover
-contas, que ficam no MySQL.
+contas, que ficam em `TBGENE016` — o cadastro de contas do próprio ERP.
 
 Só aparecem as contas cujo banco tem a integração configurada: sem credencial
 não há extrato, e exibi-las levaria o usuário direto a um erro. A conferência
@@ -81,7 +80,7 @@ reprova.
   mais fraca — 1:1 exata, N:1 (vários lançamentos fechando um movimento),
   1:N (um lançamento para vários movimentos) e N:N (os dois lados em conjunto)
 - **Extrato gravado, API consultada uma vez:** o extrato da instituição é
-  copiado para o MySQL na primeira leitura. A cada busca o sistema confere
+  copiado para `TBCONB006`, o extrato do ERP, na primeira leitura. A cada busca o sistema confere
   quais dias já tem e consulta o banco **apenas para os que faltam** — sem
   isso, períodos antigos ficariam inacessíveis (o BB não devolve nada além de
   5 anos) e cada abertura de tela gastaria cota do gateway. Concluída a busca,
@@ -89,8 +88,8 @@ reprova.
 - **Período limitado a 60 dias:** intervalos maiores são recusados com aviso —
   conferir dois meses de uma vez já não é conciliação, e o custo cai no
   gateway do banco
-- **Bloqueio de período:** gravado em `conta_corrente`, recusa lançamentos e
-  baixas em data já fechada. Exige a permissão `conciliacao.bloqueio`,
+- **Bloqueio de período:** gravado em `TBGENE016.DATULTBLOQUEIO`, recusa
+  lançamentos em data já fechada. Exige a permissão `conciliacao.bloqueio`,
   conferida no servidor — a tela apenas reflete o que a rota autoriza
 - **Filtros de situação** nos dois lados, com contadores, mais o filtro por
   qualquer campo da grade — combinável e com a quantidade aplicada à vista
@@ -123,20 +122,24 @@ não conciliado.
 ### Usuários e permissões
 
 O usuário corrente vem de `USUARIO_ATUAL` no `.env` enquanto o módulo não
-recebe a sessão do Satis. As permissões ficam em `usuario_permissao`:
+recebe a sessão do Satis: é o `USER_ID` conferido em `TBSENH006` (suspensão e
+bloqueio no ERP barram o acesso). As permissões saem de `TBSENH005`, a mesma
+tabela que o Satis usa — cada uma é uma operação em um módulo do ERP:
 
 | Permissão | Cobre |
 | --- | --- |
-| `conciliacao.bloqueio` | Fechar e reabrir período (item 6.1.3.1) |
-| `conciliacao.conciliar` | Conciliar e estornar (itens 6.1.3.6 e 6.1.3.7) |
-| `conciliacao.lancamento` | Lançar e transferir entre contas (item 6.1.3.8) |
+| `conciliacao.bloqueio` | Fechar e reabrir período (item 6.1.3.1) — ALTERACAO em CONB002 |
+| `conciliacao.conciliar` | Conciliar e estornar (itens 6.1.3.6 e 6.1.3.7) — ALTERACAO em CONB001 |
+| `conciliacao.lancamento` | Lançar e transferir entre contas (item 6.1.3.8) — INCLUSAO em CONB001 |
+| `conciliacao.exclusao` | Excluir lançamento (item 6.1.3.8 — ação 4) — EXCLUSAO em CONB001 |
 
-`INFTEC` tem as três; `OPERADOR` concilia e lança, mas não fecha o período.
+Quem libera cada operação é o cadastro de permissões do Satis, então o acesso
+ao módulo é mantido onde o cliente já mantém os outros.
 
 ### Catálogos
 
 Tipos de documento, subgrupos de fluxo de caixa (TBFLCX002), contas contábeis
-(TBGENE023) e centros de custo (TBCOMP008) vêm do MySQL e alimentam as caixas
+(TBGENE023) e centros de custo (TBCOMP008) vêm das tabelas do ERP e alimentam as caixas
 de lançamento e transferência.
 
 ### Auditoria
@@ -181,7 +184,7 @@ src/
 ├── lib/
 │   ├── conciliacao/              parser de extrato (OFX/CSV) e utilitários
 │   ├── relatorios/               geração dos relatórios
-│   └── repositories/             acesso ao MySQL
+│   └── repositories/             acesso ao banco do ERP
 ├── providers/                    integrações bancárias (Strategy + Factory)
 ├── services/                     chamadas HTTP do cliente
 └── utils/                        formatação, subset-sum, catálogos
@@ -192,8 +195,8 @@ src/
 ## Publicação
 
 `Dockerfile` e `docker-compose.yml` prontos na raiz. O passo a passo para a AWS
-(EC2 com MySQL em contêiner ou EC2 + RDS) está em
-[`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md).
+(EC2 com SQL Server em contêiner ou EC2 + RDS) está na branch
+`infra/docker-aws`, em `docs/DEPLOY-AWS.md`.
 
 ```bash
 docker compose up -d --build

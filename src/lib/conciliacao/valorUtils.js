@@ -99,7 +99,7 @@ export function separaComponentesData(sData) {
   const sTexto = String(sData).trim();
   if (!sTexto || /^0+$/.test(sTexto.replace(/\D/g, ''))) return null;
 
-  // Formato ISO explícito (AAAA-MM-DD), usado pelo MySQL e pelos inputs date
+  // Formato ISO explícito (AAAA-MM-DD), usado pelo SQL Server e pelos inputs date
   const oIso = /^(\d{4})-(\d{2})-(\d{2})/.exec(sTexto);
   if (oIso) {
     return { sAno: oIso[1], sMes: oIso[2], sDia: oIso[3] };

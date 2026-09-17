@@ -19,7 +19,7 @@ import { buscaAuditoria } from '../../services/conciliacaoService.js';
 import { formataMoeda } from '../../utils/formatters.js';
 
 /**
- * Converte o carimbo de tempo do MySQL para exibição.
+ * Converte o carimbo de tempo do SQL Server para exibição.
  * @param {string} sDataHora
  * @returns {string}
  */

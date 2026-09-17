@@ -1,5 +1,5 @@
 // ============================================================================
-// api/bank/contas - Cadastro de conta corrente no MySQL
+// api/bank/contas - Cadastro de conta corrente no SQL Server
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 // ============================================================================
 

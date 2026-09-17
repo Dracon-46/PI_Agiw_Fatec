@@ -1,18 +1,17 @@
 // ============================================================================
-// api/conciliacao/lancamentos - Lançamentos do sistema (MySQL / Satis)
+// api/conciliacao/lancamentos - Lançamentos do sistema (SQL Server / Satis)
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
  // Sem massa falsa: se ainda não houver integração Satis, a grade vem vazia.
 // ============================================================================
 
 import { NextResponse } from 'next/server';
-import { dataBrParaMysql } from '../../../../lib/db.js';
+import { dataBrParaSql } from '../../../../lib/db.js';
 import { buscaContaPorCodigo } from '../../../../lib/repositories/contaRepository.js';
 import {
    calculaSaldoAnterior,
    excluiLancamento,
    insereLancamento,
-   listaLancamentosConta,
    listaLancamentosPeriodo,
 } from '../../../../lib/repositories/lancamentoRepository.js';
 import {
@@ -76,36 +75,26 @@ export async function GET(oRequisicao) {
       const oConta = await buscaContaPorCodigo(sCodConta);
       if (!oConta) {
          return NextResponse.json(
-            { erro: `Conta corrente "${sCodConta}" não localizada no MySQL.` },
+            { erro: `Conta corrente "${sCodConta}" não localizada no SQL Server.` },
             { status: 404 }
          );
       }
 
       // Os lançamentos do sistema SEMPRE respeitam o período (item 6.1.3.2:
       // o botão Buscar "traz os lançamentos e movimentos já registrados no
-      // Satis" do período informado). Aqui a base é nossa e as datas são
-      // confiáveis, então o recorte é legítimo.
-      // As duas grades precisam cobrir a mesma janela, senão a conferência
-      // fica impossível. Quando BANK_FILTRA_PERIODO=false o extrato do banco
-      // não é recortado (o sandbox ignora as datas), então o lado do sistema
-      // também não pode ser — caso contrário sobrariam movimentos do banco
-      // sem nenhum lançamento correspondente à vista.
-      const bRecortaPeriodo =
-         (process.env.BANK_FILTRA_PERIODO ?? '').trim().toLowerCase() !== 'false';
+      // Satis" do período informado), e as duas grades cobrem a mesma janela —
+      // sem isso a conferência entre os lados fica impossível.
+      //
+      // O recorte não é configurável: TBCONB001 é a tabela do ERP e tem o
+      // histórico inteiro da conta (dezenas de milhares de movimentos desde
+      // que ela existe). Mandar isso para o navegador travaria a tela.
+      const aLancamentos = await listaLancamentosPeriodo(oConta, sDataInicio, sDataFim);
 
-      const aLancamentos = bRecortaPeriodo
-         ? await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-         : await listaLancamentosConta(oConta.idConta);
-
-      // Saldo anterior é o acumulado ANTES da primeira linha da grade. Sem
-      // recorte a grade traz o extrato inteiro, então não há nada antes dela:
-      // somar o período anterior contaria os mesmos movimentos duas vezes.
-      const [nSaldoAnterior, nSaldoAnteriorBanco] = bRecortaPeriodo
-         ? await Promise.all([
-              calculaSaldoAnterior(oConta.idConta, sDataInicio),
-              calculaSaldoAnteriorBanco(oConta.idConta, sDataInicio),
-           ])
-         : [0, 0];
+      // Saldo anterior é o acumulado ANTES da primeira linha da grade
+      const [nSaldoAnterior, nSaldoAnteriorBanco] = await Promise.all([
+         calculaSaldoAnterior(oConta, sDataInicio),
+         calculaSaldoAnteriorBanco(oConta, sDataInicio),
+      ]);
 
 
       return NextResponse.json({
@@ -162,6 +151,11 @@ export async function POST(oRequisicao) {
    if (!oCorpo.datMovimento) {
       return NextResponse.json({ erro: 'Informe a data do movimento.' }, { status: 400 });
    }
+   // O tipo de documento é obrigatório no ERP: TBCONB001 o exige na chave e
+   // tem chave estrangeira para o cadastro de documentos (TBGENE009).
+   if (!oCorpo.tipDocumento || !String(oCorpo.tipDocumento).trim()) {
+      return NextResponse.json({ erro: 'Selecione o tipo de documento do lançamento.' }, { status: 400 });
+   }
 
    const nValor = Number(oCorpo.valMovimento);
    if (!Number.isFinite(nValor) || nValor <= 0) {
@@ -176,9 +170,9 @@ export async function POST(oRequisicao) {
 
       // Não aceita lançamento em período já bloqueado (item 6.1.3.1)
       if (oConta.datUltimoBloqueio) {
-         const sDatBloqueioMysql = dataBrParaMysql(oConta.datUltimoBloqueio);
-         const sDatMovimentoMysql = dataBrParaMysql(oCorpo.datMovimento);
-         if (sDatMovimentoMysql && sDatBloqueioMysql && sDatMovimentoMysql <= sDatBloqueioMysql) {
+         const sDatBloqueioSql = dataBrParaSql(oConta.datUltimoBloqueio);
+         const sDatMovimentoSql = dataBrParaSql(oCorpo.datMovimento);
+         if (sDatMovimentoSql && sDatBloqueioSql && sDatMovimentoSql <= sDatBloqueioSql) {
             return NextResponse.json(
                {
                   erro: `A conta está bloqueada para lançamentos até ${oConta.datUltimoBloqueio}. Informe uma data posterior.`,
@@ -188,7 +182,7 @@ export async function POST(oRequisicao) {
          }
       }
 
-      const oLancamento = await insereLancamento(oConta.idConta, {
+      const oLancamento = await insereLancamento(oConta, {
          datMovimento: oCorpo.datMovimento,
          datCompensacao: oCorpo.datCompensacao,
          numDocumento: oCorpo.numDocumento,
@@ -204,7 +198,7 @@ export async function POST(oRequisicao) {
 
       // A mensagem de sucesso é emitida somente após concluir a gravação
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: ACAO_LANCAMENTO_INCLUIDO,
          desEntidade: 'lancamento',
          codEntidade: oLancamento.codLancamento,
@@ -248,7 +242,7 @@ export async function DELETE(oRequisicao) {
          return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
       }
 
-      const oResultado = await excluiLancamento(oConta.idConta, sCodLancamento);
+      const oResultado = await excluiLancamento(oConta, sCodLancamento);
       if (!oResultado.bExcluido) {
          return NextResponse.json({ erro: oResultado.sMotivo }, { status: 409 });
       }
@@ -259,7 +253,7 @@ export async function DELETE(oRequisicao) {
          : `Lançamento ${sCodLancamento} excluído da conciliação.`;
 
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: ACAO_LANCAMENTO_EXCLUIDO,
          desEntidade: oResultado.codTransferencia ? 'transferencia' : 'lancamento',
          codEntidade: oResultado.codTransferencia ?? sCodLancamento,

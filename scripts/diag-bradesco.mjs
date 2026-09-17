@@ -42,7 +42,7 @@ try {
    process.exit(1);
 }
 
-// Usa a conta cadastrada no MySQL; se não houver, cai para o .env
+// Usa a conta cadastrada no SQL Server; se não houver, cai para o .env
 let oContaTeste = { codAgencia: oCfg.sAgencia, numContaCorrente: oCfg.sConta, tipConta: 'cc' };
 try {
    const { listaContasCorrentes } = await import('../src/lib/repositories/contaRepository.js');
@@ -54,10 +54,13 @@ try {
          numContaCorrente: oConta.numContaCorrente,
          tipConta: oConta.tipConta ?? 'cc',
       };
-      console.log('\nConta usada no teste (MySQL):', `${oConta.codAgencia}/${oConta.numContaCorrente}`);
+      console.log(
+         '\nConta usada no teste (SQL Server):',
+         `${oConta.codAgencia}/${oConta.numContaCorrente}`
+      );
    }
 } catch (oErro) {
-   console.log('\nNão foi possível ler contas do MySQL:', oErro.message);
+   console.log('\nNão foi possível ler contas do SQL Server:', oErro.message);
 }
 
 console.log(`\n=== EXTRATO (${sDataInicio} a ${sDataFim}) ===`);
@@ -71,3 +74,8 @@ try {
 } catch (oErro) {
    console.log('FALHOU:', oErro.message);
 }
+
+// Sem fechar a conexão o processo não termina: a leitura da conta acima deixa
+// uma conexão aberta com o SQL Server.
+const { fechaConexao } = await import('../src/lib/db.js');
+await fechaConexao();

@@ -15,13 +15,14 @@ import { NextResponse } from 'next/server';
 import { buscaContaPorCodigo } from '../../../../lib/repositories/contaRepository.js';
 import {
    atualizaStatusLancamentos,
+   geraProximoNumSeqConc,
    listaDatasLancamentos,
 } from '../../../../lib/repositories/lancamentoRepository.js';
 import {
    atualizaStatusMovimentos,
    listaDatasMovimentos,
 } from '../../../../lib/repositories/movimentoRepository.js';
-import { dataBrParaMysql } from '../../../../lib/db.js';
+import { dataBrParaSql } from '../../../../lib/db.js';
 import {
    ACAO_CONCILIACAO,
    ACAO_CONCILIACAO_AUTOMATICA,
@@ -64,22 +65,22 @@ async function verificaPeriodoBloqueado(oConta, aCodLancamentos, aCodMovimentos)
       return { sMensagem: '', aRegistros: [] };
    }
 
-   const sBloqueio = dataBrParaMysql(oConta.datUltimoBloqueio);
+   const sBloqueio = dataBrParaSql(oConta.datUltimoBloqueio);
    if (!sBloqueio) {
       return { sMensagem: '', aRegistros: [] };
    }
 
    const [aDatasLanc, aDatasMov] = await Promise.all([
-      listaDatasLancamentos(oConta.idConta, aCodLancamentos),
-      listaDatasMovimentos(oConta.idConta, aCodMovimentos),
+      listaDatasLancamentos(oConta, aCodLancamentos),
+      listaDatasMovimentos(oConta, aCodMovimentos),
    ]);
 
    const aBloqueados = [
       ...aDatasLanc.map((oItem) => ({ sCodigo: oItem.codLancamento, sData: oItem.datMovimento })),
       ...aDatasMov.map((oItem) => ({ sCodigo: oItem.codMovimento, sData: oItem.datMovimento })),
    ].filter((oItem) => {
-      const sDataMysql = dataBrParaMysql(oItem.sData);
-      return sDataMysql && sDataMysql <= sBloqueio;
+      const sDataSql = dataBrParaSql(oItem.sData);
+      return sDataSql && sDataSql <= sBloqueio;
    });
 
    if (aBloqueados.length === 0) {
@@ -172,15 +173,26 @@ export async function POST(oRequisicao) {
       }
 
       // ---------- Gravação ----------
+      // A sequência de conciliação (NUMSEQCONC) é o que amarra o grupo: todos
+      // os registros selecionados, dos DOIS lados, recebem a mesma. É ela que
+      // permite ao ERP reconstituir depois o que foi conciliado junto — e é
+      // por isso que é gerada uma única vez, aqui, e não em cada repositório.
+      const oOpcoes = {
+         sNumSeqConc: bConciliado ? await geraProximoNumSeqConc() : null,
+         bAutomatica,
+      };
+
       const iLancAtualizados = await atualizaStatusLancamentos(
-         oConta.idConta,
+         oConta,
          aLancamentos.map((oItem) => oItem.codLancamento),
-         bConciliado
+         bConciliado,
+         oOpcoes
       );
       const iMovAtualizados = await atualizaStatusMovimentos(
-         oConta.idConta,
+         oConta,
          aMovimentos.map((oItem) => oItem.codMovimento),
-         bConciliado
+         bConciliado,
+         oOpcoes
       );
 
       const nValorConciliado = Math.abs(somaLiquido(aMovimentos.length > 0 ? aMovimentos : aLancamentos));
@@ -191,7 +203,7 @@ export async function POST(oRequisicao) {
            : ACAO_ESTORNO;
 
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: sTipAcao,
          desEntidade: 'conciliacao',
          codEntidade: aMovimentos[0]?.codMovimento ?? aLancamentos[0]?.codLancamento ?? null,

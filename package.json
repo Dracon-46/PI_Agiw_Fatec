@@ -4,13 +4,12 @@
   "description": "Módulo Conciliação Bancária - Agiw Sistemas | Ticket 37060",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "db:init": "node scripts/init-db.mjs",
-    "db:erp": "node scripts/seed-erp.mjs",
-    "db:erp:limpar": "node scripts/seed-erp.mjs --limpar",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs",
@@ -25,13 +24,14 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.383.0",
-    "mysql2": "^3.23.3",
+    "mssql": "^12.7.0",
     "next": "^14.2.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.3"
+    "eslint-config-next": "^14.2.3",
+    "prisma": "^7.10.0"
   }
 }

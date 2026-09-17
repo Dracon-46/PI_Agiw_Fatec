@@ -194,7 +194,7 @@ export function BankSelectorPage({ aoSelecionar }) {
                                  role="button"
                                  tabIndex={0}
                                  className="cartao-banco-remover"
-                                 title="Remover conta do MySQL"
+                                 title="Remover conta do SQL Server"
                                  onClick={(oEvento) => trataRemocao(oEvento, oConta.codConta)}
                                  onKeyDown={(oEvento) => {
                                     if (oEvento.key === 'Enter' || oEvento.key === ' ') {

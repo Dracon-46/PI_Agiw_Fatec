@@ -1,9 +1,9 @@
 // ============================================================================
-// carrega-extrato.mjs - Traz o extrato das instituições para o MySQL
+// carrega-extrato.mjs - Traz o extrato das instituições para o SQL Server
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
 // Percorre as contas cadastradas cuja integração está completa e grava o
-// extrato do período no MySQL, pelo mesmo caminho que a tela usa
+// extrato do período no SQL Server, pelo mesmo caminho que a tela usa
 // (lib/extratoBanco.js). Serve para deixar a base pronta antes de abrir o
 // módulo, em vez de esperar a primeira busca de cada conta.
 //
@@ -21,7 +21,7 @@ dotenv.config();
 
 const { listaContasCorrentes } = await import('../src/lib/repositories/contaRepository.js');
 const { leExtratoDaConta } = await import('../src/lib/extratoBanco.js');
-const { getPool } = await import('../src/lib/db.js');
+const { fechaConexao } = await import('../src/lib/db.js');
 
 /**
  * Período padrão de cada banco nos ambientes de teste.
@@ -101,7 +101,7 @@ async function main() {
       }
    }
 
-   console.log(`\n${iTotal} movimento(s) disponíveis no MySQL.`);
+   console.log(`\n${iTotal} movimento(s) disponíveis no SQL Server.`);
 } // main
 
 main()
@@ -110,5 +110,5 @@ main()
       process.exitCode = 1;
    })
    .finally(async () => {
-      await getPool().end();
+      await fechaConexao();
    });

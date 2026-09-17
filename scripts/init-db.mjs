@@ -1,310 +1,150 @@
 // ============================================================================
-// init-db.mjs - Aplica database/schema.sql no MySQL/MariaDB
+// init-db.mjs - Cria as tabelas novas do módulo no SQL Server
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// O schema usa CREATE TABLE IF NOT EXISTS, que não altera tabelas já criadas.
-// Por isso, depois de aplicá-lo, o script reconcilia as colunas acrescentadas
-// em versões posteriores — mantendo bases antigas em dia sem perder dados e
-// sem depender de "ADD COLUMN IF NOT EXISTS", que não existe no MySQL.
+// O módulo trabalha sobre as tabelas que o ERP JÁ TEM no BDAPRESENTACAO —
+// TBGENE015, TBGENE016, TBCONB001, TBCONB002, TBCONB006 e os catálogos. Nada
+// disso é criado ou alterado por aqui: são tabelas do ERP em produção.
+//
+// Este script aplica database/schema.sql, que cria APENAS as duas tabelas sem
+// equivalente no ERP, porque nascem da leitura do extrato por API (o ERP
+// importava arquivo):
+//
+//   TBCONB008  dias de extrato já consultados na instituição
+//   TBCONB009  trilha de auditoria do módulo
+//
+// O schema só cria o que falta, então rodar duas vezes não faz efeito.
+//
+// NUNCA use `prisma db push` nem `prisma migrate` no lugar deste script: o
+// prisma/schema.prisma descreve 21 tabelas de um banco com ~1300, e o Prisma
+// trataria as outras como sobra a ser removida.
 // ============================================================================
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
+const { prisma, fechaConexao } = await import('../src/lib/db.js');
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sSqlPath = path.join(__dirname, '..', 'database', 'schema.sql');
 
+/** Tabelas que o script cria, na ordem em que aparecem no schema */
+const TABELAS_DO_MODULO = ['TBCONB008', 'TBCONB009'];
+
 /**
- * Colunas introduzidas após a primeira versão do schema.
- * Cada entrada descreve a tabela, a coluna e sua definição completa.
+ * Tabelas do ERP que o módulo precisa encontrar prontas.
+ *
+ * A conferência é o primeiro passo: apontar o .env para um banco que não é o
+ * do ERP produziria erro só na primeira tela, e com mensagem obscura.
  */
-const COLUNAS_INCREMENTAIS = [
-   {
-      sTabela: 'lancamento_sistema',
-      sColuna: 'cod_transferencia',
-      sDefinicao: 'VARCHAR(80) NULL AFTER sta_conciliado',
-   },
-   {
-      sTabela: 'lancamento_sistema',
-      sColuna: 'tip_documento',
-      sDefinicao: 'VARCHAR(10) NULL AFTER tip_origem',
-   },
-   {
-      sTabela: 'lancamento_sistema',
-      sColuna: 'cod_subgrupo',
-      sDefinicao: 'VARCHAR(20) NULL AFTER tip_documento',
-   },
-   {
-      sTabela: 'lancamento_sistema',
-      sColuna: 'cod_conta_contabil',
-      sDefinicao: 'VARCHAR(20) NULL AFTER cod_subgrupo',
-   },
-   { sTabela: 'banco', sColuna: 'url_logo', sDefinicao: 'VARCHAR(300) NULL AFTER cor_texto' },
-   {
-      sTabela: 'movimento_banco',
-      sColuna: 'cod_lancamento_banco',
-      sDefinicao: 'VARCHAR(40) NULL AFTER num_documento',
-   },
-   {
-      sTabela: 'movimento_banco',
-      sColuna: 'des_historico',
-      sDefinicao: 'VARCHAR(500) NULL AFTER b_entrada',
-   },
-   {
-      sTabela: 'movimento_banco',
-      sColuna: 'num_documento',
-      sDefinicao: 'VARCHAR(40) NULL AFTER des_historico',
-   },
+const TABELAS_DO_ERP = [
+   'TBGENE015',
+   'TBGENE016',
+   'TBGENE009',
+   'TBGENE023',
+   'TBCOMP008',
+   'TBFLCX002',
+   'TBCONB001',
+   'TBCONB002',
+   'TBCONB006',
+   'TBSENH005',
+   'TBSENH006',
 ];
 
 /**
- * Colunas que deixaram de existir.
- *
- * O extrato do banco passou a ser gravado por inteiro, então movimento_banco
- * não distingue mais origem (tip_origem) nem esconde linha (b_excluido) — o
- * item 6.1.3.8 só permite excluir registro do ERP. E a baixa de título saiu do
- * módulo, levando junto cod_titulo.
+ * Indica se uma tabela existe no banco.
+ * @param {string} sTabela
+ * @returns {Promise<boolean>}
  */
-const COLUNAS_REMOVIDAS = [
-   { sTabela: 'movimento_banco', sColuna: 'tip_origem' },
-   { sTabela: 'movimento_banco', sColuna: 'b_excluido' },
-   { sTabela: 'movimento_banco', sColuna: 'dat_importacao' },
-   { sTabela: 'lancamento_sistema', sColuna: 'cod_titulo' },
-];
+async function existeTabela(sTabela) {
+   const aLinhas = await prisma.$queryRawUnsafe(`SELECT OBJECT_ID('dbo.${sTabela}', 'U') AS idObjeto`);
+   return aLinhas[0]?.idObjeto != null;
+} // existeTabela
 
 /**
- * Tabelas que saíram do modelo.
- *
- * titulo_aberto sustentava a ação "Baixar Título", removida do módulo;
- * arquivo_importado guardava o rastro da importação por arquivo, também
- * removida. O DROP apaga os dados dessas tabelas em definitivo.
+ * Confere se as tabelas do ERP estão no banco apontado pelo .env.
+ * @returns {Promise<string[]>} Tabelas ausentes
  */
-const TABELAS_REMOVIDAS = ['titulo_aberto', 'arquivo_importado'];
+async function conferaTabelasDoErp() {
+   const aAusentes = [];
 
-/**
- * Remove as tabelas que não fazem mais parte do modelo.
- * @param {import('mysql2/promise').Connection} oConn
- * @param {string} sBanco Nome do schema
- * @returns {Promise<number>} Quantidade de tabelas removidas
- */
-async function removeTabelasObsoletas(oConn, sBanco) {
-   let iRemovidas = 0;
-
-   for (const sTabela of TABELAS_REMOVIDAS) {
-      const [aLinhas] = await oConn.query(
-         `SELECT COUNT(*) AS total
-            FROM information_schema.tables
-           WHERE table_schema = ? AND table_name = ?`,
-         [sBanco, sTabela]
-      );
-
-      if (Number(aLinhas[0]?.total ?? 0) === 0) {
-         continue;
+   for (const sTabela of TABELAS_DO_ERP) {
+      if (!(await existeTabela(sTabela))) {
+         aAusentes.push(sTabela);
       }
-
-      await oConn.query(`DROP TABLE \`${sTabela}\``);
-      console.log(`  - tabela ${sTabela} removida`);
-      iRemovidas += 1;
    }
 
-   return iRemovidas;
-} // removeTabelasObsoletas
+   return aAusentes;
+} // conferaTabelasDoErp
 
 /**
- * Remove os movimentos gravados no modelo anterior.
+ * Aplica o schema, lote por lote.
  *
- * Antes, a origem API guardava só o ESTADO do movimento (data, valor, sentido e
- * se estava conciliado); histórico e documento ficavam nulos porque vinham da
- * instituição a cada consulta. Agora o extrato é copiado por inteiro.
+ * CREATE TABLE e CREATE INDEX precisam de lote próprio no T-SQL — mandar o
+ * arquivo inteiro em uma instrução faria o servidor recusar a partir do
+ * segundo comando. O separador é a linha "GO", como no sqlcmd.
  *
- * Como o cod_movimento passou a incluir o discriminador de ocorrência, a chave
- * antiga não casa com a nova: reconsultar o período INSERE em vez de atualizar,
- * e a grade mostra cada movimento duas vezes — um com histórico, outro sem.
- *
- * A limpeza remove apenas as linhas sem histórico que já têm equivalente
- * completo (mesma conta, data, valor e sentido), e transfere o status de
- * conciliação antes de apagar, para não desfazer conciliação já feita.
- *
- * @param {import('mysql2/promise').Connection} oConn
- * @returns {Promise<number>} Quantidade de linhas removidas
+ * @param {string} sSql Conteúdo de schema.sql
+ * @returns {Promise<number>} Quantidade de lotes aplicados
  */
-async function removeMovimentosDoModeloAntigo(oConn) {
-   // Preserva a conciliação: o registro novo herda o status do antigo
-   await oConn.query(
-      `UPDATE movimento_banco novo
-         INNER JOIN movimento_banco antigo
-            ON antigo.id_conta = novo.id_conta
-           AND antigo.dat_movimento = novo.dat_movimento
-           AND antigo.val_movimento = novo.val_movimento
-           AND antigo.b_entrada = novo.b_entrada
-           AND antigo.des_historico IS NULL
-           AND novo.des_historico IS NOT NULL
-          SET novo.sta_conciliado = 1
-        WHERE antigo.sta_conciliado = 1`
-   );
+async function aplicaSchema(sSql) {
+   const aLotes = sSql
+      .split(/^[ \t]*GO[ \t]*\r?$/im)
+      .map((sLote) => sLote.trim())
+      .filter((sLote) => sLote.length > 0);
 
-   const [oResultado] = await oConn.query(
-      `DELETE antigo
-         FROM movimento_banco antigo
-        INNER JOIN movimento_banco novo
-           ON novo.id_conta = antigo.id_conta
-          AND novo.dat_movimento = antigo.dat_movimento
-          AND novo.val_movimento = antigo.val_movimento
-          AND novo.b_entrada = antigo.b_entrada
-          AND novo.des_historico IS NOT NULL
-        WHERE antigo.des_historico IS NULL`
-   );
-
-   return oResultado.affectedRows ?? 0;
-} // removeMovimentosDoModeloAntigo
-
-/**
- * Marca como consultados os dias que já têm movimento gravado.
- *
- * extrato_dia nasceu depois de movimento_banco. Sem esta carga, uma base que
- * já tinha extrato ficaria com a tabela vazia e o sistema tentaria buscar na
- * instituição períodos que ele já possui — repetindo a chamada a cada abertura
- * de tela, e falhando em ambientes de homologação, que só respondem para
- * janelas específicas.
- *
- * A afirmação é segura no sentido usado: dia com movimento gravado é,
- * necessariamente, dia que já foi consultado. O contrário não vale — dia sem
- * movimento pode não ter sido consultado nunca —, então nada é inferido para
- * os dias vazios.
- *
- * @param {import('mysql2/promise').Connection} oConn
- * @returns {Promise<number>} Quantidade de dias marcados
- */
-async function preencheDiasConsultados(oConn) {
-   const [oResultado] = await oConn.query(
-      `INSERT IGNORE INTO extrato_dia (id_conta, dat_dia)
-       SELECT DISTINCT id_conta, dat_movimento
-         FROM movimento_banco`
-   );
-
-   return oResultado.affectedRows ?? 0;
-} // preencheDiasConsultados
-
-/**
- * Remove as colunas que não fazem mais parte do modelo.
- * @param {import('mysql2/promise').Connection} oConn
- * @param {string} sBanco Nome do schema
- * @returns {Promise<number>} Quantidade de colunas removidas
- */
-async function removeColunasObsoletas(oConn, sBanco) {
-   let iRemovidas = 0;
-
-   for (const oColuna of COLUNAS_REMOVIDAS) {
-      const [aLinhas] = await oConn.query(
-         `SELECT COUNT(*) AS total
-            FROM information_schema.columns
-           WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
-         [sBanco, oColuna.sTabela, oColuna.sColuna]
-      );
-
-      if (Number(aLinhas[0]?.total ?? 0) === 0) {
-         continue;
-      }
-
-      await oConn.query(
-         `ALTER TABLE \`${oColuna.sTabela}\` DROP COLUMN \`${oColuna.sColuna}\``
-      );
-      console.log(`  - ${oColuna.sTabela}.${oColuna.sColuna}`);
-      iRemovidas += 1;
+   let iAplicados = 0;
+   for (const sLote of aLotes) {
+      await prisma.$executeRawUnsafe(sLote);
+      iAplicados += 1;
    }
 
-   return iRemovidas;
-} // removeColunasObsoletas
-
-/**
- * Acrescenta as colunas que ainda não existem na base.
- * @param {import('mysql2/promise').Connection} oConn
- * @param {string} sBanco Nome do schema
- * @returns {Promise<number>} Quantidade de colunas criadas
- */
-async function reconciliaColunas(oConn, sBanco) {
-   let iCriadas = 0;
-
-   for (const oColuna of COLUNAS_INCREMENTAIS) {
-      const [aLinhas] = await oConn.query(
-         `SELECT COUNT(*) AS total
-            FROM information_schema.columns
-           WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
-         [sBanco, oColuna.sTabela, oColuna.sColuna]
-      );
-
-      if (Number(aLinhas[0]?.total ?? 0) > 0) {
-         continue;
-      }
-
-      await oConn.query(
-         `ALTER TABLE \`${oColuna.sTabela}\` ADD COLUMN \`${oColuna.sColuna}\` ${oColuna.sDefinicao}`
-      );
-      console.log(`  + ${oColuna.sTabela}.${oColuna.sColuna}`);
-      iCriadas += 1;
-   }
-
-   return iCriadas;
-} // reconciliaColunas
+   return iAplicados;
+} // aplicaSchema
 
 async function main() {
-   const sBanco = process.env.MYSQL_DATABASE || 'conciliacao_agiw';
+   const sBanco = process.env.DB_NAME || 'BDAPRESENTACAO';
    const sSql = fs.readFileSync(sSqlPath, 'utf8');
 
-   const oConn = await mysql.createConnection({
-      host: process.env.MYSQL_HOST || '127.0.0.1',
-      port: Number(process.env.MYSQL_PORT || 3306),
-      user: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || '',
-      multipleStatements: true,
-   });
-
    try {
-      // As colunas novas entram ANTES do schema: o schema.sql traz INSERTs que
-      // já citam essas colunas, e em uma base antiga o CREATE TABLE IF NOT
-      // EXISTS não as acrescenta — o INSERT falharia com "Unknown column".
-      // Em base nova as tabelas ainda não existem e a reconciliação não faz
-      // nada, porque consulta o information_schema antes de alterar.
-      await oConn.query(`CREATE DATABASE IF NOT EXISTS \`${sBanco}\``);
-      await oConn.query(`USE \`${sBanco}\``);
-      console.log('Conferindo colunas de bases existentes...');
-      const iPreCriadas = await reconciliaColunas(oConn, sBanco);
+      const aBanco = await prisma.$queryRaw`SELECT DB_NAME() AS nomBanco, SCHEMA_NAME() AS nomSchema`;
+      console.log(`Conectado em ${aBanco[0]?.nomBanco} (schema padrão ${aBanco[0]?.nomSchema}).`);
 
-      await oConn.query(sSql);
-      console.log('Schema aplicado com sucesso em', sBanco);
+      console.log('\nConferindo as tabelas do ERP...');
+      const aAusentes = await conferaTabelasDoErp();
+      if (aAusentes.length > 0) {
+         throw new Error(
+            `As tabelas ${aAusentes.join(', ')} não existem em ${sBanco}. ` +
+               'Confira DB_NAME no .env: o módulo trabalha dentro do banco do ERP.'
+         );
+      }
+      console.log(`  ${TABELAS_DO_ERP.length} tabela(s) do ERP encontrada(s).`);
 
-      await oConn.query(`USE \`${sBanco}\``);
-      console.log('Conferindo colunas incrementais...');
-      const iCriadas = iPreCriadas + (await reconciliaColunas(oConn, sBanco));
-      const iRemovidas = await removeColunasObsoletas(oConn, sBanco);
-      console.log(
-         iCriadas === 0 && iRemovidas === 0
-            ? '  nenhuma coluna pendente.'
-            : `  ${iCriadas} coluna(s) acrescentada(s), ${iRemovidas} removida(s).`
-      );
+      console.log('\nCriando as tabelas do módulo...');
+      const aAntes = [];
+      for (const sTabela of TABELAS_DO_MODULO) {
+         if (await existeTabela(sTabela)) {
+            aAntes.push(sTabela);
+         }
+      }
 
-      console.log('Conferindo tabelas obsoletas...');
-      const iTabelas = await removeTabelasObsoletas(oConn, sBanco);
-      console.log(iTabelas === 0 ? '  nenhuma tabela pendente.' : `  ${iTabelas} tabela(s) removida(s).`);
+      const iLotes = await aplicaSchema(sSql);
 
-      console.log('Limpando movimentos do modelo anterior...');
-      const iAntigos = await removeMovimentosDoModeloAntigo(oConn);
-      console.log(iAntigos === 0 ? '  nada a limpar.' : `  ${iAntigos} duplicata(s) removida(s).`);
-
-      console.log('Marcando dias já cobertos pelo extrato gravado...');
-      const iDias = await preencheDiasConsultados(oConn);
-      console.log(iDias === 0 ? '  nada a marcar.' : `  ${iDias} dia(s) marcado(s) como consultado(s).`);
+      for (const sTabela of TABELAS_DO_MODULO) {
+         console.log(`  ${sTabela}: ${aAntes.includes(sTabela) ? 'já existia' : 'criada'}`);
+      }
+      console.log(`\nSchema aplicado em ${sBanco} (${iLotes} lote(s)).`);
    } finally {
-      await oConn.end();
+      await fechaConexao();
    }
-}
+} // main
 
-main().catch((oErro) => {
+main().catch(async (oErro) => {
    console.error('Falha ao aplicar schema:', oErro.message);
+   await fechaConexao().catch(() => {});
    process.exit(1);
 });

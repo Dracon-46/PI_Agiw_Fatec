@@ -1,10 +1,10 @@
 'use client';
 // ============================================================================
-// CadastroContaModal.jsx - Cadastro e edição de banco/agência/conta (MySQL)
+// CadastroContaModal.jsx - Cadastro e edição de banco/agência/conta (SQL Server)
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
 // A mesma caixa atende as duas operações: sem oContaEdicao ela cadastra, com
-// ela altera. O catálogo de bancos vem do MySQL (tabela banco / TBGENE015) —
+// ela altera. O catálogo de bancos vem do SQL Server (tabela banco / TBGENE015) —
 // antes estava fixo em utils/mockData.js, o que impedia o cliente de manter os
 // próprios bancos.
 // ============================================================================
@@ -164,7 +164,7 @@ export function CadastroContaModal({ aberto, oContaEdicao = null, aoFechar, aoGr
          }
       >
          <p style={{ marginBottom: 14, fontSize: 12, color: 'var(--cor-texto-secundario)' }}>
-            Os dados são gravados no MySQL (<code>conta_corrente</code>). Credenciais da API
+            Os dados são gravados no SQL Server (<code>conta_corrente</code>). Credenciais da API
             (client id/secret/certificado) ficam no <code>.env</code> do servidor — não no navegador.
             Para Bradesco, use agência e conta só com dígitos (ex.: agência 3750, conta 75557) e um
             período em que a conta tenha movimento real.

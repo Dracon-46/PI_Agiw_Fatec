@@ -3,7 +3,7 @@
 // BankContext.jsx - Contexto da conta corrente em conciliação
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// Contas vêm do MySQL via API. Apenas a seleção atual fica no localStorage.
+// Contas vêm do SQL Server via API. Apenas a seleção atual fica no localStorage.
 // ============================================================================
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -114,7 +114,7 @@ export function BankContextProvider({ children }) {
    }, []);
 
    /**
-    * Cadastra conta no MySQL.
+    * Cadastra conta no SQL Server.
     * @param {object} oDados
     * @returns {Promise<{ ok: boolean, erro?: string, conta?: object }>}
     */

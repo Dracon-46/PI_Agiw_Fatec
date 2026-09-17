@@ -670,13 +670,17 @@ export function useConciliacao(oConta, notifica) {
          return '';
       }
 
+      // A mensagem cita o DOCUMENTO, não a chave: no ERP a chave do lançamento
+      // é composta (documento + série + emitente + desdobro…) e o código que
+      // a tela usa para marcar a linha é essa chave inteira — ilegível em um
+      // aviso. O número do documento é o que o usuário reconhece na grade.
       const aBloqueados = [
          ...aLancSelecionados
             .filter((oItem) => estaBloqueada(oItem.datMovimento))
-            .map((oItem) => `${oItem.codLancamento} (${oItem.datMovimento})`),
+            .map((oItem) => `${oItem.numDocumento || oItem.codLancamento} (${oItem.datMovimento})`),
          ...aMovSelecionados
             .filter((oItem) => estaBloqueada(oItem.datMovimento))
-            .map((oItem) => `${oItem.codMovimento} (${oItem.datMovimento})`),
+            .map((oItem) => `${oItem.numDocumento || oItem.codMovimento} (${oItem.datMovimento})`),
       ];
 
       if (aBloqueados.length === 0) {

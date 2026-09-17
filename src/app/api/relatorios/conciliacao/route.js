@@ -122,8 +122,8 @@ export async function GET(oRequisicao) {
          return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
       }
 
-      const aLancamentos = await listaLancamentosPeriodo(oConta.idConta, sDataInicio, sDataFim);
-      const nSaldoAnterior = await calculaSaldoAnterior(oConta.idConta, sDataInicio);
+      const aLancamentos = await listaLancamentosPeriodo(oConta, sDataInicio, sDataFim);
+      const nSaldoAnterior = await calculaSaldoAnterior(oConta, sDataInicio);
 
       // O item 6.2 manda imprimir "os registros exibidos nas grades": o
       // relatório lê o extrato pelo mesmo caminho da tela — API da
@@ -159,7 +159,7 @@ export async function GET(oRequisicao) {
       };
 
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: ACAO_EXPORTACAO,
          desEntidade: 'relatorio',
          codEntidade: `${sFormato.toUpperCase()}/${sEscopo}`,

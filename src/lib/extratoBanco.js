@@ -6,14 +6,15 @@
 // do mesmo extrato — o relatório imprime "os registros exibidos nas grades".
 // Ter duas leituras diferentes faria o papel divergir da tela.
 //
-// O extrato é GRAVADO no MySQL na primeira leitura e, a partir daí, servido de
-// lá. A instituição só é consultada para os dias que ainda não temos:
+// O extrato é GRAVADO no extrato do ERP (TBCONB006) na primeira leitura e, a
+// partir daí, servido de lá. A instituição só é consultada para os dias que
+// ainda não temos:
 //
 //   1. o período pedido é quebrado em dias;
-//   2. extrato_dia diz quais já foram consultados;
+//   2. TBCONB008 diz quais já foram consultados;
 //   3. os que faltam viram faixas contíguas e vão à API, uma faixa por vez;
 //   4. o que volta é gravado e os dias são marcados como cobertos;
-//   5. a grade é montada lendo o MySQL — sempre, inclusive no caminho novo.
+//   5. a grade é montada lendo o ERP — sempre, inclusive no caminho novo.
 //
 // Duas razões para isso, e nenhuma é desempenho apenas: as APIs têm janela
 // limitada (o BB não devolve nada além de 5 anos), então sem cópia local a
@@ -25,7 +26,6 @@ import { BankProviderFactory } from '../providers/BankProviderFactory.js';
 import {
    gravaMovimentos,
    listaDiasConsultados,
-   listaMovimentosConta,
    listaMovimentosPeriodo,
    marcaDiasConsultados,
 } from './repositories/movimentoRepository.js';
@@ -53,16 +53,18 @@ export const MAX_DIAS_POR_CHAMADA = 31;
 export const MAX_FAIXAS_POR_BUSCA = 8;
 
 /**
- * Indica se o extrato deve ser recortado pelo período informado.
+ * Indica se o que a API devolve fora do período pedido deve ser descartado.
  *
- * Ligado é o comportamento do item 6.1.3.3 e o correto em produção. Em
- * homologação o recorte atrapalha: o sandbox do Bradesco só ACEITA a janela
- * 06/11/2024-20/11/2024 na consulta, mas RESPONDE sempre out/2024 a jan/2025 —
- * recortar deixaria um único movimento na grade.
+ * Ligado é o correto em produção: dia que não foi consultado não pode ser
+ * marcado como coberto. Em homologação o descarte atrapalha — o sandbox do
+ * Bradesco só ACEITA a janela 06/11/2024-20/11/2024 na consulta, mas RESPONDE
+ * sempre out/2024 a jan/2025, e com o recorte ligado quase nada é gravado.
  *
- * Com o extrato gravado, a chave age em dois lugares: o que a API devolve fora
- * da faixa é gravado do mesmo jeito (é dado real do banco) e a grade passa a
- * mostrar o extrato inteiro da conta, sem recorte.
+ * A chave age SÓ na gravação. A GRADE é sempre recortada pelo período (item
+ * 6.1.3.3), e isso não é configurável: as tabelas do ERP têm o histórico
+ * inteiro da conta — a do Itaú tem movimento desde 2010 —, e mandar isso para
+ * o navegador travaria a tela. O teto de 60 dias do período existe justamente
+ * para manter a grade em um tamanho que se possa conferir.
  *
  * @returns {boolean}
  */
@@ -71,43 +73,47 @@ export function recortaPorPeriodo() {
 } // recortaPorPeriodo
 
 /**
- * Monta o código determinístico de um movimento.
+ * Monta o FITID determinístico de um movimento.
  *
- * Data, documento, sentido e valor identificam a linha do extrato: a mesma
- * linha gera sempre o mesmo código, e é por ele que reconsultar um período já
- * gravado atualiza o registro em vez de duplicá-lo.
+ * FITID é o campo de OFX para "identificador único da transação no banco", e é
+ * nele que TBCONB006 guarda a identidade da linha do extrato: a mesma linha
+ * gera sempre o mesmo FITID, e é por ele que reconsultar um período já gravado
+ * ATUALIZA o registro em vez de duplicá-lo. A chave primária da tabela é uma
+ * sequência (NUMSEQMOVTO), que não serviria para isso.
+ *
+ * A coluna é VARCHAR(50), então cada parte tem tamanho máximo — o código não
+ * pode ser truncado no meio, sob pena de dois movimentos distintos virarem o
+ * mesmo FITID e um sobrescrever o outro. A conta fica FORA do código: ela já
+ * está na chave da tabela.
  *
  * O "codigoLancamento" do Bradesco NÃO serve sozinho: ele identifica o TIPO da
  * transação (ex.: 03584 = rendimento) e se repete entre movimentos distintos.
  *
  * @param {object} oMovimento
- * @param {string} sCodConta
  * @param {number} iIndice
  * @param {boolean} bEntrada
  * @param {number} nValor
- * @returns {string}
+ * @returns {string} No máximo 50 posições
  */
-function montaCodigoMovimento(oMovimento, sCodConta, iIndice, bEntrada, nValor) {
-   return [
-      'API',
-      sCodConta,
-      String(oMovimento.datMovimento ?? '').replace(/\D/g, ''),
-      oMovimento.numDocumento || String(iIndice),
-      bEntrada ? 'E' : 'S',
-      String(Math.round(nValor * 100)),
-      oMovimento.codigoLancamento || '',
-      // Discriminador da ocorrência. Sem ele, dois movimentos de mesmo dia,
-      // documento, sentido e valor produzem a mesma chave e um sobrescreve o
-      // outro na gravação — perda silenciosa de movimento. Acontece de
-      // verdade: o Itaú devolve liquidações repetidas do mesmo título.
-      // Quando o banco fornece identificador próprio de transação (o BB o faz
-      // na v2), é ele que entra; senão, a posição na resposta.
-      oMovimento.idTransacao || String(iIndice),
-   ].join('-');
-} // montaCodigoMovimento
+function montaFitid(oMovimento, iIndice, bEntrada, nValor) {
+   const sData = String(oMovimento.datMovimento ?? '').replace(/\D/g, '').slice(0, 8);
+   const sValor = String(Math.round(nValor * 100)).slice(-12);
+   const sDocumento = String(oMovimento.numDocumento || iIndice).slice(-8);
+   const sTipo = String(oMovimento.codigoLancamento || '').slice(-6);
+
+   // Discriminador da ocorrência. Sem ele, dois movimentos de mesmo dia,
+   // documento, sentido e valor produzem a mesma chave e um sobrescreve o
+   // outro na gravação — perda silenciosa de movimento. Acontece de verdade:
+   // o Itaú devolve liquidações repetidas do mesmo título. Quando o banco
+   // fornece identificador próprio de transação (o BB o faz na v2), é ele que
+   // entra; senão, a posição na resposta.
+   const sOcorrencia = String(oMovimento.idTransacao || iIndice).slice(-8);
+
+   return `${sData}${bEntrada ? 'E' : 'S'}${sValor}-${sDocumento}-${sTipo}-${sOcorrencia}`;
+} // montaFitid
 
 /**
- * Normaliza os movimentos do provider para o formato da tela.
+ * Normaliza os movimentos do provider para o formato da gravação.
  * @param {Array<object>} aBrutos
  * @param {string} sCodConta
  * @returns {Array<object>}
@@ -120,7 +126,7 @@ export function normalizaMovimentosDoProvider(aBrutos, sCodConta) {
       const nValor = bEntrada ? nEntrada : nSaida;
 
       return {
-         codMovimento: montaCodigoMovimento(oMovimento, sCodConta, iIndice, bEntrada, nValor),
+         codFitid: montaFitid(oMovimento, iIndice, bEntrada, nValor),
          codConta: sCodConta,
          datMovimento: oMovimento.datMovimento ?? '',
          desHistorico: oMovimento.desHistorico ?? 'Movimento bancário',
@@ -262,6 +268,29 @@ export function recortaPeriodo(aMovimentos, sDataInicio, sDataFim) {
 } // recortaPeriodo
 
 /**
+ * Conta quantos movimentos cada dia trouxe.
+ *
+ * Vai para TBCONB008.QTDMOVTO: dia consultado com zero movimento é resposta
+ * legítima da instituição, e registrar a quantidade deixa isso explícito para
+ * quem for conferir a cobertura do extrato depois.
+ *
+ * @param {Array<object>} aMovimentos Movimentos já recortados pelo período
+ * @returns {Record<string, number>} Quantidade por dia, em AAAA-MM-DD
+ */
+function contaMovimentosPorDia(aMovimentos) {
+   const oQtd = {};
+
+   for (const oMovimento of aMovimentos) {
+      const sDia = paraIso(oMovimento.datMovimento);
+      if (sDia) {
+         oQtd[sDia] = (oQtd[sDia] ?? 0) + 1;
+      }
+   }
+
+   return oQtd;
+} // contaMovimentosPorDia
+
+/**
  * Busca na instituição as faixas de dias que ainda não temos e grava o
  * resultado.
  *
@@ -289,13 +318,14 @@ async function buscaEGrava(oProvider, oConta, aFaixas) {
          const aNormalizados = normalizaMovimentosDoProvider(aBrutos, oConta.codConta);
          const { aDentro, iFora } = recortaPeriodo(aNormalizados, sInicioBr, sFimBr);
 
-         iGravados += await gravaMovimentos(oConta.idConta, aDentro);
+         iGravados += await gravaMovimentos(oConta, aDentro);
 
          // Só marca os dias depois de gravar: falha no meio deixa o dia
          // pendente e a próxima busca refaz a consulta
          await marcaDiasConsultados(
-            oConta.idConta,
-            listaDiasDoPeriodo(sInicioBr, sFimBr)
+            oConta,
+            listaDiasDoPeriodo(sInicioBr, sFimBr),
+            contaMovimentosPorDia(aDentro)
          );
 
          if (iFora > 0) {
@@ -333,11 +363,11 @@ async function buscaEGrava(oProvider, oConta, aFaixas) {
  * Lê o extrato de uma conta no período, consultando a instituição apenas para
  * os dias que ainda não estão gravados.
  *
- * Nunca lança por falha da instituição: o que já está no MySQL continua
+ * Nunca lança por falha da instituição: o que já está gravado no ERP continua
  * disponível para conciliar mesmo com a API fora do ar. O motivo volta em
  * `sAviso` para a tela mostrar.
  *
- * @param {object} oConta Conta corrente já carregada do MySQL
+ * @param {object} oConta Conta corrente já carregada do ERP
  * @param {string} sDataInicio DD/MM/AAAA
  * @param {string} sDataFim DD/MM/AAAA
  * @param {object} [oOpcoes]
@@ -368,7 +398,7 @@ export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = 
    // ---------- 1. o que ainda falta buscar ----------
    const oJaConsultados = oOpcoes.bForcaApi
       ? new Set()
-      : await listaDiasConsultados(oConta.idConta, sDataInicio, sDataFim);
+      : await listaDiasConsultados(oConta, sDataInicio, sDataFim);
 
    const aDiasFaltantes = aDiasPeriodo.filter((sDia) => !oJaConsultados.has(sDia));
 
@@ -412,12 +442,10 @@ export async function leExtratoDaConta(oConta, sDataInicio, sDataFim, oOpcoes = 
       }
    }
 
-   // ---------- 3. a grade sai sempre do MySQL ----------
-   // Sem recorte, a grade traz o extrato inteiro da conta — é o que mantém as
-   // duas grades simétricas quando o ambiente ignora as datas enviadas.
-   const aMovimentos = recortaPorPeriodo()
-      ? await listaMovimentosPeriodo(oConta.idConta, sDataInicio, sDataFim)
-      : await listaMovimentosConta(oConta.idConta);
+   // ---------- 3. a grade sai sempre do ERP, recortada pelo período ----------
+   // O recorte aqui NÃO é configurável: TBCONB006 guarda o extrato desde que a
+   // conta existe, e a grade tem de caber na tela e na conferência.
+   const aMovimentos = await listaMovimentosPeriodo(oConta, sDataInicio, sDataFim);
 
    return {
       aMovimentos,

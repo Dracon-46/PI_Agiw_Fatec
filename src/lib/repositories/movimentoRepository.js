@@ -1,109 +1,137 @@
 // ============================================================================
-// movimentoRepository.js - Extrato bancário gravado no MySQL
+// movimentoRepository.js - Extrato bancário no ERP (TBCONB006 e TBCONB008)
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// O extrato da instituição é COPIADO para cá. A grade "Movimentos no Banco" lê
-// desta tabela, não da API: a consulta externa acontece uma única vez por dia
-// de extrato, e a partir daí o dado é nosso.
+// A grade "Movimentos no Banco" é TBCONB006, a tabela que o ERP já usava para
+// o extrato importado por arquivo (NOMEARQUIVO guarda o nome do .txt ou .ofx).
+// O que este módulo acrescenta é a origem: o extrato passa a vir da API da
+// instituição, e é gravado na MESMA tabela — quem concilia pelo Satis e quem
+// concilia por aqui olham o mesmo extrato.
 //
-// Isso resolve dois problemas do desenho anterior, em que a grade era sempre o
-// retorno vivo da API:
-//   - as APIs têm janela limitada (o BB devolve no máximo 5 anos, o Itaú
-//     consulta um dia por vez). Movimento de 2022 simplesmente deixaria de ser
-//     consultável, e a conciliação de períodos antigos ficaria impossível;
-//   - cada abertura de tela repetia as mesmas chamadas ao banco, sem
-//     necessidade e contando contra os limites de uso do gateway.
+// Quatro decisões vêm disso:
 //
-// Quem sabe o que já foi consultado é a tabela extrato_dia: ela guarda um
-// registro por DIA coberto. Sem ela não haveria como distinguir "dia sem
-// movimento" de "dia nunca consultado" — os dois chegariam como lista vazia.
+//   - a chave de TBCONB006 é (empresa, banco, agência, NUMSEQMOVTO, conta), e
+//     NUMSEQMOVTO é uma sequência de 12 dígitos por conta. Como sequência não
+//     identifica a LINHA do extrato, reconsultar um período gravaria tudo de
+//     novo. Quem impede isso é o FITID: é o campo de OFX para "id único da
+//     transação no banco", e é nele que gravamos o código determinístico do
+//     movimento. Mesma linha do extrato, mesmo FITID, logo UPDATE em vez de
+//     INSERT;
+//   - HISTMOVTO é CHAR(60) e o histórico das APIs passa disso. O texto
+//     completo vai para MEMO (VARCHAR 256), que é a coluna de OFX para isso,
+//     e HISTMOVTOEXIBE guarda o que a grade mostra;
+//   - a conciliação é marcada em STAMOVTO + NUMSEQCONC, exatamente como em
+//     TBCONB001. É o mesmo NUMSEQCONC nos dois lados que forma o grupo;
+//   - os dias já consultados na API ficam em TBCONB008, tabela nova. Sem ela
+//     não haveria como distinguir "dia sem movimento" de "dia nunca
+//     consultado" — os dois chegam da API como lista vazia.
 //
-// A chave do movimento é o cod_movimento determinístico montado em
-// extratoBanco.js: a mesma linha do extrato produz sempre o mesmo código, então
-// reconsultar um período já gravado atualiza em vez de duplicar.
+// NÃO há exclusão de movimento: o item 6.1.3.8 permite excluir apenas
+// registros do ERP. Extrato do banco é fato consumado e não se apaga.
 // ============================================================================
 
-import { dataBrParaMysql, dataMysqlParaBr, query } from '../db.js';
+import {
+   codEmp,
+   dataBrParaData,
+   dataIsoParaData,
+   dataSqlParaBr,
+   dataSqlParaIso,
+   limpa,
+   prisma,
+} from '../db.js';
+import { filtroContaMovimento } from './contaRepository.js';
+import { STATUS_CONCILIADO } from './lancamentoRepository.js';
+
+/** Identificação da origem gravada em TBCONB006.NOMEARQUIVO */
+const ORIGEM_ARQUIVO = 'API';
+
+/** Colunas lidas nas consultas da grade do banco */
+const SELECAO_MOVIMENTO = {
+   CODEMP: true,
+   CODBANCO: true,
+   CODAGENCIA: true,
+   CODCTACORRENTE: true,
+   NUMSEQMOVTO: true,
+   DATMOVTO: true,
+   HISTMOVTO: true,
+   HISTMOVTOEXIBE: true,
+   MEMO: true,
+   DOCUMENTO: true,
+   VALMOVTO: true,
+   TIPOMOVTO: true,
+   STAMOVTO: true,
+   NUMSEQCONC: true,
+   TRNTYPE: true,
+   FITID: true,
+   DATIMPORTACAO: true,
+   NOMEARQUIVO: true,
+};
+
+/**
+ * Converte a linha do ERP no objeto que a grade consome.
+ * @param {object} oLinha Linha de TBCONB006
+ * @returns {object}
+ */
+function mapeiaMovimento(oLinha) {
+   return {
+      codMovimento: limpa(oLinha.NUMSEQMOVTO),
+      codConta: '',
+      datMovimento: dataSqlParaBr(oLinha.DATMOVTO),
+      // HISTMOVTOEXIBE é o texto para a tela; MEMO tem o histórico completo da
+      // API, e HISTMOVTO é o de 60 posições que o ERP mostra nos relatórios.
+      desHistorico: limpa(oLinha.HISTMOVTOEXIBE) || limpa(oLinha.MEMO) || limpa(oLinha.HISTMOVTO),
+      numDocumento: limpa(oLinha.DOCUMENTO),
+      valMovimento: Math.abs(Number(oLinha.VALMOVTO ?? 0)),
+      bEntrada: limpa(oLinha.TIPOMOVTO) === 'E',
+      staConciliado: STATUS_CONCILIADO.includes(limpa(oLinha.STAMOVTO)),
+      numSeqConc: limpa(oLinha.NUMSEQCONC),
+      codigoLancamento: limpa(oLinha.TRNTYPE),
+   };
+} // mapeiaMovimento
 
 /**
  * Lista os movimentos do extrato bancário no período.
- * @param {number} iIdConta
+ * @param {object} oConta Conta corrente carregada do ERP
  * @param {string} sDataInicioBr
  * @param {string} sDataFimBr
  * @returns {Promise<Array<object>>}
  */
-export async function listaMovimentosPeriodo(iIdConta, sDataInicioBr, sDataFimBr) {
-   const aLinhas = await query(
-      `SELECT m.cod_movimento AS codMovimento,
-              c.cod_conta AS codConta,
-              m.dat_movimento AS datMovimento,
-              m.des_historico AS desHistorico,
-              m.num_documento AS numDocumento,
-              m.val_movimento AS valMovimento,
-              m.b_entrada AS bEntrada,
-              m.sta_conciliado AS staConciliado,
-              m.cod_lancamento_banco AS codigoLancamento
-         FROM movimento_banco m
-         INNER JOIN conta_corrente c ON c.id_conta = m.id_conta
-        WHERE m.id_conta = :idConta
-          AND m.dat_movimento BETWEEN :dataInicio AND :dataFim
-     ORDER BY m.dat_movimento, m.id_movimento`,
-      {
-         idConta: iIdConta,
-         dataInicio: dataBrParaMysql(sDataInicioBr),
-         dataFim: dataBrParaMysql(sDataFimBr),
-      }
-   );
+export async function listaMovimentosPeriodo(oConta, sDataInicioBr, sDataFimBr) {
+   const aLinhas = await prisma.TBCONB006.findMany({
+      where: {
+         ...filtroContaMovimento(oConta, 'CODCTACORRENTE'),
+         DATMOVTO: {
+            gte: dataBrParaData(sDataInicioBr),
+            lte: dataBrParaData(sDataFimBr),
+         },
+      },
+      select: SELECAO_MOVIMENTO,
+      orderBy: [{ DATMOVTO: 'asc' }, { NUMSEQMOVTO: 'asc' }],
+   });
 
-   return aLinhas.map((oLinha) => ({
-      ...oLinha,
-      valMovimento: Number(oLinha.valMovimento),
-      bEntrada: Boolean(oLinha.bEntrada),
-      staConciliado: Boolean(oLinha.staConciliado),
-      datMovimento: dataMysqlParaBr(oLinha.datMovimento),
-      desHistorico: oLinha.desHistorico ?? '',
-      numDocumento: oLinha.numDocumento ?? '',
-   }));
+   return aLinhas.map((oLinha) => ({ ...mapeiaMovimento(oLinha), codConta: oConta.codConta }));
 } // listaMovimentosPeriodo
 
 /**
- * Lista TODOS os movimentos da conta, sem recortar por período.
+ * Descobre a última sequência de movimento usada na conta.
  *
- * Mantém a grade do banco simétrica à do sistema quando o recorte está
- * desligado (BANK_FILTRA_PERIODO=false): ambientes de homologação ignoram as
- * datas enviadas, e recortar deixaria quase nada na tela.
+ * NUMSEQMOVTO é CHAR(12) com zeros à esquerda, então a ordenação alfabética
+ * coincide com a numérica e MAX() serve.
  *
- * @param {number} iIdConta
- * @returns {Promise<Array<object>>}
+ * @param {object} oConta
+ * @returns {Promise<number>}
  */
-export async function listaMovimentosConta(iIdConta) {
-   const aLinhas = await query(
-      `SELECT m.cod_movimento AS codMovimento,
-              c.cod_conta AS codConta,
-              m.dat_movimento AS datMovimento,
-              m.des_historico AS desHistorico,
-              m.num_documento AS numDocumento,
-              m.val_movimento AS valMovimento,
-              m.b_entrada AS bEntrada,
-              m.sta_conciliado AS staConciliado,
-              m.cod_lancamento_banco AS codigoLancamento
-         FROM movimento_banco m
-         INNER JOIN conta_corrente c ON c.id_conta = m.id_conta
-        WHERE m.id_conta = :idConta
-     ORDER BY m.dat_movimento, m.id_movimento`,
-      { idConta: iIdConta }
-   );
+async function ultimaSequenciaMovimento(oConta) {
+   const aLinhas = await prisma.$queryRaw`
+      SELECT MAX(NUMSEQMOVTO) AS numUltimo
+        FROM dbo.TBCONB006
+       WHERE CODEMP = ${oConta.codEmp || codEmp()}
+         AND CODBANCO = ${oConta.codBancoErp}
+         AND CODAGENCIA = ${oConta.codAgencia}
+         AND CODCTACORRENTE = ${oConta.numContaCorrente}`;
 
-   return aLinhas.map((oLinha) => ({
-      ...oLinha,
-      valMovimento: Number(oLinha.valMovimento),
-      bEntrada: Boolean(oLinha.bEntrada),
-      staConciliado: Boolean(oLinha.staConciliado),
-      datMovimento: dataMysqlParaBr(oLinha.datMovimento),
-      desHistorico: oLinha.desHistorico ?? '',
-      numDocumento: oLinha.numDocumento ?? '',
-   }));
-} // listaMovimentosConta
+   return Number(limpa(aLinhas[0]?.numUltimo)) || 0;
+} // ultimaSequenciaMovimento
 
 /**
  * Grava os movimentos lidos da instituição.
@@ -111,48 +139,77 @@ export async function listaMovimentosConta(iIdConta) {
  * O status de conciliação NÃO é tocado no update: ele é nosso, não do banco.
  * Reconsultar um período já conciliado não pode desfazer a conciliação.
  *
- * @param {number} iIdConta
+ * A identidade da linha é o FITID (o código determinístico montado em
+ * extratoBanco.js): já existe, atualiza; não existe, insere com a próxima
+ * sequência. A sequência é calculada UMA vez e incrementada na memória —
+ * consultar o MAX a cada movimento transformaria um extrato de 200 linhas em
+ * 200 idas ao banco.
+ *
+ * @param {object} oConta
  * @param {Array<object>} aMovimentos Movimentos já normalizados
  * @returns {Promise<number>} Quantidade gravada
  */
-export async function gravaMovimentos(iIdConta, aMovimentos) {
+export async function gravaMovimentos(oConta, aMovimentos) {
    if (!Array.isArray(aMovimentos) || aMovimentos.length === 0) {
       return 0;
    }
 
+   const oFiltroConta = filtroContaMovimento(oConta, 'CODCTACORRENTE');
+   let iSequencia = await ultimaSequenciaMovimento(oConta);
    let iGravados = 0;
 
    for (const oMovimento of aMovimentos) {
-      const sDatMovimento = dataBrParaMysql(oMovimento.datMovimento);
-      if (!sDatMovimento) {
+      const dtMovimento = dataBrParaData(oMovimento.datMovimento);
+      if (!dtMovimento) {
          continue;
       }
 
-      await query(
-         `INSERT INTO movimento_banco
-            (id_conta, cod_movimento, dat_movimento, des_historico, num_documento,
-             val_movimento, b_entrada, cod_lancamento_banco)
-          VALUES
-            (:idConta, :codMovimento, :datMovimento, :desHistorico, :numDocumento,
-             :valMovimento, :bEntrada, :codigoLancamento)
-          ON DUPLICATE KEY UPDATE
-            dat_movimento = VALUES(dat_movimento),
-            des_historico = VALUES(des_historico),
-            num_documento = VALUES(num_documento),
-            val_movimento = VALUES(val_movimento),
-            b_entrada = VALUES(b_entrada),
-            cod_lancamento_banco = VALUES(cod_lancamento_banco)`,
-         {
-            idConta: iIdConta,
-            codMovimento: oMovimento.codMovimento,
-            datMovimento: sDatMovimento,
-            desHistorico: (oMovimento.desHistorico ?? '').slice(0, 500),
-            numDocumento: (oMovimento.numDocumento ?? '').slice(0, 40),
-            valMovimento: Math.abs(Number(oMovimento.valMovimento) || 0),
-            bEntrada: oMovimento.bEntrada ? 1 : 0,
-            codigoLancamento: (oMovimento.codigoLancamento ?? '').slice(0, 40) || null,
-         }
-      );
+      const sFitid = String(oMovimento.codFitid ?? '').slice(0, 50);
+      const sHistorico = limpa(oMovimento.desHistorico) || 'Movimento bancário';
+      const bEntrada = Boolean(oMovimento.bEntrada);
+
+      const oComuns = {
+         DATMOVTO: dtMovimento,
+         HISTMOVTO: sHistorico.slice(0, 60),
+         HISTMOVTOEXIBE: sHistorico.slice(0, 60),
+         MEMO: sHistorico.slice(0, 256),
+         DOCUMENTO: limpa(oMovimento.numDocumento).slice(0, 8) || null,
+         VALMOVTO: Math.abs(Number(oMovimento.valMovimento) || 0),
+         TIPOMOVTO: bEntrada ? 'E' : 'S',
+         TRNTYPE: limpa(oMovimento.codigoLancamento).slice(0, 15) || (bEntrada ? 'CREDIT' : 'DEBIT'),
+         DATATU: new Date(),
+      };
+
+      const oExistente = await prisma.TBCONB006.findFirst({
+         where: { ...oFiltroConta, FITID: sFitid },
+         select: { NUMSEQMOVTO: true },
+      });
+
+      if (oExistente) {
+         await prisma.TBCONB006.update({
+            where: {
+               CODEMP_CODBANCO_CODAGENCIA_NUMSEQMOVTO_CODCTACORRENTE: {
+                  ...oFiltroConta,
+                  NUMSEQMOVTO: oExistente.NUMSEQMOVTO,
+               },
+            },
+            data: oComuns,
+         });
+      } else {
+         iSequencia += 1;
+         await prisma.TBCONB006.create({
+            data: {
+               ...oFiltroConta,
+               NUMSEQMOVTO: String(iSequencia).padStart(12, '0'),
+               ...oComuns,
+               FITID: sFitid,
+               // Nasce não conciliado; a conciliação é ação própria
+               STAMOVTO: 'N',
+               DATIMPORTACAO: new Date(),
+               NOMEARQUIVO: `${ORIGEM_ARQUIVO}-${oConta.slugProvider}`.slice(0, 30),
+            },
+         });
+      }
 
       iGravados += 1;
    }
@@ -162,52 +219,65 @@ export async function gravaMovimentos(iIdConta, aMovimentos) {
 
 /**
  * Relaciona os dias do período que JÁ foram consultados na instituição.
- * @param {number} iIdConta
+ * @param {object} oConta
  * @param {string} sDataInicioBr
  * @param {string} sDataFimBr
  * @returns {Promise<Set<string>>} Dias em AAAA-MM-DD
  */
-export async function listaDiasConsultados(iIdConta, sDataInicioBr, sDataFimBr) {
-   const aLinhas = await query(
-      `SELECT dat_dia AS datDia
-         FROM extrato_dia
-        WHERE id_conta = :idConta
-          AND dat_dia BETWEEN :dataInicio AND :dataFim`,
-      {
-         idConta: iIdConta,
-         dataInicio: dataBrParaMysql(sDataInicioBr),
-         dataFim: dataBrParaMysql(sDataFimBr),
-      }
-   );
+export async function listaDiasConsultados(oConta, sDataInicioBr, sDataFimBr) {
+   const aLinhas = await prisma.TBCONB008.findMany({
+      where: {
+         ...filtroContaMovimento(oConta, 'CODCTACORRENTE'),
+         DATEXTRATO: {
+            gte: dataBrParaData(sDataInicioBr),
+            lte: dataBrParaData(sDataFimBr),
+         },
+      },
+      select: { DATEXTRATO: true },
+   });
 
-   return new Set(aLinhas.map((oLinha) => String(oLinha.datDia).slice(0, 10)));
+   return new Set(aLinhas.map((oLinha) => dataSqlParaIso(oLinha.DATEXTRATO)));
 } // listaDiasConsultados
 
 /**
- * Marca dias como já consultados na instituição.
+ * Marca dias como já consultados na instituição (TBCONB008).
  *
  * Gravado DEPOIS dos movimentos: se a gravação falhar no meio, o dia continua
- * pendente e a próxima busca refaz a consulta, em vez de dar o dia por
- * coberto com o extrato incompleto.
+ * pendente e a próxima busca refaz a consulta, em vez de dar o dia por coberto
+ * com o extrato incompleto.
  *
- * @param {number} iIdConta
+ * @param {object} oConta
  * @param {string[]} aDiasIso Dias em AAAA-MM-DD
+ * @param {object} [oQtdPorDia] Quantidade de movimentos por dia, se conhecida
  * @returns {Promise<number>}
  */
-export async function marcaDiasConsultados(iIdConta, aDiasIso) {
+export async function marcaDiasConsultados(oConta, aDiasIso, oQtdPorDia = {}) {
    if (!Array.isArray(aDiasIso) || aDiasIso.length === 0) {
       return 0;
    }
 
+   const oFiltroConta = filtroContaMovimento(oConta, 'CODCTACORRENTE');
    let iMarcados = 0;
 
    for (const sDia of aDiasIso) {
-      await query(
-         `INSERT INTO extrato_dia (id_conta, dat_dia)
-          VALUES (:idConta, :datDia)
-          ON DUPLICATE KEY UPDATE dat_consulta = CURRENT_TIMESTAMP`,
-         { idConta: iIdConta, datDia: sDia }
-      );
+      const dtDia = dataIsoParaData(sDia);
+      if (!dtDia) {
+         continue;
+      }
+
+      const oChave = { ...oFiltroConta, DATEXTRATO: dtDia };
+      const oDados = {
+         DATCONSULTA: new Date(),
+         QTDMOVTO: Number(oQtdPorDia[sDia] ?? 0),
+         NOMPROVIDER: String(oConta.slugProvider ?? '').slice(0, 20),
+      };
+
+      await prisma.TBCONB008.upsert({
+         where: { CODEMP_CODBANCO_CODAGENCIA_CODCTACORRENTE_DATEXTRATO: oChave },
+         create: { ...oChave, ...oDados },
+         update: oDados,
+      });
+
       iMarcados += 1;
    }
 
@@ -216,19 +286,30 @@ export async function marcaDiasConsultados(iIdConta, aDiasIso) {
 
 /**
  * Calcula o saldo do banco acumulado antes da data inicial.
- * @param {number} iIdConta
+ *
+ * A soma sai do servidor: trazer o extrato anterior para somar no Node
+ * significaria carregar anos de movimento a cada abertura de tela.
+ *
+ * @param {object} oConta
  * @param {string} sDataInicioBr
  * @returns {Promise<number>}
  */
-export async function calculaSaldoAnteriorBanco(iIdConta, sDataInicioBr) {
-   const aLinhas = await query(
-      `SELECT COALESCE(SUM(CASE WHEN b_entrada = 1 THEN val_movimento ELSE -val_movimento END), 0) AS saldo
-         FROM movimento_banco
-        WHERE id_conta = :idConta
-          AND dat_movimento < :dataInicio`,
-      { idConta: iIdConta, dataInicio: dataBrParaMysql(sDataInicioBr) }
-   );
-   return Number(aLinhas[0]?.saldo ?? 0);
+export async function calculaSaldoAnteriorBanco(oConta, sDataInicioBr) {
+   const dtInicio = dataBrParaData(sDataInicioBr);
+   if (!dtInicio) {
+      return 0;
+   }
+
+   const aLinhas = await prisma.$queryRaw`
+      SELECT COALESCE(SUM(CASE WHEN TIPOMOVTO = 'E' THEN VALMOVTO ELSE -VALMOVTO END), 0) AS valSaldo
+        FROM dbo.TBCONB006
+       WHERE CODEMP = ${oConta.codEmp || codEmp()}
+         AND CODBANCO = ${oConta.codBancoErp}
+         AND CODAGENCIA = ${oConta.codAgencia}
+         AND CODCTACORRENTE = ${oConta.numContaCorrente}
+         AND DATMOVTO < ${dtInicio}`;
+
+   return Number(aLinhas[0]?.valSaldo ?? 0);
 } // calculaSaldoAnteriorBanco
 
 /**
@@ -237,58 +318,62 @@ export async function calculaSaldoAnteriorBanco(iIdConta, sDataInicioBr) {
  * Usada na conferência de período bloqueado: quem grava não pode aceitar a
  * data que o navegador informou.
  *
- * @param {number} iIdConta
+ * @param {object} oConta
  * @param {string[]} aCodMovimentos
  * @returns {Promise<Array<{ codMovimento: string, datMovimento: string }>>}
  */
-export async function listaDatasMovimentos(iIdConta, aCodMovimentos) {
+export async function listaDatasMovimentos(oConta, aCodMovimentos) {
    if (!Array.isArray(aCodMovimentos) || aCodMovimentos.length === 0) {
       return [];
    }
 
-   const aLinhas = [];
+   const aLinhas = await prisma.TBCONB006.findMany({
+      where: {
+         ...filtroContaMovimento(oConta, 'CODCTACORRENTE'),
+         NUMSEQMOVTO: { in: aCodMovimentos.map((s) => String(s)) },
+      },
+      select: { NUMSEQMOVTO: true, DATMOVTO: true },
+   });
 
-   for (const sCodigo of aCodMovimentos) {
-      const aResultado = await query(
-         `SELECT cod_movimento AS codMovimento, dat_movimento AS datMovimento
-            FROM movimento_banco
-           WHERE id_conta = :idConta AND cod_movimento = :codMovimento`,
-         { idConta: iIdConta, codMovimento: sCodigo }
-      );
-      if (aResultado[0]) {
-         aLinhas.push({
-            codMovimento: aResultado[0].codMovimento,
-            datMovimento: dataMysqlParaBr(aResultado[0].datMovimento),
-         });
-      }
-   }
-
-   return aLinhas;
+   return aLinhas.map((oLinha) => ({
+      codMovimento: limpa(oLinha.NUMSEQMOVTO),
+      datMovimento: dataSqlParaBr(oLinha.DATMOVTO),
+   }));
 } // listaDatasMovimentos
 
 /**
  * Grava o status de conciliação de um conjunto de movimentos.
- * @param {number} iIdConta
+ *
+ * Conciliar grava STAMOVTO ('C' manual, 'A' automática) e a sequência do grupo
+ * em NUMSEQCONC; estornar devolve 'N' e limpa a sequência. É a MESMA sequência
+ * usada do lado do sistema — é ela que amarra os dois lados do grupo.
+ *
+ * @param {object} oConta
  * @param {string[]} aCodMovimentos
  * @param {boolean} bConciliado
+ * @param {object} [oOpcoes]
+ * @param {string} [oOpcoes.sNumSeqConc] Sequência do grupo (obrigatória ao conciliar)
+ * @param {boolean} [oOpcoes.bAutomatica] Conciliação automática (item 6.1.3.5)
  * @returns {Promise<number>} Quantidade de registros atualizados
  */
-export async function atualizaStatusMovimentos(iIdConta, aCodMovimentos, bConciliado) {
+export async function atualizaStatusMovimentos(oConta, aCodMovimentos, bConciliado, oOpcoes = {}) {
    if (!Array.isArray(aCodMovimentos) || aCodMovimentos.length === 0) {
       return 0;
    }
 
-   let iAtualizados = 0;
+   const oResultado = await prisma.TBCONB006.updateMany({
+      where: {
+         ...filtroContaMovimento(oConta, 'CODCTACORRENTE'),
+         NUMSEQMOVTO: { in: aCodMovimentos.map((s) => String(s)) },
+      },
+      data: bConciliado
+         ? {
+              STAMOVTO: oOpcoes.bAutomatica ? 'A' : 'C',
+              NUMSEQCONC: oOpcoes.sNumSeqConc ?? null,
+              DATATU: new Date(),
+           }
+         : { STAMOVTO: 'N', NUMSEQCONC: null, DATATU: new Date() },
+   });
 
-   for (const sCodigo of aCodMovimentos) {
-      const oResultado = await query(
-         `UPDATE movimento_banco
-             SET sta_conciliado = :staConciliado
-           WHERE id_conta = :idConta AND cod_movimento = :codMovimento`,
-         { idConta: iIdConta, codMovimento: sCodigo, staConciliado: bConciliado ? 1 : 0 }
-      );
-      iAtualizados += oResultado.affectedRows ?? 0;
-   }
-
-   return iAtualizados;
+   return oResultado.count;
 } // atualizaStatusMovimentos

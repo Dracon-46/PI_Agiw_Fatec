@@ -3,7 +3,7 @@
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
 // A grade "Movimentos no Banco" é sempre o retorno vivo da API: o extrato não
-// é copiado para o nosso MySQL. O que fica gravado localmente é apenas o
+// é copiado para o nosso SQL Server. O que fica gravado localmente é apenas o
 // estado que a API não sabe responder — se o movimento já foi conciliado e se
 // foi removido da grade (item 6.1.3.8 — ação 4).
 //
@@ -81,14 +81,14 @@ export async function GET(oRequisicao) {
       oConta = await buscaContaPorCodigo(sCodConta);
    } catch (oErro) {
       return NextResponse.json(
-         { erro: `Falha ao ler a conta no MySQL: ${oErro.message}` },
+         { erro: `Falha ao ler a conta no SQL Server: ${oErro.message}` },
          { status: 500 }
       );
    }
 
    if (!oConta) {
       return NextResponse.json(
-         { erro: `Conta "${sCodConta}" não encontrada no MySQL. Cadastre a conta antes de importar.` },
+         { erro: `Conta "${sCodConta}" não encontrada no SQL Server. Cadastre a conta antes de importar.` },
          { status: 404 }
       );
    }

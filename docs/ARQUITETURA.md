@@ -17,15 +17,27 @@ O módulo confronta dois extratos da mesma conta corrente e do mesmo período:
 
 | Lado | Fonte | Onde mora |
 | --- | --- | --- |
-| **Movimentos no Sistema** (Satis/ERP) | tabela `lancamento_sistema` | MySQL |
-| **Movimentos no Banco** | API da instituição, gravada na primeira leitura | `movimento_banco` |
+| **Movimentos no Sistema** (Satis/ERP) | Contas a Pagar/Receber e lançamentos da própria tela | `TBCONB001` |
+| **Movimentos no Banco** | API da instituição, gravada na primeira leitura | `TBCONB006` |
+
+As duas tabelas são do **ERP**, no banco `BDAPRESENTACAO` — as mesmas que o
+Satis usa. Isso é o eixo do desenho: o módulo não tem base própria, ele é uma
+tela nova sobre o modelo de dados que já existe. Quem concilia pelo Satis e quem
+concilia por aqui mexem no mesmo registro.
 
 A regra central, que explica metade do código:
 
-> **O extrato é copiado para o MySQL, e a API só é consultada para os dias que
-> ainda não temos.** A tabela `extrato_dia` guarda um registro por dia coberto —
+> **O extrato é copiado para o ERP, e a API só é consultada para os dias que
+> ainda não temos.** A tabela `TBCONB008` guarda um registro por dia coberto —
 > sem ela não haveria como distinguir "dia sem movimento" de "dia nunca
 > consultado", já que os dois chegam como lista vazia.
+
+E a regra que explica a outra metade:
+
+> **O que o ERP já tem, o módulo usa; o que não tem, o módulo cria seguindo o
+> padrão de nomes da Agiw.** Só duas tabelas são novas — `TBCONB008` (dias
+> lidos da API) e `TBCONB009` (auditoria) —, porque as duas nascem da leitura
+> por API, e o ERP importava extrato por arquivo.
 
 Duas razões, e nenhuma é só desempenho: as APIs têm janela limitada (o BB não
 devolve nada além de 5 anos), então sem cópia local a conciliação de períodos
@@ -39,13 +51,13 @@ navegador                    servidor (Next.js Route Handler)             extern
 ─────────                    ────────────────────────────────             ───────
 useConciliacao.buscaMovimentos()
    │
-   ├─ conciliacaoService ─► GET /api/conciliacao/lancamentos ─► lancamentoRepository ─► MySQL
+   ├─ conciliacaoService ─► GET /api/conciliacao/lancamentos ─► lancamentoRepository ─► TBCONB001
    │
    └─ conciliacaoService ─► GET /api/bank/extrato ─► lib/extratoBanco.js
-                                                       ├─ extrato_dia: que dias faltam?
+                                                       ├─ TBCONB008: que dias faltam?
                                                        ├─ BankProviderFactory (só os buracos)
                                                        │     └─ XProvider.fetchExtrato() ─► API do banco
-                                                       └─ movimentoRepository (grava, depois lê)
+                                                       └─ movimentoRepository (grava, depois lê) ─► TBCONB006
 ```
 
 Ao receber as duas listas, o hook casa automaticamente os pares de mesma data,
@@ -59,7 +71,7 @@ valor e sentido e devolve tudo pronto para as grades.
 | --- | --- |
 | Interface | Next.js 14 (App Router) + React 18, componentes `'use client'` |
 | API | Route Handlers (`src/app/api/**/route.js`) |
-| Banco | MySQL / MariaDB via `mysql2/promise` |
+| Banco | SQL Server (banco do ERP) via Prisma Client + adapter `mssql` |
 | Relatórios | ExcelJS (xlsx), CSV, HTML de impressão (PDF) e OFX (SGML) |
 | Ícones | `lucide-react` |
 | Estilo | CSS próprio em `src/styles/globals.css` (sem framework de UI) |
@@ -76,11 +88,11 @@ src/
 ├── contexts/BankContext.jsx conta selecionada, usuário, catálogos
 ├── hooks/useConciliacao.js  todas as regras da tela de conciliação
 ├── lib/
-│   ├── db.js                pool MySQL + conversão de datas
-│   ├── extratoBanco.js      extrato: cache no MySQL + consulta dos buracos
+│   ├── db.js                cliente Prisma + borda de conversão do ERP
+│   ├── extratoBanco.js      extrato: cache no ERP + consulta dos buracos
 │   ├── conciliacao/         utilitários de valor e data
 │   ├── relatorios/          geração de xlsx, csv, HTML de impressão e OFX
-│   └── repositories/        acesso ao MySQL, um arquivo por agregado
+│   └── repositories/        acesso ao ERP, um arquivo por agregado
 ├── providers/               integrações bancárias (Strategy + Factory)
 ├── services/                cliente HTTP do navegador + regra do auto-match
 └── utils/                   formatação, subset-sum, permissões, origens
@@ -117,8 +129,13 @@ O prefixo indica o **tipo**, não o significado. Por isso
 `"20/03/2026"`, não um `Date`.
 
 **Nomes de campos** (colunas de tabela) — prefixo pelo **papel**:
-`cod_` código · `des_` descrição · `dat_` data · `val_` valor · `num_` número ·
-`tip_` tipo · `sta_` status · `b_` booleano.
+`COD` código · `DES` descrição · `DAT` data · `VAL` valor · `NUM` número ·
+`TIP` tipo · `STA` situação · `QTD` quantidade.
+
+As tabelas são as do ERP, então o nome delas também segue o padrão da Agiw:
+`TB` + quatro letras do módulo + três dígitos (`TBCONB001`, `TBGENE016`). As
+duas tabelas novas do módulo entraram na sequência do módulo de conciliação
+bancária, como `TBCONB008` e `TBCONB009`.
 
 **Outras convenções observadas em todo o código:**
 
@@ -129,8 +146,13 @@ O prefixo indica o **tipo**, não o significado. Por isso
 - em rotas que gravam: **todas as validações antes de iniciar a gravação**, e a
   mensagem de sucesso montada **somente depois** de concluí-la;
 - datas trafegam sempre em `DD/MM/AAAA` entre tela, API interna e relatórios; a
-  conversão para/de `AAAA-MM-DD` acontece só na borda do MySQL
-  (`dataBrParaMysql` / `dataMysqlParaBr` em [db.js](../src/lib/db.js));
+  conversão para/de o `DATETIME` do ERP acontece só na borda do banco
+  (`dataBrParaData` / `dataSqlParaBr` em [db.js](../src/lib/db.js)), e sempre
+  em **UTC** — usar hora local deslocaria a data em um dia no fuso de Brasília;
+- todo texto lido do ERP passa por `limpa()`: as colunas são `CHAR` de tamanho
+  fixo e devolvem `"237   "`, que não é igual a `"237"`;
+- toda consulta filtra por `CODEMP` (a empresa, vinda do `.env`) — sem isso a
+  grade somaria o movimento de duas empresas;
 - valores monetários são comparados em **centavos inteiros**, nunca em `float`
   (ver seção 9.1).
 
@@ -138,62 +160,124 @@ O prefixo indica o **tipo**, não o significado. Por isso
 
 ## 4. Modelo de dados
 
-[`database/schema.sql`](../database/schema.sql) — só estrutura e o catálogo de
-bancos. Contas vêm do cadastro, extrato vem da API, lançamentos vêm do Satis;
-nada de massa falsa no schema.
+O módulo **não tem banco próprio**. Ele trabalha dentro do `BDAPRESENTACAO`,
+sobre as tabelas do Satis, e o [`prisma/schema.prisma`](../prisma/schema.prisma)
+descreve o subconjunto que ele usa — 21 tabelas de cerca de 1.300.
 
-| Tabela | Papel |
+| Tabela do ERP | Papel no módulo |
 | --- | --- |
-| `banco` | catálogo de compensação (TBGENE015): nome, slug do provider, cores, logo |
-| `conta_corrente` | contas cadastradas; guarda `dat_ultimo_bloqueio` |
-| `conta_credencial` | credenciais por conta (opcional); segredos globais ficam no `.env` |
-| `lancamento_sistema` | extrato do Satis (TBCONB001): o lado esquerdo da tela |
-| `movimento_banco` | extrato do banco, copiado da instituição |
-| `extrato_dia` | um registro por dia de extrato já consultado |
-| `auditoria` | trilha de todas as ações do módulo |
-| `tipo_documento`, `subgrupo_fluxo`, `conta_contabil`, `centro_custo` | catálogos das caixas de lançamento (TBFLCX002, TBGENE023, TBCOMP008) |
-| `usuario`, `usuario_permissao` | usuário corrente e permissões |
+| `TBGENE015` | catálogo de bancos: nome e código de compensação (`NUMBANCO`) |
+| `TBGENE016` | conta corrente: agência, C.C., saldo, `DATULTBLOQUEIO` e as credenciais de API da conta (`API_CLIENTID`, `API_CHAVESECRETA`, `API_CERTPFX`…) |
+| `TBCONB001` | movimento da conciliação: o **lado esquerdo** da tela |
+| `TBCONB002` | parâmetros e último período fechado (`ULTMESFECHCONC`/`ULTANOFECHCONC`) |
+| `TBCONB006` | extrato bancário: o **lado direito** da tela |
+| `TBGENE009` | tipos de documento (o `CODDOCUM` que `TBCONB001` exige na chave) |
+| `TBFLCX002` | subgrupos do fluxo de caixa |
+| `TBGENE023` | contas contábeis |
+| `TBCOMP008` | centros de custo |
+| `TBSENH006` / `TBSENH005` | usuários e permissão por módulo |
 
-### 4.1 `movimento_banco` e `extrato_dia`
+E duas tabelas **novas**, criadas por
+[`database/schema.sql`](../database/schema.sql) com `npm run db:init`, porque o
+ERP não tem equivalente — as duas nascem da leitura por API, e o ERP importava
+extrato por arquivo:
 
-O extrato do banco é gravado por inteiro — data, valor, sentido, histórico,
-documento e o código de tipo da instituição. `sta_conciliado` é a única coluna
-que é **nossa**, e por isso nunca é sobrescrita ao reconsultar um período.
+| Tabela nova | Papel |
+| --- | --- |
+| `TBCONB008` | um registro por dia de extrato já consultado na instituição |
+| `TBCONB009` | trilha de auditoria de todas as ações do módulo |
 
-A chave é `cod_movimento`, **determinístico**, montado em
-[extratoBanco.js](../src/lib/extratoBanco.js):
+> **Nunca rode `prisma db push` nem `prisma migrate` contra o BDAPRESENTACAO.**
+> O schema descreve um subconjunto, e o Prisma trataria as outras ~1.290 tabelas
+> do ERP como sobra a ser removida. O DDL das tabelas novas é T-SQL em
+> `database/schema.sql`, aplicado lote por lote pelo `db:init`.
+
+### 4.1 O que o ERP guarda em cada lado
+
+**`TBCONB001` (sistema).** A chave tem oito colunas: `CODEMP`, `CODDOCUM`,
+`NUMDOCTO`, `SERIE`, `CODEMITENTE`, `DESDOBRO`, `NUMSEQPAGTO` e
+`SEQMOVTOCONB`. O sentido está em `TIPOMOVTO` (`E`/`S`) e `VALMOVTO` é sempre
+positivo; `SINAL` (+1/-1) é **coluna calculada** a partir de `TIPOMOVTO` — o
+SQL Server recusa a instrução que tenta gravá-la, e por isso ela só aparece nas
+somas (`SUM(VALMOVTO * SINAL)`).
+
+A origem é `ORIGEMMOVTO`, de uma letra: `P` Contas a Pagar, `R` Contas a
+Receber, `C` Conciliação, `T` Transferência, `M` Manual. O item 6.1.3.8 — ação
+4 só permite excluir o que nasceu nesta tela, ou seja `C` e `T`.
+
+**`TBCONB006` (banco).** O extrato é gravado por inteiro. A chave é uma
+sequência por conta (`NUMSEQMOVTO`, 12 dígitos), que **não** identifica a linha
+do extrato — quem faz isso é o `FITID`, o campo de OFX para "id único da
+transação no banco". É nele que o módulo grava o código determinístico do
+movimento, montado em [extratoBanco.js](../src/lib/extratoBanco.js):
 
 ```
-API-<codConta>-<dataSóDígitos>-<numDocumento|índice>-<E|S>-<valorEmCentavos>-<codTipo>-<ocorrência>
+<data8><E|S><valorEmCentavos>-<numDocumento|índice>-<codTipo>-<ocorrência>
 ```
 
-A mesma linha do extrato produz sempre o mesmo código, então reconsultar
-atualiza em vez de duplicar. Dois detalhes que custaram bug:
+A mesma linha do extrato produz sempre o mesmo `FITID`, então reconsultar
+atualiza em vez de duplicar. Três detalhes que custaram bug:
 
+- a coluna tem 50 posições, então **cada parte do código tem tamanho máximo**.
+  Truncar o código no meio faria dois movimentos distintos virarem o mesmo
+  `FITID`, e um sobrescreveria o outro;
 - o `codigoLancamento` do Bradesco **não** serve como chave: identifica o *tipo*
   da transação (ex.: `03584` = rendimento) e se repete entre movimentos;
 - o **discriminador de ocorrência** no fim é obrigatório. Sem ele, dois
-  movimentos de mesmo dia, documento, sentido e valor geram a mesma chave e um
-  sobrescreve o outro. Acontece de verdade: o sandbox do Itaú devolve três
-  liquidações idênticas do mesmo título. Quando o banco fornece identificador
-  próprio de transação (o BB o faz na v2, em
-  `TextoIdentificadorUnicoTransacao`), é ele que entra ali; senão, a posição na
-  resposta.
+  movimentos de mesmo dia, documento, sentido e valor geram a mesma chave.
+  Acontece de verdade: o sandbox do Itaú devolve três liquidações idênticas do
+  mesmo título. Quando o banco fornece identificador próprio de transação (o BB
+  o faz na v2, em `TextoIdentificadorUnicoTransacao`), é ele que entra ali;
+  senão, a posição na resposta.
 
-`extrato_dia` marca os dias já consultados, e é gravada **depois** dos
+O histórico vai para três colunas, porque `HISTMOVTO` é `CHAR(60)` e o texto das
+APIs passa disso: `MEMO` (256) guarda o completo, `HISTMOVTOEXIBE` o que a grade
+mostra, `HISTMOVTO` o que os relatórios do ERP leem.
+
+`TBCONB008` marca os dias já consultados, e é gravada **depois** dos
 movimentos: falha no meio deixa o dia pendente e a próxima busca refaz a
 consulta, em vez de dar por coberto um dia com extrato incompleto.
 
 **Não há exclusão de movimento.** O item 6.1.3.8 permite excluir apenas
 registros do ERP; o extrato do banco é o registro da instituição e não se apaga.
 
-### 4.2 Chaves lógicas
+### 4.2 Como a conciliação é gravada
 
-- `cod_conta` = `slug-agencia-conta` em minúsculas (`montaCodConta`), a chave
-  que a tela usa em toda chamada;
-- `cod_lancamento` sequencial por conta (`geraProximoCodigoLancamento`);
-- `cod_transferencia` (`TR-000001`) compartilhado pelas **duas pernas** de uma
-  transferência — é o que as torna um par indivisível na exclusão.
+Os dois lados usam o mesmo par de colunas:
+
+| Coluna | Significado |
+| --- | --- |
+| `STAMOVTO` | `N` ou nulo = não conciliado · `C` = conciliado manualmente · `A` = conciliado automaticamente |
+| `NUMSEQCONC` | sequência de 6 dígitos que **amarra o grupo** |
+
+É o `NUMSEQCONC` que torna o N:N possível: todos os registros selecionados, dos
+dois lados, recebem a mesma sequência. Ela é gerada **uma vez por conciliação**,
+na rota que grava, e é única nas duas tabelas — reaproveitar um número juntaria
+grupos conciliados em momentos diferentes. Estornar devolve `N` e limpa a
+sequência.
+
+### 4.3 Chaves lógicas
+
+- `codConta` = `slug-agencia-conta` em minúsculas (`montaCodConta`), a chave que
+  a tela usa em toda chamada. A chave real do ERP é
+  (`CODEMP`, `CODBANCO`, `CODAGENCIA`), e trafegar as três partes em cada URL só
+  aumentaria a superfície de erro. A conta **não tem id inteiro**, e é por isso
+  que os repositórios recebem o objeto da conta;
+- `codLancamento` = a chave de oito colunas de `TBCONB001` codificada em um
+  texto, separada por `|` (`montaCodLancamento` / `chaveLancamento`). É opaca
+  de propósito: serve para marcar linha, e o que a tela mostra é o `NUMDOCTO`;
+- `codMovimento` = `NUMSEQMOVTO`, único dentro da conta;
+- `codTransferencia` = `CODDOCUM|NUMDOCTO` compartilhado pelas **duas pernas**
+  de uma transferência. As duas são o mesmo documento em `TBCONB001`, nas
+  sequências `001` e `002`, apontando uma para a outra em `SEQMOVTOCONBRELAC` —
+  é assim que o ERP amarra movimentos relacionados, e é o que as torna um par
+  indivisível na exclusão;
+- `NUMDOCTO` dos lançamentos do módulo tem prefixo próprio (`MC000001` para o
+  avulso, `TR000001` para a transferência), o que os distingue da numeração
+  fiscal do ERP. O `CODDOCUM`, porém, **nunca é inventado**: `TBCONB001` tem
+  chave estrangeira para `TBGENE009`, então o tipo vem da caixa de lançamento
+  (ou de `CONB_CODDOCUM_TRANSFERENCIA`, no caso da transferência) e é conferido
+  antes de gravar.
 
 ---
 
@@ -317,13 +401,14 @@ obter o extrato. Tela e relatório usam o mesmo, porque o item 6.2 manda imprimi
 O que ela faz, em ordem:
 
 1. quebra o período em dias;
-2. `extrato_dia` diz quais já foram consultados;
+2. `TBCONB008` diz quais já foram consultados;
 3. os que faltam viram **faixas contíguas** de no máximo 31 dias
    (`agrupaEmFaixas`) — buscar dia a dia multiplicaria as chamadas, buscar tudo
    de uma vez estouraria o limite do BB;
 4. cada faixa vai à API; o retorno é recortado pelo período, gravado, e só então
    os dias são marcados;
-5. a grade sai **sempre** do MySQL, inclusive no caminho novo.
+5. a grade sai **sempre** do ERP, recortada pelo período — inclusive no
+   caminho novo.
 
 O recorte do passo 4 não é opcional, e é a diferença mais importante em relação
 ao desenho anterior: o que sai da API vai ser **gravado**, e gravar movimento de
@@ -363,16 +448,18 @@ nossa, **502** falha da instituição.
 
 ### 6.1 Repositórios (`src/lib/repositories/`)
 
-Todo SQL vive aqui; nenhuma rota escreve SQL.
+Todo acesso ao banco vive aqui; nenhuma rota consulta o ERP direto. O Prisma
+resolve a maior parte; `$queryRaw` aparece só nas somas que o `aggregate` não
+expressa — o sinal do movimento está em uma coluna calculada.
 
 | Arquivo | Destaques |
 | --- | --- |
-| `contaRepository` | `listaContasCorrentes` calcula o saldo previsto somando os lançamentos e marca `bIntegracaoConfigurada` cruzando provider + `verificaConta`; `atualizaBloqueioConta`; `inativaConta` (lógica) |
-| `lancamentoRepository` | `listaLancamentosPeriodo`, `calculaSaldoAnterior`, `insereLancamento`, `insereTransferencia` (duas pernas), `excluiLancamento`, `atualizaStatusLancamentos` |
-| `movimentoRepository` | `listaMovimentosPeriodo` (a grade), `gravaMovimentos` (upsert que preserva `sta_conciliado`), `listaDiasConsultados` / `marcaDiasConsultados` (o cache), `atualizaStatusMovimentos` |
-| `auditoriaRepository` | constantes `ACAO_*`, `ROTULOS_ACAO`, `registraAuditoria`, `listaAuditoria` |
-| `usuarioRepository` | `nomUsuarioAtual`, `carregaUsuarioAtual`, `temPermissao`, `mensagemSemPermissao` |
-| `catalogoRepository` | `listaCatalogos` |
+| `contaRepository` | TBGENE015 + TBGENE016. `listaContasCorrentes` soma `VALMOVTO * SINAL` de TBCONB001 em uma consulta agrupada para o saldo previsto e marca `bIntegracaoConfigurada` cruzando provider + `verificaConta`; `chaveContaErp` e `filtroContaMovimento` montam a chave composta que os outros repositórios usam; `inativaConta` grava `STAGENCIA = N` |
+| `lancamentoRepository` | TBCONB001. `montaCodLancamento`/`chaveLancamento` (a chave de oito colunas ↔ o código da tela), `listaLancamentosPeriodo`, `calculaSaldoAnterior`, `insereLancamento` (valida o CODDOCUM contra TBGENE009), `insereTransferencia` (duas pernas no mesmo documento), `excluiLancamento`, `atualizaStatusLancamentos`, `geraProximoNumSeqConc` |
+| `movimentoRepository` | TBCONB006 + TBCONB008. `listaMovimentosPeriodo` (a grade), `gravaMovimentos` (identifica a linha pelo FITID e preserva `STAMOVTO`), `listaDiasConsultados` / `marcaDiasConsultados` (o cache), `atualizaStatusMovimentos` |
+| `auditoriaRepository` | TBCONB009. Constantes `ACAO_*`, `ROTULOS_ACAO`, `registraAuditoria`, `listaAuditoria`, `resumeAuditoriaPorAcao` |
+| `usuarioRepository` | TBSENH006 + TBSENH005. `nomUsuarioAtual`, `carregaUsuarioAtual`, `temPermissao`, `mensagemSemPermissao`; traduz as permissões do módulo para (módulo do ERP, coluna de operação) |
+| `catalogoRepository` | TBGENE009, TBFLCX002, TBGENE023 e TBCOMP008. `listaCatalogos` |
 
 ---
 
@@ -405,7 +492,7 @@ Funções puras de módulo, fáceis de ler primeiro:
 | `concilia` / `desfazConciliacao` | exigem diferença zero e nenhum registro em período bloqueado |
 | `conciliaAutomaticamente` | **descarta grupos inteiros** que toquem o período bloqueado — o grupo é indivisível: conciliar metade deixaria a outra órfã |
 | `excluiRegistro` | só o lado do ERP; movimento do banco é recusado com o motivo |
-| `aplicaBloqueio` / `removeBloqueio` | gravam em `conta_corrente` |
+| `aplicaBloqueio` / `removeBloqueio` | gravam `DATULTBLOQUEIO` em `TBGENE016` |
 
 ### 7.3 `services/`
 
@@ -427,7 +514,7 @@ mesma data/valor/sentido já vêm selecionados.
 ### 8.2 Leitura do extrato
 
 `GET /api/bank/extrato` → `leExtratoDaConta` (seção 5.5). O primeiro acesso a um
-período consulta a instituição; os seguintes saem do MySQL.
+período consulta a instituição; os seguintes saem de `TBCONB006`.
 
 ### 8.3 Conciliação manual
 
@@ -462,7 +549,7 @@ são equivalentes por construção.
 vazia, diferença zero e período bloqueado. A verificação de bloqueio lê as datas
 **da base**, não do corpo da requisição.
 
-Exclusão (item 6.1.3.8): só `lancamento_sistema`, apenas com origem
+Exclusão (item 6.1.3.8): só `TBCONB001`, apenas com origem
 `Conciliação` ou `Transferência`, nunca conciliado. Excluir uma perna de
 transferência exclui **as duas**.
 
@@ -519,8 +606,10 @@ Provider fora do ar, produto não contratado ou credencial ausente viram
 
 | Grupo | Variáveis |
 | --- | --- |
-| Banco de dados | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` |
-| Módulo | `BANK_PROVIDER`, `USUARIO_ATUAL`, `NEXT_PUBLIC_PERIODO_INICIO`, `NEXT_PUBLIC_PERIODO_FIM` |
+| Banco de dados | `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`, `DB_INSTANCE`, `DB_ENCRYPT`, `DB_TRUST_SERVER_CERTIFICATE` |
+| Prisma CLI | `DATABASE_URL` — usada só por `prisma db pull` / `generate`; a aplicação conecta pelas `DB_*` |
+| Chaves do ERP | `CODEMP` (empresa), `CONB_CODDOCUM_TRANSFERENCIA` (tipo de documento da transferência), `ERP_SISTEMA_ID` (sistema conferido na permissão) |
+| Módulo | `BANK_PROVIDER`, `USUARIO_ATUAL`, `BANK_FILTRA_PERIODO`, `NEXT_PUBLIC_PERIODO_INICIO`, `NEXT_PUBLIC_PERIODO_FIM` |
 | Bradesco | `BRADESCO_CLIENT_ID`, `_CLIENT_SECRET`, `_APP_KEY`, `_AGENCIA`, `_CONTA`, `_CERT_PATH`, `_KEY_PATH`, `_BASE_URL`, `_API_URL` |
 | Itaú | `ITAU_AMBIENTE`, `ITAU_CLIENT_ID`, `_CLIENT_SECRET`, `_API_KEY`, `_AGENCIA`, `_CONTA`, `_DAC`, `_BASE_URL`, `_SANDBOX_URL` |
 | Safra | `SAFRA_API_URL`, `_CLIENT_ID`, `_USERNAME`, `_PASSWORD`, `_AGENCIA`, `_CONTA`, `_EXTRATO_PATH` |
@@ -535,8 +624,8 @@ a conta cadastrada na tela sempre tem precedência.
 
 | Comando | O que faz |
 | --- | --- |
-| `npm run db:init` | aplica `schema.sql`, reconcilia colunas e remove tabelas obsoletas |
-| `npm run db:erp` | lê a API do banco e cria em `lancamento_sistema` o lançamento equivalente a cada movimento, deixando um sem contrapartida para exercitar a pendência |
+| `npm run db:init` | confere se as tabelas do ERP estão no banco apontado pelo `.env` e cria as duas do módulo (`TBCONB008` e `TBCONB009`). Não altera nada do ERP |
+| `npm run db:extrato` | percorre as contas com integração completa e carrega o extrato do período pelo mesmo caminho da tela, para a base já estar pronta quando o módulo abrir |
 | `npm run diag:bradesco` · `diag:itau` · `diag:safra` · `diag:bb` | diagnóstico ponta a ponta: configuração, token e extrato. Cada etapa reporta sem interromper as seguintes |
 
 ---
@@ -545,9 +634,11 @@ a conta cadastrada na tela sempre tem precedência.
 
 | Tarefa | Comece por |
 | --- | --- |
-| **Adicionar um banco** | nova classe em `src/providers/` estendendo `BankProvider`; registre o slug em `BankProviderFactory`; acrescente a linha na tabela `banco` e as variáveis no `.env.example`; crie um `scripts/diag-<banco>.mjs` |
+| **Adicionar um banco** | nova classe em `src/providers/` estendendo `BankProvider`; registre o slug em `BankProviderFactory`; acrescente o código de compensação em `utils/bancos.js` (é ele que liga TBGENE015 ao provider) e as variáveis no `.env.example`; crie um `scripts/diag-<banco>.mjs`. O banco precisa existir em TBGENE015 |
 | **Mudar uma regra de conciliação** | `useConciliacao.js` (tela) e/ou `autoMatchService.js` (automática); a trava que grava está em `api/conciliacao/conciliar` |
-| **Novo campo no lançamento** | coluna em `schema.sql` + entrada em `COLUNAS_INCREMENTAIS` do `init-db.mjs`; `insereLancamento`; rota; `ModalNovoLancamento` |
+| **Novo campo no lançamento** | a coluna provavelmente já existe em `TBCONB001` (confira o `prisma/schema.prisma`); acrescente em `SELECAO_LANCAMENTO`, `mapeiaLancamento` e `insereLancamento`; depois rota e `ModalNovoLancamento` |
 | **Nova coluna nos relatórios** | `montaBlocos` e `calculaTotais` — as quatro saídas partem dos mesmos blocos |
 | **Nova ação auditada** | constante `ACAO_*` + rótulo em `auditoriaRepository`, e a chamada na rota |
+| **Usar outra tabela do ERP** | acrescente o model ao `prisma/schema.prisma` (tire a definição de um `prisma db pull`, sem os `@relation` para tabelas fora do subconjunto), rode `prisma generate` e consulte pelo repositório do agregado |
+| **Usar outra tabela do ERP** | acrescente o model ao `prisma/schema.prisma` (tire a definição de um `prisma db pull`, sem os `@relation` para tabelas fora do subconjunto), rode `prisma generate` e consulte pelo repositório do agregado |
 | **Formatação de valor ou data** | `utils/formatters.js` (tela e relatórios) e `lib/conciliacao/valorUtils.js` (integrações) |

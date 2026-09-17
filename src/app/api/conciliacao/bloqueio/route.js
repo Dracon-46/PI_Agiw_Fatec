@@ -27,7 +27,7 @@ import {
    nomUsuarioAtual,
    temPermissao,
 } from '../../../../lib/repositories/usuarioRepository.js';
-import { dataBrParaMysql } from '../../../../lib/db.js';
+import { dataBrParaSql } from '../../../../lib/db.js';
 import { formataDataBr } from '../../../../utils/formatters.js';
 
 export const dynamic = 'force-dynamic';
@@ -63,8 +63,8 @@ export async function POST(oRequisicao) {
    }
 
    if (!bRemove) {
-      const sDatMysql = dataBrParaMysql(sDatBloqueio);
-      if (!sDatMysql) {
+      const sDatSql = dataBrParaSql(sDatBloqueio);
+      if (!sDatSql) {
          return NextResponse.json(
             { erro: `Data de bloqueio inválida: "${sDatBloqueio}".` },
             { status: 400 }
@@ -72,8 +72,8 @@ export async function POST(oRequisicao) {
       }
 
       // Regra do item 6.1.3.1: a data deve ser menor que a data do dia
-      const sHojeMysql = dataBrParaMysql(formataDataBr(new Date()));
-      if (sDatMysql >= sHojeMysql) {
+      const sHojeSql = dataBrParaSql(formataDataBr(new Date()));
+      if (sDatSql >= sHojeSql) {
          return NextResponse.json(
             { erro: 'A data de bloqueio deve ser anterior à data do dia.' },
             { status: 409 }
@@ -90,7 +90,7 @@ export async function POST(oRequisicao) {
       await atualizaBloqueioConta(sCodConta, bRemove ? '' : sDatBloqueio);
 
       await registraAuditoria({
-         idConta: oConta.idConta,
+         oConta,
          tipAcao: bRemove ? ACAO_DESBLOQUEIO : ACAO_BLOQUEIO,
          desEntidade: 'conta',
          codEntidade: sCodConta,

@@ -9,11 +9,11 @@
 import { NextResponse } from 'next/server';
 import { buscaContaPorCodigo } from '../../../lib/repositories/contaRepository.js';
 import {
-   ROTULOS_ACAO,
+   ROTULOS_ACAO,
    listaAuditoria,
    resumeAuditoriaPorAcao,
 } from '../../../lib/repositories/auditoriaRepository.js';
-import { dataBrParaMysql } from '../../../lib/db.js';
+import { dataBrParaSql } from '../../../lib/db.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,28 +31,27 @@ export async function GET(oRequisicao) {
    const iLimite = Number(oParams.get('limite') ?? 0);
 
    try {
-      let iIdConta = null;
+      let oContaFiltro = null;
       if (sCodConta) {
-         const oConta = await buscaContaPorCodigo(sCodConta);
-         if (!oConta) {
+         oContaFiltro = await buscaContaPorCodigo(sCodConta);
+         if (!oContaFiltro) {
             return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
          }
-         iIdConta = oConta.idConta;
       }
 
       const aEventos = await listaAuditoria({
-         idConta: iIdConta,
+         oConta: oContaFiltro,
          tipAcao: sAcao,
-         datInicioMysql: dataBrParaMysql(sDataInicio),
-         datFimMysql: dataBrParaMysql(sDataFim),
+         datInicioSql: dataBrParaSql(sDataInicio),
+         datFimSql: dataBrParaSql(sDataFim),
          iLimite,
       });
 
-      const aResumo = await resumeAuditoriaPorAcao(iIdConta);
+      const aResumo = await resumeAuditoriaPorAcao(oContaFiltro);
 
       return NextResponse.json({
          eventos: aEventos,
-         resumo: aResumo,
+         resumo: aResumo,
          acoesDisponiveis: Object.entries(ROTULOS_ACAO).map(([sChave, sRotulo]) => ({
             tipAcao: sChave,
             desAcao: sRotulo,
