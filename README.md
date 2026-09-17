@@ -194,23 +194,21 @@ src/
 
 ## Publicação
 
-`Dockerfile` e `docker-compose.yml` prontos na raiz. O passo a passo para a AWS
-(EC2 com SQL Server em contêiner ou EC2 + RDS) está na branch
-`infra/docker-aws`, em `docs/DEPLOY-AWS.md`.
+O módulo é um app Next.js: `npm run build` e `npm start` no servidor que
+alcança o SQL Server do ERP.
 
-```bash
-docker compose up -d --build
-docker compose exec app node scripts/init-db.mjs
-docker compose exec app node scripts/seed-demo.mjs
-```
+Os arquivos de contêiner e o passo a passo da AWS ficam na branch
+`infra/docker-aws`, fora do main — publicação é assunto de infraestrutura, e
+mantê-la separada evita que a raiz do projeto acumule configuração que o
+desenvolvimento não usa.
 
 ---
 
 ## Segurança
 
-- `.env`, certificados (`*.key`, `*.crt`, `*.pfx`) e a pasta `docs/` estão fora
-  do Git e fora da imagem Docker
+- `.env`, os certificados (`*.key`, `*.crt`, `*.pfx`) e a pasta `docs/` estão
+  fora do Git
 - Credenciais das APIs bancárias só existem no servidor — nunca chegam ao
   navegador
-- Certificados mTLS entram por volume somente leitura, nunca dentro da imagem
-- O contêiner roda com usuário sem privilégios
+- Os segredos de banco ficam nas variáveis `DB_*`, lidas só no servidor
+- O usuário corrente e as permissões são conferidos no ERP a cada gravação
