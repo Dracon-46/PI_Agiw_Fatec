@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:init": "node scripts/init-db.mjs",
+    "db:espelho": "node scripts/seed-espelho.mjs",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs",

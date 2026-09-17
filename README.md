@@ -49,6 +49,7 @@ confere se elas estão lá antes de criar as duas tabelas que são do módulo.
 | `npm run build` / `npm start` | Build de produção e execução |
 | `npm run db:init` | Confere as tabelas do ERP e cria `TBCONB008` e `TBCONB009` |
 | `npm run db:extrato` | Carrega o extrato das contas configuradas pelo caminho da tela |
+| `npm run db:espelho` | Cria a massa espelhada no lado do sistema, a partir do extrato que a API trouxe |
 | `npm run diag:safra` | Diagnostica a integração Safra ponta a ponta |
 | `npm run diag:bradesco` | Diagnostica a integração Bradesco |
 | `npm run diag:itau` | Diagnostica a integração Itaú |

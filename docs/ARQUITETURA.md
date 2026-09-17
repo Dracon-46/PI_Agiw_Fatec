@@ -626,6 +626,7 @@ a conta cadastrada na tela sempre tem precedência.
 | --- | --- |
 | `npm run db:init` | confere se as tabelas do ERP estão no banco apontado pelo `.env` e cria as duas do módulo (`TBCONB008` e `TBCONB009`). Não altera nada do ERP |
 | `npm run db:extrato` | percorre as contas com integração completa e carrega o extrato do período pelo mesmo caminho da tela, para a base já estar pronta quando o módulo abrir |
+| `npm run db:espelho` | espelha, no lado do sistema (TBCONB001), o extrato que a API trouxe (TBCONB006), deixando um movimento sem contrapartida para exercitar a pendência. Só considera movimento com NOMEARQUIVO começando em API, e exige --confirmo |
 | `npm run diag:bradesco` · `diag:itau` · `diag:safra` · `diag:bb` | diagnóstico ponta a ponta: configuração, token e extrato. Cada etapa reporta sem interromper as seguintes |
 
 ---

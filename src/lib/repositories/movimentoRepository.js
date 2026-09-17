@@ -42,8 +42,14 @@ import {
 import { filtroContaMovimento } from './contaRepository.js';
 import { STATUS_CONCILIADO } from './lancamentoRepository.js';
 
-/** Identificação da origem gravada em TBCONB006.NOMEARQUIVO */
-const ORIGEM_ARQUIVO = 'API';
+/**
+ * Identificação da origem gravada em TBCONB006.NOMEARQUIVO.
+ *
+ * O ERP guarda ali o nome do arquivo importado ("extrato19.11.txt"). O que
+ * entra por API recebe "API-<provider>", e é isso que distingue, dentro da
+ * mesma tabela, o extrato que este módulo trouxe do que o Satis já tinha.
+ */
+export const ORIGEM_ARQUIVO = 'API';
 
 /** Colunas lidas nas consultas da grade do banco */
 const SELECAO_MOVIMENTO = {
@@ -111,6 +117,32 @@ export async function listaMovimentosPeriodo(oConta, sDataInicioBr, sDataFimBr) 
 
    return aLinhas.map((oLinha) => ({ ...mapeiaMovimento(oLinha), codConta: oConta.codConta }));
 } // listaMovimentosPeriodo
+
+/**
+ * Lista os movimentos que ESTE módulo trouxe da API e que ainda não estão
+ * conciliados.
+ *
+ * Serve à massa espelhada (`npm run db:espelho`): é a fonte do lançamento
+ * equivalente no lado do sistema. O filtro por NOMEARQUIVO é a garantia de que
+ * o espelho nunca se aplica ao extrato que o Satis importou por arquivo — ou
+ * seja, nunca gera lançamento em cima do movimento real do cliente.
+ *
+ * @param {object} oConta
+ * @returns {Promise<Array<object>>} Movimentos em ordem de data
+ */
+export async function listaMovimentosDaApi(oConta) {
+   const aLinhas = await prisma.TBCONB006.findMany({
+      where: {
+         ...filtroContaMovimento(oConta, 'CODCTACORRENTE'),
+         NOMEARQUIVO: { startsWith: ORIGEM_ARQUIVO },
+         OR: [{ STAMOVTO: null }, { STAMOVTO: { notIn: STATUS_CONCILIADO } }],
+      },
+      select: SELECAO_MOVIMENTO,
+      orderBy: [{ DATMOVTO: 'asc' }, { NUMSEQMOVTO: 'asc' }],
+   });
+
+   return aLinhas.map((oLinha) => ({ ...mapeiaMovimento(oLinha), codConta: oConta.codConta }));
+} // listaMovimentosDaApi
 
 /**
  * Descobre a última sequência de movimento usada na conta.
