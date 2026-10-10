@@ -69,7 +69,7 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref AllowedSSHCidr
-          Description: SSH para administração
+          Description: SSH para administracao
 
         # HTTP — redireciona para HTTPS via Nginx
         - IpProtocol: tcp
@@ -91,7 +91,7 @@ Resources:
           FromPort: !Ref AppPort
           ToPort: !Ref AppPort
           CidrIp: '0.0.0.0/0'
-          Description: Next.js direto (remover após configurar Nginx)
+          Description: Next.js direto (remover apos configurar Nginx)
 
       # Sem regra para 3306 — MySQL nunca exposto para a internet
       Tags:
