@@ -61,7 +61,7 @@ Resources:
   SecurityGroupConciliacao:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: sg-conciliacao-agiw
+      GroupName: conciliacao-agiw-sg
       GroupDescription: Regras de rede para o módulo Conciliação Bancária
       SecurityGroupIngress:
         # SSH — restringir ao IP do time em produção
