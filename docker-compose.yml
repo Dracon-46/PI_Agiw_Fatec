@@ -23,7 +23,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-conciliacao_agiw}
     # A porta só é publicada para depuração local; em servidor, comente
     ports:
-      - '3306:3306'
+      - '127.0.0.1:3306:3306'
     volumes:
       - dados-mysql:/var/lib/mysql
     healthcheck:
@@ -31,6 +31,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+      start_period: 30s
+    # Configuração de logging para CloudWatch (via driver json-file + logrotate)
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+        tag: '{{.Name}}'
 
   app:
     build: .
@@ -60,11 +68,29 @@ services:
       BRADESCO_API_URL: ${BRADESCO_API_URL:-}
       BRADESCO_CERT_PATH: ${BRADESCO_CERT_PATH:-}
       BRADESCO_KEY_PATH: ${BRADESCO_KEY_PATH:-}
+      NEXT_PUBLIC_PERIODO_INICIO: ${NEXT_PUBLIC_PERIODO_INICIO:-}
+      NEXT_PUBLIC_PERIODO_FIM: ${NEXT_PUBLIC_PERIODO_FIM:-}
+      NODE_ENV: production
     ports:
       - '3000:3000'
     volumes:
       # Certificados mTLS entram por volume, nunca dentro da imagem
       - ./certs:/app/certs:ro
+    # Health check: verifica se a aplicação responde corretamente
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Configuração de logging para CloudWatch (via driver json-file + logrotate)
+    logging:
+      driver: json-file
+      options:
+        max-size: '50m'
+        max-file: '5'
+        tag: '{{.Name}}'
 
 volumes:
   dados-mysql:
+    name: conciliacao-agiw_dados-mysql

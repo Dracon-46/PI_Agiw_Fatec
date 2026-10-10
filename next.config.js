@@ -10,4 +10,4 @@ if (process.env.BUILD_STANDALONE === '1') {
   nextConfig.output = 'standalone';
 }
 
-module.exports = nextConfig;
+export default nextConfig;

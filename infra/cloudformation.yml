@@ -1,0 +1,231 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Conciliação Bancária - Agiw Sistemas | Ticket 37060
+  Infraestrutura EC2 para AWS Academy Learner Lab.
+  Provisiona: Security Group, Elastic IP e instância EC2 t3.small
+  com Docker e Docker Compose instalados via UserData.
+
+  USO:
+    aws cloudformation create-stack \
+      --stack-name conciliacao-agiw \
+      --template-body file://infra/cloudformation.yml \
+      --parameters \
+          ParameterKey=KeyPairName,ParameterValue=<SEU-PAR-DE-CHAVES> \
+          ParameterKey=GitRepoUrl,ParameterValue=<URL-DO-REPO-GITHUB>
+
+# ==============================================================================
+# Parâmetros
+# ==============================================================================
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Par de chaves EC2 existente para acesso SSH
+    ConstraintDescription: Deve ser um par de chaves EC2 existente na região
+
+  GitRepoUrl:
+    Type: String
+    Description: URL do repositório GitHub (ex. https://github.com/org/repo.git)
+    Default: 'https://github.com/SUBSTITUIR/PI_Agiw_Fatec.git'
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t2.micro, t2.small, t3.micro, t3.small]
+    Description: |
+      Tipo de instância EC2.
+      AWS Academy limita a t2/t3 até medium. t3.small é suficiente.
+
+  AppPort:
+    Type: Number
+    Default: 3000
+    Description: Porta da aplicação Next.js
+
+  AllowedSSHCidr:
+    Type: String
+    Default: '0.0.0.0/0'
+    Description: |
+      CIDR autorizado para SSH (porta 22).
+      IMPORTANTE: Em produção, restrinja ao seu IP (ex. 203.0.113.10/32).
+      Para o lab, 0.0.0.0/0 é usado por conveniência apenas.
+
+# ==============================================================================
+# Recursos
+# ==============================================================================
+Resources:
+
+  # ----------------------------------------------------------------------------
+  # Security Group
+  # Em produção real, SSH seria restrito ao IP do time e a porta 80/443
+  # seria aberta apenas para o ALB, não diretamente para a internet.
+  # ----------------------------------------------------------------------------
+  SecurityGroupConciliacao:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sg-conciliacao-agiw
+      GroupDescription: Regras de rede para o módulo Conciliação Bancária
+      SecurityGroupIngress:
+        # SSH — restringir ao IP do time em produção
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCidr
+          Description: SSH para administração
+
+        # HTTP — redireciona para HTTPS via Nginx
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+          Description: HTTP (redireciona para HTTPS)
+
+        # HTTPS — porta principal de acesso público
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+          Description: HTTPS
+
+        # Porta da app (manter restrita; Nginx expõe 80/443)
+        # Comentar após configurar Nginx em produção
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: '0.0.0.0/0'
+          Description: Next.js direto (remover após configurar Nginx)
+
+      # Sem regra para 3306 — MySQL nunca exposto para a internet
+      Tags:
+        - Key: Name
+          Value: sg-conciliacao-agiw
+        - Key: Project
+          Value: conciliacao-bancaria
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ----------------------------------------------------------------------------
+  # Instância EC2
+  # IAM: AWS Academy limita ao uso da LabRole; em produção criaria uma Role
+  # específica com permissões mínimas (ver docs/AWS-PRODUCTION-READINESS.md)
+  # ----------------------------------------------------------------------------
+  EC2ConciliacaoAgiw:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      # Amazon Linux 2023 (us-east-1) — AMI pública e atualizada
+      # Em outras regiões, substitua pelo ID correto via:
+      #   aws ec2 describe-images --owners amazon --filters "Name=name,Values=al2023-ami-*-x86_64"
+      ImageId: ami-0453ec754f44f9a4a
+      SecurityGroups:
+        - !Ref SecurityGroupConciliacao
+      # IamInstanceProfile: LabInstanceProfile  # Descomentar se precisar de acesso a S3/SSM
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: false  # Em produção: true (usar KMS)
+
+      # -----------------------------------------------------------------------
+      # UserData: bootstrap automático da instância
+      # Instala Docker, Docker Compose, clona o repositório e sobe a aplicação
+      # -----------------------------------------------------------------------
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
+
+          echo "=== [$(date)] Iniciando bootstrap Conciliação Bancária ==="
+
+          # Atualizar sistema
+          dnf update -y
+
+          # Instalar dependências
+          dnf install -y docker git curl
+
+          # Habilitar e iniciar Docker
+          systemctl enable --now docker
+          usermod -aG docker ec2-user
+
+          # Instalar Docker Compose v2 como plugin
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest \
+            | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
+          curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+          # Clonar repositório
+          git clone ${GitRepoUrl} /home/ec2-user/conciliacao-agiw
+          chown -R ec2-user:ec2-user /home/ec2-user/conciliacao-agiw
+
+          # Instalar Nginx para proxy reverso e SSL
+          dnf install -y nginx
+          systemctl enable nginx
+
+          # Criar diretório para os certs mTLS (vazio; enviar via SCP)
+          mkdir -p /home/ec2-user/conciliacao-agiw/certs
+          chown -R ec2-user:ec2-user /home/ec2-user/conciliacao-agiw/certs
+
+          echo "=== [$(date)] Bootstrap concluído ==="
+          echo "PRÓXIMOS PASSOS:"
+          echo "  1. Enviar certificados mTLS: scp -i chave.pem cert.crt key.key ec2-user@<IP>:~/conciliacao-agiw/certs/"
+          echo "  2. Configurar .env: cp .env.example .env && nano .env"
+          echo "  3. Subir app: cd conciliacao-agiw && docker compose up -d --build"
+          echo "  4. Init DB: docker compose exec app node scripts/init-db.mjs"
+
+      Tags:
+        - Key: Name
+          Value: conciliacao-agiw
+        - Key: Project
+          Value: conciliacao-bancaria
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Environment
+          Value: lab
+
+  # ----------------------------------------------------------------------------
+  # Elastic IP — mantém o mesmo endereço entre reinicializações do Learner Lab
+  # ----------------------------------------------------------------------------
+  ElasticIPConciliacao:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref EC2ConciliacaoAgiw
+      Tags:
+        - Key: Name
+          Value: eip-conciliacao-agiw
+
+# ==============================================================================
+# Outputs
+# ==============================================================================
+Outputs:
+  InstanceId:
+    Description: ID da instância EC2
+    Value: !Ref EC2ConciliacaoAgiw
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  PublicIP:
+    Description: IP público da instância (Elastic IP — não muda ao religar)
+    Value: !Ref ElasticIPConciliacao
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  AppUrl:
+    Description: URL da aplicação (HTTP direto na porta da app)
+    Value: !Sub 'http://${ElasticIPConciliacao}:3000'
+
+  AppUrlHttp:
+    Description: URL após configurar Nginx na porta 80
+    Value: !Sub 'http://${ElasticIPConciliacao}'
+
+  SSHCommand:
+    Description: Comando SSH para conectar na instância
+    Value: !Sub 'ssh -i <seu-par-de-chaves>.pem ec2-user@${ElasticIPConciliacao}'
+
+  SecurityGroupId:
+    Description: ID do Security Group criado
+    Value: !Ref SecurityGroupConciliacao

@@ -1,0 +1,107 @@
+# =============================================================================
+# ci.yml — Continuous Integration
+# Projeto Banco · Ticket 37060 · Agiw Sistemas
+#
+# Executa a cada push em qualquer branch e em todo Pull Request para main.
+# Pipeline: dependências → lint → build → validação da imagem Docker
+# =============================================================================
+
+name: CI — Build & Lint
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Lint + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2. Configurar Node.js
+      # ------------------------------------------------------------------
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ------------------------------------------------------------------
+      # 3. Instalar dependências (usando lockfile para reproducibilidade)
+      # ------------------------------------------------------------------
+      - name: Instalar dependências
+        run: npm ci
+
+      # ------------------------------------------------------------------
+      # 4. Lint (Next.js ESLint)
+      # ------------------------------------------------------------------
+      - name: Lint
+        run: npm run lint
+
+      # ------------------------------------------------------------------
+      # 5. Build de produção (standalone para validar Dockerfile)
+      # ------------------------------------------------------------------
+      - name: Build Next.js
+        env:
+          # Variáveis mínimas para o build não falhar por ausência de env
+          MYSQL_HOST: '127.0.0.1'
+          MYSQL_PORT: '3306'
+          MYSQL_USER: 'root'
+          MYSQL_PASSWORD: 'ci_placeholder'
+          MYSQL_DATABASE: 'conciliacao_agiw'
+          BANK_PROVIDER: 'bradesco'
+          BUILD_STANDALONE: '1'
+          # Sem credenciais bancárias reais — o build não conecta ao banco
+        run: npm run build
+
+      # ------------------------------------------------------------------
+      # 6. Verificar artefato standalone
+      # ------------------------------------------------------------------
+      - name: Verificar artefato standalone
+        run: |
+          if [ ! -f ".next/standalone/server.js" ]; then
+            echo "❌ server.js não encontrado no artefato standalone"
+            exit 1
+          fi
+          echo "✅ Artefato standalone gerado com sucesso"
+
+      # ------------------------------------------------------------------
+      # 7. Build da imagem Docker (sem push — só valida o Dockerfile)
+      # ------------------------------------------------------------------
+      - name: Build imagem Docker
+        run: |
+          docker build \
+            --tag conciliacao-agiw:ci-${{ github.sha }} \
+            --file Dockerfile \
+            .
+          echo "✅ Imagem Docker construída com sucesso"
+
+      # ------------------------------------------------------------------
+      # 8. Verificação de segurança: garantir que .env não foi comitado
+      # ------------------------------------------------------------------
+      - name: Verificar ausência de credenciais no repositório
+        run: |
+          # Bloqueia se .env real existir no repositório
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "❌ FALHA DE SEGURANÇA: arquivo .env está versionado!"
+            exit 1
+          fi
+          # Busca por padrões típicos de credenciais hardcoded
+          if grep -rn \
+            -e "AWS_SECRET_ACCESS_KEY\s*=" \
+            -e "MYSQL_PASSWORD\s*=\s*['\"][^'\"]\+['\"]" \
+            --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" \
+            src/ 2>/dev/null; then
+            echo "❌ FALHA DE SEGURANÇA: possível credencial hardcoded detectada!"
+            exit 1
+          fi
+          echo "✅ Nenhuma credencial detectada no código-fonte"

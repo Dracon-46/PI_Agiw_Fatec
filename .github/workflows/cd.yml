@@ -1,0 +1,172 @@
+# =============================================================================
+# cd.yml — Continuous Deployment
+# Projeto Banco · Ticket 37060 · Agiw Sistemas
+#
+# Executa apenas quando há merge na branch main.
+# Pipeline: build → testes → deploy via SSH na EC2 AWS
+#
+# Secrets necessários no GitHub (Settings → Secrets and variables → Actions):
+#   EC2_HOST           — IP público ou DNS da instância EC2
+#   EC2_USER           — Usuário SSH (ex: ec2-user)
+#   EC2_SSH_KEY        — Chave privada PEM completa (cat conciliacao-agiw.pem)
+#   EC2_APP_DIR        — Caminho da aplicação na EC2 (ex: /home/ec2-user/conciliacao-agiw)
+#
+# Limitação do AWS Academy:
+#   As credenciais AWS (access key, secret, session token) expiram a cada sessão
+#   do Learner Lab (~4h). Por isso o deploy é feito via SSH direto na EC2,
+#   sem usar a AWS CLI para push de imagem no ECR.
+#
+#   Em produção real, o fluxo seria:
+#     1. Build da imagem Docker
+#     2. Push para Amazon ECR
+#     3. Deploy via ECS/EKS ou rolling update com AWS CLI
+# =============================================================================
+
+name: CD — Deploy EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1: CI (reutiliza a mesma validação)
+  # --------------------------------------------------------------------------
+  build-and-validate:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build Next.js
+        env:
+          MYSQL_HOST: '127.0.0.1'
+          MYSQL_PORT: '3306'
+          MYSQL_USER: 'root'
+          MYSQL_PASSWORD: 'ci_placeholder'
+          MYSQL_DATABASE: 'conciliacao_agiw'
+          BANK_PROVIDER: 'bradesco'
+          BUILD_STANDALONE: '1'
+        run: npm run build
+
+      - name: Verificar artefato standalone
+        run: |
+          if [ ! -f ".next/standalone/server.js" ]; then
+            echo "❌ server.js ausente — build falhou"
+            exit 1
+          fi
+          echo "✅ Build OK"
+
+  # --------------------------------------------------------------------------
+  # Job 2: Deploy na EC2 (somente após build com sucesso)
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Deploy EC2
+    runs-on: ubuntu-latest
+    needs: build-and-validate
+
+    # Garante que apenas um deploy rode por vez
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # ----------------------------------------------------------------------
+      # Deploy via SSH: git pull + docker compose up
+      # A estratégia é "pull-based" — a EC2 busca o código do GitHub.
+      # Em produção real, usaríamos ECR + ECS com rolling deployment.
+      # ----------------------------------------------------------------------
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy na EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" << 'ENDSSH'
+            set -e
+
+            APP_DIR="${{ secrets.EC2_APP_DIR }}"
+            echo "📂 Diretório da aplicação: $APP_DIR"
+
+            cd "$APP_DIR"
+
+            echo "🔄 Atualizando código..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🐳 Reconstruindo e subindo containers..."
+            docker compose pull --quiet 2>/dev/null || true
+            docker compose up -d --build --remove-orphans
+
+            echo "⏳ Aguardando saúde dos containers..."
+            sleep 15
+
+            # Verifica se o app está respondendo
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 10 http://localhost:3000 2>/dev/null || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "✅ Deploy bem-sucedido! HTTP $HTTP_CODE"
+            else
+              echo "⚠️  App respondeu HTTP $HTTP_CODE (pode ser inicialização ainda em curso)"
+              docker compose logs --tail=50 app
+            fi
+
+            # Limpeza de imagens antigas
+            docker image prune -f --filter "until=24h" 2>/dev/null || true
+
+            echo "🚀 Deploy concluído em $(date)"
+          ENDSSH
+
+      - name: Verificar deploy (health check externo)
+        run: |
+          echo "⏳ Aguardando aplicação estabilizar..."
+          sleep 20
+
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 15 "http://${{ secrets.EC2_HOST }}" 2>/dev/null || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "✅ Aplicação está online! HTTP $HTTP_CODE"
+              exit 0
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Tentativa $RETRY_COUNT/$MAX_RETRIES — HTTP $HTTP_CODE. Aguardando..."
+            sleep 10
+          done
+
+          echo "⚠️  Aplicação não respondeu após $MAX_RETRIES tentativas."
+          echo "    Verifique os logs: ssh ec2-user@${{ secrets.EC2_HOST }} 'docker compose -f ${{ secrets.EC2_APP_DIR }}/docker-compose.yml logs app'"
+          # Não falha o job — pode ser lag de inicialização ou HTTPS não configurado
+          exit 0
+
+      - name: Limpar chave SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

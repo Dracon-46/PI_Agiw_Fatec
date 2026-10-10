@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Módulo Conciliação Bancária - Agiw Sistemas | Ticket 37060",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
