@@ -81,22 +81,20 @@ Auto Scaling Group
 O AWS Academy **não permite criar certificados ACM** (Certificate Manager) de forma simples, pois isso exige validação de domínio. A solução adotada é:
 
 1. **Nginx na EC2** expõe a porta 80 (HTTP), fazendo proxy reverso para o Next.js na porta 3000.
-2. Para habilitar HTTPS **sem domínio**, use um certificado **auto-assinado**:
+2. **HTTPS no laboratório** usa certificado **autoassinado**, gerado automaticamente por `infra/setup-ec2.sh` (e pelo UserData do CloudFormation). O Nginx escuta **80** (health check / CD) e **443**.
+
+O navegador mostra aviso de certificado — esperado no AWS Academy, que não valida domínio no ACM. Em produção isso nunca seria usado.
 
 ```bash
-# Gerar certificado auto-assinado (válido por 365 dias)
+# Já é feito pelo setup. Para regerar:
 sudo openssl req -x509 -nodes -days 365 \
   -newkey rsa:2048 \
   -keyout /etc/ssl/private/conciliacao.key \
   -out /etc/ssl/certs/conciliacao.crt \
   -subj "/CN=conciliacao-agiw/O=Agiw Sistemas"
-
-# Ativar o bloco HTTPS no nginx.conf (descomentar o bloco server 443)
-sudo nano /etc/nginx/conf.d/conciliacao.conf
+sudo cp infra/nginx.conf /etc/nginx/conf.d/conciliacao.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
-
-> ⚠️ Certificado auto-assinado gera alerta no navegador. Para o contexto do laboratório, é aceitável. Em produção real, isso nunca seria usado.
 
 ### Em produção real
 
@@ -492,6 +490,15 @@ docker compose start mysql
 
 #### Restore completo a partir do `.sql.gz`
 
+Script pronto: [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh).
+
+```bash
+cd /home/ec2-user/conciliacao-agiw
+bash infra/restore-conciliacao.sh ~/backups/conciliacao_2026-10-10_020000.sql.gz
+```
+
+Ou, passo a passo:
+
 ```bash
 cd /home/ec2-user/conciliacao-agiw
 
@@ -804,8 +811,8 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 
 | Item | Status | Onde |
 |---|---|---|
-| ✅ Aplicação funcionando na AWS | Implementado | EC2 via `docker compose up -d --build` |
-| ✅ HTTPS habilitado | Parcial (Nginx pronto; cert auto-assinado para lab) | `infra/nginx.conf` |
+| ✅ Aplicação funcionando na AWS | Lab: após `setup-ec2.sh` + `.env` + `docker compose up` | EC2 via `docker compose up -d --build` |
+| ✅ HTTPS habilitado | Implementado no lab (certificado autoassinado) | `infra/nginx.conf` + `infra/setup-ec2.sh` |
 | ✅ Código no GitHub | Implementado | `.gitignore` correto; `.env` e certs excluídos |
 | ✅ Nenhuma credencial no repositório | Implementado | CI verifica automaticamente |
 | ✅ CI funcionando | Implementado | `.github/workflows/ci.yml` |

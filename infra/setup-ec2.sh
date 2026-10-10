@@ -82,68 +82,34 @@ else
 fi
 
 # ==============================================================================
-# 5. Configurar Nginx como proxy reverso para a aplicação
+# 5. HTTPS (certificado autoassinado) + Nginx como proxy reverso
 # ==============================================================================
 NGINX_CONF="/etc/nginx/conf.d/conciliacao.conf"
-log_info "Configurando Nginx..."
+TLS_CERT="/etc/ssl/certs/conciliacao.crt"
+TLS_KEY="/etc/ssl/private/conciliacao.key"
+APP_DIR="$(pwd)"
 
-sudo tee "$NGINX_CONF" > /dev/null << 'NGINX'
-# =============================================================================
-# Nginx — Proxy reverso para o módulo Conciliação Bancária
-# Redireciona HTTP → HTTPS (quando TLS estiver configurado)
-# Por ora expõe HTTP na porta 80 fazendo proxy para localhost:3000
-# =============================================================================
+if [[ ! -f "$TLS_CERT" || ! -f "$TLS_KEY" ]]; then
+  log_info "Gerando certificado TLS autoassinado (lab, sem ACM)..."
+  sudo openssl req -x509 -nodes -days 365 \
+    -newkey rsa:2048 \
+    -keyout "$TLS_KEY" \
+    -out "$TLS_CERT" \
+    -subj "/CN=conciliacao-agiw/O=Agiw Sistemas"
+  sudo chmod 600 "$TLS_KEY"
+  log_success "Certificado gerado em $TLS_CERT"
+else
+  log_info "Certificado TLS já existe"
+fi
 
-server {
-    listen 80;
-    listen [::]:80;
-    server_name _;
-
-    # Logs separados por aplicação (facilita o troubleshooting)
-    access_log /var/log/nginx/conciliacao_access.log;
-    error_log  /var/log/nginx/conciliacao_error.log;
-
-    # Headers de segurança (sem custo de performance)
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    # Proxy para o Next.js na porta 3000
-    location / {
-        proxy_pass         http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header   Upgrade           $http_upgrade;
-        proxy_set_header   Connection        "upgrade";
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-        proxy_connect_timeout 10s;
-    }
-
-    # Health check endpoint (usado pelo ALB/monitoramento)
-    location /health {
-        proxy_pass http://127.0.0.1:3000/api/health;
-        access_log off;
-    }
-}
-
-# Em produção com domínio próprio, adicione um bloco server com:
-#   listen 443 ssl;
-#   ssl_certificate     /etc/letsencrypt/live/<dominio>/fullchain.pem;
-#   ssl_certificate_key /etc/letsencrypt/live/<dominio>/privkey.pem;
-NGINX
-
-# Validar e reiniciar Nginx
+log_info "Configurando Nginx (HTTP :80 + HTTPS :443)..."
+sudo cp "$APP_DIR/infra/nginx.conf" "$NGINX_CONF"
 sudo nginx -t && sudo systemctl restart nginx
-log_success "Nginx configurado e reiniciado"
+log_success "Nginx configurado com HTTPS"
 
 # ==============================================================================
 # 6. Criar diretório de certificados mTLS (se não existir)
 # ==============================================================================
-APP_DIR="$(pwd)"
 mkdir -p "$APP_DIR/certs"
 log_info "Diretório de certs: $APP_DIR/certs"
 log_warn "Envie os certificados mTLS do Bradesco para este diretório:"
@@ -153,8 +119,8 @@ log_warn "  scp -i chave.pem certificado.crt chave.key ec2-user@<IP>:$APP_DIR/ce
 # 7. Verificar .env
 # ==============================================================================
 if [ ! -f "$APP_DIR/.env" ]; then
-  log_warn "Arquivo .env não encontrado. Criando a partir do .env.example..."
-  cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+  log_warn "Arquivo .env não encontrado. Criando a partir do .env.lab.example..."
+  cp "$APP_DIR/.env.lab.example" "$APP_DIR/.env"
   log_warn "AÇÃO NECESSÁRIA: edite $APP_DIR/.env com as credenciais reais"
   log_warn "  nano $APP_DIR/.env"
 else
@@ -219,7 +185,31 @@ sudo chmod +x "$BACKUP_SCRIPT"
 log_success "Backup diário agendado (cron 02:00)"
 
 # ==============================================================================
-# 10. Resumo final
+# 10. CloudWatch Agent (logs + métricas)
+# ==============================================================================
+if ! command -v amazon-cloudwatch-agent-ctl &>/dev/null; then
+  log_info "Instalando Amazon CloudWatch Agent..."
+  sudo dnf install -y amazon-cloudwatch-agent || log_warn "Pacote amazon-cloudwatch-agent indisponível neste AMI"
+fi
+
+if command -v amazon-cloudwatch-agent-ctl &>/dev/null; then
+  sudo cp "$APP_DIR/infra/cloudwatch-agent.json" \
+    /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+  if sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+      -a fetch-config \
+      -m ec2 \
+      -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+      -s; then
+    log_success "CloudWatch Agent iniciado"
+  else
+    log_warn "CloudWatch Agent instalado, mas não iniciou. No Academy anexe o LabInstanceProfile à EC2."
+  fi
+else
+  log_warn "CloudWatch Agent não instalado — logs continuam em docker compose logs"
+fi
+
+# ==============================================================================
+# 11. Resumo final
 # ==============================================================================
 echo ""
 echo "============================================================"
@@ -244,6 +234,9 @@ echo "     docker compose up -d --build"
 echo "     docker compose exec app node scripts/init-db.mjs"
 echo "     docker compose logs -f app"
 echo ""
-echo "  5. Acesse via browser:"
-echo "     http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo '<IP-PUBLICO>')"
+echo "  5. Acesse via browser (HTTPS com aviso de certificado autoassinado):"
+echo "     https://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo '<IP-PUBLICO>')"
+echo ""
+echo "  6. Restore de backup:"
+echo "     bash infra/restore-conciliacao.sh ~/backups/<arquivo>.sql.gz"
 echo ""

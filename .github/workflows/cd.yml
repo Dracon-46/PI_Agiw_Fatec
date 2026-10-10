@@ -26,7 +26,8 @@ name: CD — Deploy EC2
 
 on:
   push:
-    branches: [main]
+    branches: [main, projeto-nuvem-glauco]
+  workflow_dispatch:
 
 jobs:
   # --------------------------------------------------------------------------

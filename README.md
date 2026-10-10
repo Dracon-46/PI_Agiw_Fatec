@@ -169,8 +169,18 @@ src/
 
 ## Publicação na AWS
 
-[![CI — Build & Lint](https://github.com/SUBSTITUIR/PI_Agiw_Fatec/actions/workflows/ci.yml/badge.svg)](https://github.com/SUBSTITUIR/PI_Agiw_Fatec/actions/workflows/ci.yml)
-[![CD — Deploy EC2](https://github.com/SUBSTITUIR/PI_Agiw_Fatec/actions/workflows/cd.yml/badge.svg)](https://github.com/SUBSTITUIR/PI_Agiw_Fatec/actions/workflows/cd.yml)
+[![CI — Build & Lint](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/ci.yml/badge.svg?branch=projeto-nuvem-glauco)](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/ci.yml)
+[![CD — Deploy EC2](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/cd.yml/badge.svg?branch=projeto-nuvem-glauco)](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/cd.yml)
+
+Repositório: [github.com/Dracon-46/PI_Agiw_Fatec](https://github.com/Dracon-46/PI_Agiw_Fatec).
+
+Ambientes:
+
+| Arquivo | Uso |
+| --- | --- |
+| `.env.example` | Desenvolvimento local (XAMPP / MySQL na máquina) |
+| `.env.lab.example` | AWS Academy (`MYSQL_HOST=mysql` no Docker Compose) |
+| `.env.prod.example` | Produção (RDS). Senhas reais ficam no Secrets Manager, não no Git |
 
 `Dockerfile` e `docker-compose.yml` prontos na raiz. A infraestrutura completa
 (EC2 + Security Group + Elastic IP) pode ser provisionada via CloudFormation:
@@ -234,8 +244,8 @@ Consulte [`docs/AWS-PRODUCTION-READINESS.md`](docs/AWS-PRODUCTION-READINESS.md) 
 
 ## Segurança
 
-- `.env`, certificados (`*.key`, `*.crt`, `*.pfx`) e a pasta `docs/` estão fora
-  do Git e fora da imagem Docker
+- `.env`, certificados (`*.key`, `*.crt`, `*.pfx`) e arquivos de credenciais em
+  `docs/` estão fora do Git e fora da imagem Docker
 - Credenciais das APIs bancárias só existem no servidor — nunca chegam ao
   navegador
 - Certificados mTLS entram por volume somente leitura, nunca dentro da imagem

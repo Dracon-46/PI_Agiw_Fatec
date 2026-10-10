@@ -13,7 +13,9 @@ configuração de servidor para o deploy na AWS.
 |---|---|
 | [`cloudformation.yml`](cloudformation.yml) | Template CloudFormation para provisionar EC2 + Security Group + Elastic IP |
 | [`setup-ec2.sh`](setup-ec2.sh) | Script de bootstrap manual da EC2 (Docker, Nginx, backup, cron) |
-| [`nginx.conf`](nginx.conf) | Configuração Nginx como proxy reverso (HTTP + HTTPS comentado) |
+| [`nginx.conf`](nginx.conf) | Nginx: HTTP :80 + HTTPS :443 (certificado autoassinado no lab) |
+| [`cloudwatch-agent.json`](cloudwatch-agent.json) | Configuração do CloudWatch Agent (logs Docker/Nginx + métricas) |
+| [`restore-conciliacao.sh`](restore-conciliacao.sh) | Restore do MySQL a partir de `~/backups/*.sql.gz` |
 
 ---
 

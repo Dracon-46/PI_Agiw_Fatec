@@ -25,7 +25,7 @@ Parameters:
   GitRepoUrl:
     Type: String
     Description: URL do repositório GitHub (ex. https://github.com/org/repo.git)
-    Default: 'https://github.com/SUBSTITUIR/PI_Agiw_Fatec.git'
+    Default: 'https://github.com/Dracon-46/PI_Agiw_Fatec.git'
 
   InstanceType:
     Type: String
@@ -162,12 +162,36 @@ Resources:
           chown -R ec2-user:ec2-user /home/ec2-user/conciliacao-agiw
 
           # Instalar Nginx para proxy reverso e SSL
-          dnf install -y nginx
+          dnf install -y nginx openssl
           systemctl enable nginx
 
           # Criar diretório para os certs mTLS (vazio; enviar via SCP)
           mkdir -p /home/ec2-user/conciliacao-agiw/certs
           chown -R ec2-user:ec2-user /home/ec2-user/conciliacao-agiw/certs
+
+          # Certificado TLS autoassinado (AWS Academy nao tem ACM com dominio)
+          openssl req -x509 -nodes -days 365 \
+            -newkey rsa:2048 \
+            -keyout /etc/ssl/private/conciliacao.key \
+            -out /etc/ssl/certs/conciliacao.crt \
+            -subj "/CN=conciliacao-agiw/O=Agiw Sistemas"
+          chmod 600 /etc/ssl/private/conciliacao.key
+
+          if [ -f /home/ec2-user/conciliacao-agiw/infra/nginx.conf ]; then
+            cp /home/ec2-user/conciliacao-agiw/infra/nginx.conf /etc/nginx/conf.d/conciliacao.conf
+            nginx -t && systemctl restart nginx
+          fi
+
+          # CloudWatch Agent (requer LabInstanceProfile para enviar logs)
+          dnf install -y amazon-cloudwatch-agent || true
+          if [ -f /home/ec2-user/conciliacao-agiw/infra/cloudwatch-agent.json ]; then
+            cp /home/ec2-user/conciliacao-agiw/infra/cloudwatch-agent.json \
+              /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json || true
+            /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+              -a fetch-config -m ec2 \
+              -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+              -s || true
+          fi
 
           echo "=== [$(date)] Bootstrap concluído ==="
           echo "PRÓXIMOS PASSOS:"
