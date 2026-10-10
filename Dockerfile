@@ -39,6 +39,7 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup -g 1001 -S nodejs && adduser -S -u 1001 -G nodejs nextjs
 
 # O projeto atual não possui pasta public, então não copiamos
+# # O projeto atual não possui pasta public, então não copiamos
 # COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
