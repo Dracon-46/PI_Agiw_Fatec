@@ -43,6 +43,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -S -u 1001 -G nodejs nextjs
 # COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=deps /app/node_modules ./node_modules
 
 # Scripts de banco: permitem rodar db:init e db:seed dentro do contêiner
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
