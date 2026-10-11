@@ -820,7 +820,7 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | Logs disponiveis | Docker logs da app e logs locais do Nginx | docker compose logs; /var/log/nginx |
 | CloudWatch utilizado | Pendente: a instancia nao tem IAM instance profile associado | LabInstanceProfile precisa ser associado a EC2 |
 | Backup definido | Ativo: backup inicial validado e rotina diaria; retencao local de 14 dias, sem copia externa | /home/ec2-user/backups |
-| Restore definido | Procedimento documentado em infra/restore-conciliacao.sh; restauracao ainda nao simulada | Secao 8 |
+| Restore definido | Backup importado em schema temporario (8 tabelas); banco principal intacto; script operacional documentado | infra/restore-conciliacao.sh |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
 | ✅ Serviços AWS justificados | Documentado | Seção 1 deste documento |
 | ✅ Configuração preparada para ambientes | Implementado | `.env.example` + variáveis de ambiente |
