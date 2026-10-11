@@ -95,51 +95,63 @@ jobs:
       # Em produção real, usaríamos ECR + ECS com rolling deployment.
       # ----------------------------------------------------------------------
       - name: Configurar chave SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          set -euo pipefail
+          : "${EC2_HOST:?GitHub Actions secret EC2_HOST is missing}"
+          : "${EC2_SSH_KEY:?GitHub Actions secret EC2_SSH_KEY is missing}"
+          mkdir -p "$HOME/.ssh"
+          echo "$EC2_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          ssh-keyscan -H "$EC2_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 
       - name: Deploy na EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
-          ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=30 \
-              "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" << 'ENDSSH'
-            set -e
+          set -euo pipefail
+          : "${EC2_HOST:?GitHub Actions secret EC2_HOST is missing}"
+          : "${EC2_USER:?GitHub Actions secret EC2_USER is missing}"
+          : "${EC2_APP_DIR:?GitHub Actions secret EC2_APP_DIR is missing}"
+          APP_DIR_Q=$(printf '%q' "$EC2_APP_DIR")
+          DEPLOY_BRANCH_Q=$(printf '%q' "$DEPLOY_BRANCH")
+          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "${EC2_USER}@${EC2_HOST}" "APP_DIR=$APP_DIR_Q DEPLOY_BRANCH=$DEPLOY_BRANCH_Q bash -s" <<'ENDSSH'
+            set -euo pipefail
 
-            APP_DIR="${{ secrets.EC2_APP_DIR }}"
-            echo "📂 Diretório da aplicação: $APP_DIR"
-
+            echo "Application directory: $APP_DIR"
             cd "$APP_DIR"
 
-            echo "🔄 Atualizando código..."
-            git fetch origin main
-            git reset --hard origin/main
+            echo "Updating branch $DEPLOY_BRANCH..."
+            git fetch origin "$DEPLOY_BRANCH"
+            git reset --hard "origin/$DEPLOY_BRANCH"
 
-            echo "🐳 Reconstruindo e subindo containers..."
-            docker compose pull --quiet 2>/dev/null || true
+            echo "Building and starting containers..."
             docker compose up -d --build --remove-orphans
 
-            echo "⏳ Aguardando saúde dos containers..."
+            echo "Applying database schema..."
+            docker compose exec -T app node scripts/init-db.mjs
+
+            echo "Waiting for containers to become healthy..."
             sleep 15
 
-            # Verifica se o app está respondendo
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 10 http://localhost:3000 2>/dev/null || echo "000")
+              --max-time 10 http://localhost:3000/api/health 2>/dev/null || echo "000")
 
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-              echo "✅ Deploy bem-sucedido! HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Deploy succeeded! Health check HTTP $HTTP_CODE"
             else
-              echo "⚠️  App respondeu HTTP $HTTP_CODE (pode ser inicialização ainda em curso)"
+              echo "Health check returned HTTP $HTTP_CODE"
               docker compose logs --tail=50 app
+              exit 1
             fi
 
-            # Limpeza de imagens antigas
             docker image prune -f --filter "until=24h" 2>/dev/null || true
-
-            echo "🚀 Deploy concluído em $(date)"
+            echo "Deploy completed at $(date)"
           ENDSSH
 
       - name: Verificar deploy (health check externo)
