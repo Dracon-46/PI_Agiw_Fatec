@@ -100,7 +100,7 @@ jobs:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           set -euo pipefail
-          : "${EC2_HOST:?GitHub Actions secret EC2_HOST is missing}"
+          : "${EC2_HOST:?EC2_HOST is missing from Actions secrets and variables}"
           : "${EC2_SSH_KEY:?GitHub Actions secret EC2_SSH_KEY is missing}"
           mkdir -p "$HOME/.ssh"
           echo "$EC2_SSH_KEY" > "$HOME/.ssh/deploy_key"
@@ -110,14 +110,14 @@ jobs:
       - name: Deploy na EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          EC2_USER: ${{ secrets.EC2_USER || vars.EC2_USER }}
+          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR || vars.EC2_APP_DIR }}
           DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          : "${EC2_HOST:?GitHub Actions secret EC2_HOST is missing}"
-          : "${EC2_USER:?GitHub Actions secret EC2_USER is missing}"
-          : "${EC2_APP_DIR:?GitHub Actions secret EC2_APP_DIR is missing}"
+          : "${EC2_HOST:?EC2_HOST is missing from Actions secrets and variables}"
+          : "${EC2_USER:?EC2_USER is missing from Actions secrets and variables}"
+          : "${EC2_APP_DIR:?EC2_APP_DIR is missing from Actions secrets and variables}"
           APP_DIR_Q=$(printf '%q' "$EC2_APP_DIR")
           DEPLOY_BRANCH_Q=$(printf '%q' "$DEPLOY_BRANCH")
           ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes -o ConnectTimeout=30 "${EC2_USER}@${EC2_HOST}" "APP_DIR=$APP_DIR_Q DEPLOY_BRANCH=$DEPLOY_BRANCH_Q bash -s" <<'ENDSSH'
@@ -176,7 +176,7 @@ jobs:
           done
 
           echo "⚠️  Aplicação não respondeu após $MAX_RETRIES tentativas."
-          echo "    Verifique os logs: ssh ec2-user@${{ secrets.EC2_HOST || vars.EC2_HOST }} 'docker compose -f ${{ secrets.EC2_APP_DIR }}/docker-compose.yml logs app'"
+          echo "    Verifique os logs: ssh ec2-user@${{ secrets.EC2_HOST || vars.EC2_HOST }} 'docker compose -f ${{ secrets.EC2_APP_DIR || vars.EC2_APP_DIR }}/docker-compose.yml logs app'"
           # Não falha o job — pode ser lag de inicialização ou HTTPS não configurado
           exit 0
 
