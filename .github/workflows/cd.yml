@@ -131,10 +131,10 @@ jobs:
             git reset --hard "origin/$DEPLOY_BRANCH"
 
             echo "Building and starting containers..."
-            docker compose up -d --build --remove-orphans
+            sudo docker compose up -d --build --remove-orphans
 
             echo "Applying database schema..."
-            docker compose exec -T app node scripts/init-db.mjs
+            sudo docker compose exec -T app node scripts/init-db.mjs
 
             echo "Waiting for containers to become healthy..."
             sleep 15
@@ -146,11 +146,11 @@ jobs:
               echo "Deploy succeeded! Health check HTTP $HTTP_CODE"
             else
               echo "Health check returned HTTP $HTTP_CODE"
-              docker compose logs --tail=50 app
+              sudo docker compose logs --tail=50 app
               exit 1
             fi
 
-            docker image prune -f --filter "until=24h" 2>/dev/null || true
+            sudo docker image prune -f --filter "until=24h" 2>/dev/null || true
             echo "Deploy completed at $(date)"
           ENDSSH
 
