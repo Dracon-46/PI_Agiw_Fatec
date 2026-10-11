@@ -96,7 +96,7 @@ jobs:
       # ----------------------------------------------------------------------
       - name: Configurar chave SSH
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_HOST: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           set -euo pipefail
@@ -109,7 +109,7 @@ jobs:
 
       - name: Deploy na EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_HOST: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
           DEPLOY_BRANCH: ${{ github.ref_name }}
@@ -163,7 +163,7 @@ jobs:
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 15 "http://${{ secrets.EC2_HOST }}" 2>/dev/null || echo "000")
+              --max-time 15 "http://${{ secrets.EC2_HOST || vars.EC2_HOST }}" 2>/dev/null || echo "000")
 
             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
               echo "✅ Aplicação está online! HTTP $HTTP_CODE"
@@ -176,7 +176,7 @@ jobs:
           done
 
           echo "⚠️  Aplicação não respondeu após $MAX_RETRIES tentativas."
-          echo "    Verifique os logs: ssh ec2-user@${{ secrets.EC2_HOST }} 'docker compose -f ${{ secrets.EC2_APP_DIR }}/docker-compose.yml logs app'"
+          echo "    Verifique os logs: ssh ec2-user@${{ secrets.EC2_HOST || vars.EC2_HOST }} 'docker compose -f ${{ secrets.EC2_APP_DIR }}/docker-compose.yml logs app'"
           # Não falha o job — pode ser lag de inicialização ou HTTPS não configurado
           exit 0
 
