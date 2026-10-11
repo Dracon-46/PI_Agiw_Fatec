@@ -24,6 +24,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Liga o "output: standalone" apenas aqui. Deixá-lo sempre ativo no
 # next.config.js trava o "next dev" em "Starting..." na máquina do desenvolvedor.
 ENV BUILD_STANDALONE=1
+# O Next.js incorpora NEXT_PUBLIC_* no bundle do navegador durante o build.
+# Receber os valores apenas em runtime (environment do Compose) não altera os
+# períodos padrão que a tela abre no cliente.
+ARG NEXT_PUBLIC_PERIODO_INICIO=
+ARG NEXT_PUBLIC_PERIODO_FIM=
+ENV NEXT_PUBLIC_PERIODO_INICIO=${NEXT_PUBLIC_PERIODO_INICIO}
+ENV NEXT_PUBLIC_PERIODO_FIM=${NEXT_PUBLIC_PERIODO_FIM}
 RUN npm run build
 
 # ---------- 3) Execução ----------

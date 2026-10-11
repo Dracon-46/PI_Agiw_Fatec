@@ -41,7 +41,11 @@ services:
         tag: '{{.Name}}'
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_PERIODO_INICIO: ${NEXT_PUBLIC_PERIODO_INICIO:-}
+        NEXT_PUBLIC_PERIODO_FIM: ${NEXT_PUBLIC_PERIODO_FIM:-}
     container_name: conciliacao-app
     restart: unless-stopped
     depends_on:
