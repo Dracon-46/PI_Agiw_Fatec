@@ -812,19 +812,19 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | Item | Status | Onde |
 |---|---|---|
 | ✅ Aplicação funcionando na AWS | Lab: após `setup-ec2.sh` + `.env` + `docker compose up` | EC2 via `docker compose up -d --build` |
-| ✅ HTTPS habilitado | Implementado no lab (certificado autoassinado) | `infra/nginx.conf` + `infra/setup-ec2.sh` |
+| HTTPS habilitado | Ativo na EC2, certificado autoassinado; HTTPS respondeu 200 no teste externo | infra/nginx.conf; porta 443 |
 | ✅ Código no GitHub | Implementado | `.gitignore` correto; `.env` e certs excluídos |
 | ✅ Nenhuma credencial no repositório | Implementado | CI verifica automaticamente |
 | ✅ CI funcionando | Implementado | `.github/workflows/ci.yml` |
 | ✅ CD implementado | Implementado | `.github/workflows/cd.yml` + secrets do GitHub |
-| ✅ Logs disponíveis | Implementado | `docker compose logs -f app` + CloudWatch agent |
-| ✅ CloudWatch utilizado | Implementado | CloudWatch Logs via agent |
-| ✅ Backup definido | Implementado | Cron diário 02:00 + script manual |
-| ✅ Restore definido | Documentado | Seção 8 deste documento |
+| Logs disponiveis | Docker logs da app e logs locais do Nginx | docker compose logs; /var/log/nginx |
+| CloudWatch utilizado | Pendente: a instancia nao tem IAM instance profile associado | LabInstanceProfile precisa ser associado a EC2 |
+| Backup definido | Ativo: backup inicial validado e rotina diaria; retencao local de 14 dias, sem copia externa | /home/ec2-user/backups |
+| Restore definido | Procedimento documentado em infra/restore-conciliacao.sh; restauracao ainda nao simulada | Secao 8 |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
 | ✅ Serviços AWS justificados | Documentado | Seção 1 deste documento |
 | ✅ Configuração preparada para ambientes | Implementado | `.env.example` + variáveis de ambiente |
-| ✅ Estratégia de rollback | Documentado | Seção 10 deste documento |
+| Estrategia de rollback | Procedimento manual documentado; nao automatizado | Secao 10 |
 | ✅ Escalabilidade analisada | Documentado | Seção 9 deste documento |
 | ✅ Custo estimado | Documentado | Seção 11 deste documento |
 | ✅ README completo | Implementado | `README.md` |

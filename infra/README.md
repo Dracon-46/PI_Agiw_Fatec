@@ -16,6 +16,7 @@ configuração de servidor para o deploy na AWS.
 | [`nginx.conf`](nginx.conf) | Nginx: HTTP :80 + HTTPS :443 (certificado autoassinado no lab) |
 | [`cloudwatch-agent.json`](cloudwatch-agent.json) | Configuração do CloudWatch Agent (logs Docker/Nginx + métricas) |
 | [`restore-conciliacao.sh`](restore-conciliacao.sh) | Restore do MySQL a partir de `~/backups/*.sql.gz` |
+| [backup-conciliacao.sh](backup-conciliacao.sh) | Backup MySQL compactado, validado e com retenção local de 14 dias |
 
 ---
 
