@@ -373,10 +373,36 @@ export async function atualizaContaCorrente(sCodContaAtual, oDados) {
 } // atualizaContaCorrente
 
 /**
+ * Lê a data de bloqueio gravada para a conta, direto de TBGENE016.
+ *
+ * Não passa por `listaContasCorrentes`: aquela lista só traz os bancos
+ * integrados ao módulo, e a contrapartida de uma transferência pode estar em
+ * qualquer conta do ERP.
+ *
+ * @param {{ codEmp?: string, codBancoErp: string, codAgencia: string }} oConta
+ * @returns {Promise<string>} Data em DD/MM/AAAA, ou vazio sem bloqueio
+ */
+export async function leBloqueioConta(oConta) {
+   const oLinha = await prisma.TBGENE016.findUnique({
+      where: { CODEMP_CODBANCO_CODAGENCIA: chaveContaErp(oConta) },
+      select: { DATULTBLOQUEIO: true },
+   });
+
+   return dataSqlParaBr(oLinha?.DATULTBLOQUEIO);
+} // leBloqueioConta
+
+/**
  * Atualiza a data de bloqueio da conta (TBGENE016.DATULTBLOQUEIO).
+ *
+ * Pendência técnica da ata de 24/09/2026: "validar o bloqueio de período —
+ * aparentemente não está sendo gravado corretamente". Por isso a gravação é
+ * conferida: a data é relida da base e comparada com a pedida. Uma diferença
+ * (registro não atualizado, ou data deslocada pelo fuso na ida ao SQL Server)
+ * vira erro com as duas datas, em vez de sucesso silencioso.
+ *
  * @param {string} sCodConta
  * @param {string} sDatBloqueioBr
- * @returns {Promise<void>}
+ * @returns {Promise<string>} Data efetivamente gravada (DD/MM/AAAA ou vazio)
  */
 export async function atualizaBloqueioConta(sCodConta, sDatBloqueioBr) {
    const oConta = await buscaContaPorCodigo(sCodConta);
@@ -384,13 +410,31 @@ export async function atualizaBloqueioConta(sCodConta, sDatBloqueioBr) {
       throw new Error(`Conta "${sCodConta}" não localizada.`);
    }
 
-   await prisma.TBGENE016.update({
-      where: { CODEMP_CODBANCO_CODAGENCIA: chaveContaErp(oConta) },
+   const oResultado = await prisma.TBGENE016.updateMany({
+      where: chaveContaErp(oConta),
       data: {
          DATULTBLOQUEIO: dataBrParaData(sDatBloqueioBr),
          DATATU: new Date(),
       },
    });
+
+   if (oResultado.count !== 1) {
+      throw new Error(
+         `O bloqueio não foi gravado: ${oResultado.count} registro(s) de conta atualizado(s) em TBGENE016 ` +
+            `(banco ${oConta.codBancoErp}, agência ${oConta.codAgencia}).`
+      );
+   }
+
+   const sGravada = await leBloqueioConta(oConta);
+   const sEsperada = sDatBloqueioBr ? dataSqlParaBr(dataBrParaData(sDatBloqueioBr)) : '';
+   if (sGravada !== sEsperada) {
+      throw new Error(
+         `O bloqueio foi gravado com data diferente da informada: pedido "${sEsperada || 'sem bloqueio'}", ` +
+            `gravado "${sGravada || 'sem bloqueio'}". Verifique o fuso horário da conexão com o SQL Server.`
+      );
+   }
+
+   return sGravada;
 } // atualizaBloqueioConta
 
 /**

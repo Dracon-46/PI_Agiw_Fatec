@@ -170,6 +170,42 @@ export async function incluiLancamentoApi(sCodConta, oLancamento) {
 } // incluiLancamentoApi
 
 /**
+ * Lê um lançamento com o rateio por centro de custo (tela de detalhes).
+ * @param {string} sCodConta
+ * @param {string} sCodLancamento
+ * @returns {Promise<{ lancamento: object }>}
+ */
+export async function buscaLancamentoApi(sCodConta, sCodLancamento) {
+   const oParams = new URLSearchParams({ conta: sCodConta, lancamento: sCodLancamento });
+   return requisitaJson(`/api/conciliacao/lancamentos?${oParams}`);
+} // buscaLancamentoApi
+
+/**
+ * Altera um lançamento originado na conciliação.
+ * @param {string} sCodConta
+ * @param {string} sCodLancamento
+ * @param {object} oLancamento Dados informados na caixa de edição
+ * @returns {Promise<{ lancamento: object, mensagem: string }>}
+ */
+export async function alteraLancamentoApi(sCodConta, sCodLancamento, oLancamento) {
+   return requisitaJson('/api/conciliacao/lancamentos', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conta: sCodConta, lancamento: sCodLancamento, ...oLancamento }),
+   });
+} // alteraLancamentoApi
+
+/**
+ * Contas em que um tipo de documento já foi lançado (filtro de bancos).
+ * @param {string} sTipoDocumento
+ * @returns {Promise<{ contas: string[] }>}
+ */
+export async function buscaContasDoDocumentoApi(sTipoDocumento) {
+   const oParams = new URLSearchParams({ tipo: sTipoDocumento });
+   return requisitaJson(`/api/conciliacao/documentos?${oParams}`);
+} // buscaContasDoDocumentoApi
+
+/**
  * Exclui um lançamento originado na conciliação.
  * @param {string} sCodConta
  * @param {string} sCodLancamento

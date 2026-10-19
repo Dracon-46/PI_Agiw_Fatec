@@ -87,7 +87,9 @@ export async function POST(oRequisicao) {
          return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
       }
 
-      await atualizaBloqueioConta(sCodConta, bRemove ? '' : sDatBloqueio);
+      // Devolve a data RELIDA da base, não a que a tela mandou: é o que
+      // confirma que o bloqueio foi de fato gravado
+      const sDatGravada = await atualizaBloqueioConta(sCodConta, bRemove ? '' : sDatBloqueio);
 
       await registraAuditoria({
          oConta,
@@ -102,10 +104,10 @@ export async function POST(oRequisicao) {
 
       return NextResponse.json({
          ok: true,
-         datUltimoBloqueio: bRemove ? '' : sDatBloqueio,
+         datUltimoBloqueio: sDatGravada,
          mensagem: bRemove
             ? 'Bloqueio removido. A conta aceita lançamentos em todo o período.'
-            : `Conta bloqueada para lançamentos até ${sDatBloqueio}.`,
+            : `Conta bloqueada para lançamentos até ${sDatGravada}.`,
       });
    } catch (oErro) {
       console.error('[api/conciliacao/bloqueio] Falha ao gravar:', oErro);

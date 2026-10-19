@@ -637,7 +637,7 @@ a conta cadastrada na tela sempre tem precedência.
 | --- | --- |
 | **Adicionar um banco** | nova classe em `src/providers/` estendendo `BankProvider`; registre o slug em `BankProviderFactory`; acrescente o código de compensação em `utils/bancos.js` (é ele que liga TBGENE015 ao provider) e as variáveis no `.env.example`; crie um `scripts/diag-<banco>.mjs`. O banco precisa existir em TBGENE015 |
 | **Mudar uma regra de conciliação** | `useConciliacao.js` (tela) e/ou `autoMatchService.js` (automática); a trava que grava está em `api/conciliacao/conciliar` |
-| **Novo campo no lançamento** | a coluna provavelmente já existe em `TBCONB001` (confira o `prisma/schema.prisma`); acrescente em `SELECAO_LANCAMENTO`, `mapeiaLancamento` e `insereLancamento`; depois rota e `ModalNovoLancamento` |
+| **Novo campo no lançamento** | a coluna provavelmente já existe em `TBCONB001` (confira o `prisma/schema.prisma`); acrescente em `SELECAO_LANCAMENTO`, `mapeiaLancamento` e `insereLancamento`; depois rota e `ModalLancamento` (inclusão, detalhes e edição) |
 | **Nova coluna nos relatórios** | `montaBlocos` e `calculaTotais` — as quatro saídas partem dos mesmos blocos |
 | **Nova ação auditada** | constante `ACAO_*` + rótulo em `auditoriaRepository`, e a chamada na rota |
 | **Usar outra tabela do ERP** | acrescente o model ao `prisma/schema.prisma` (tire a definição de um `prisma db pull`, sem os `@relation` para tabelas fora do subconjunto), rode `prisma generate` e consulte pelo repositório do agregado |

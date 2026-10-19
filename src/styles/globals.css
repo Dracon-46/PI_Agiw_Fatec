@@ -629,7 +629,7 @@ textarea {
    ========================================================================== */
 .filtro-conciliacao {
    display: grid;
-   grid-template-columns: minmax(240px, 1.4fr) 150px 150px auto minmax(200px, 1fr);
+   grid-template-columns: 150px 150px auto minmax(200px, 1fr);
    gap: 12px;
    align-items: end;
 }
@@ -725,6 +725,39 @@ textarea {
    align-items: start;
 }
 
+/* Ata de 24/09/2026: a linha inferior das grades (entradas/saídas) fica
+   travada. Cada quadro tem altura fixa, acompanhando a janela; quem rola é só
+   a grade, e o rodapé de saldos permanece no mesmo lugar, alinhado entre os
+   dois lados, tenha a grade duas linhas ou duzentas. */
+.area-conciliacao > .painel {
+   display: flex;
+   flex-direction: column;
+   height: max(360px, calc(100vh - 330px));
+}
+
+.area-conciliacao > .painel .grade-wrapper {
+   flex: 1;
+   min-height: 0;
+   max-height: none;
+}
+
+.area-conciliacao > .painel .grade-rodape {
+   flex-shrink: 0;
+}
+
+/* Somatórias da seleção travadas no pé da tela */
+.barra-somatoria {
+   position: sticky;
+   bottom: 0;
+   z-index: 5;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+   margin-top: 12px;
+   padding: 8px 0 4px;
+   background: var(--cor-canvas);
+}
+
 .coluna-banco {
    display: flex;
    flex-direction: column;
@@ -800,13 +833,24 @@ textarea {
    background: transparent;
    padding: 0;
    cursor: pointer;
-   color: var(--cor-texto-suave);
+   color: inherit;
+   font: inherit;
    display: inline-flex;
    align-items: center;
 }
 
+.grade-ordenar svg {
+   color: var(--cor-texto-suave);
+}
+
+.grade thead th.col-valor .grade-ordenar {
+   justify-content: flex-end;
+}
+
 .grade-ordenar:hover,
-.grade-ordenar.ativo {
+.grade-ordenar.ativo,
+.grade-ordenar:hover svg,
+.grade-ordenar.ativo svg {
    color: var(--agiw-primary);
 }
 
@@ -883,6 +927,15 @@ textarea {
    text-align: center;
    font-size: 12px;
    color: var(--cor-texto-suave);
+}
+
+/* Ata de 24/09/2026: os textos esmaecidos das grades vazias ficam no centro
+   do quadro, e não colados no topo */
+.grade-wrapper > .grade-vazia {
+   height: 100%;
+   display: flex;
+   align-items: center;
+   justify-content: center;
 }
 
 /* ---------- Checkbox ---------- */
@@ -1095,13 +1148,6 @@ textarea {
 }
 
 /* ---------- Somatórias da seleção em duas linhas (item 6.1.2) ---------- */
-.linhas-somatoria {
-   display: flex;
-   flex-direction: column;
-   gap: 6px;
-   margin-top: 12px;
-}
-
 .linha-somatoria {
    display: flex;
    align-items: center;
@@ -1874,4 +1920,207 @@ textarea {
 .col-situacao-banco {
    white-space: nowrap;
    text-align: center;
+}
+
+/* ============================================================================
+   Campo com pesquisa (CampoAutocomplete) — ata de 24/09/2026
+   ========================================================================== */
+.campo-autocomplete {
+   position: relative;
+}
+
+.campo-autocomplete-controle {
+   position: relative;
+   display: block;
+}
+
+.campo-autocomplete-controle .campo-controle {
+   padding-left: 26px;
+   padding-right: 26px;
+}
+
+.campo-autocomplete-icone {
+   position: absolute;
+   left: 8px;
+   top: 50%;
+   transform: translateY(-50%);
+   color: var(--cor-texto-suave);
+   pointer-events: none;
+}
+
+.campo-autocomplete-limpar {
+   position: absolute;
+   right: 6px;
+   top: 50%;
+   transform: translateY(-50%);
+   display: inline-flex;
+   align-items: center;
+   border: none;
+   background: transparent;
+   color: var(--cor-texto-suave);
+   cursor: pointer;
+   padding: 2px;
+}
+
+.campo-autocomplete-limpar:hover {
+   color: var(--cor-texto);
+}
+
+.campo-autocomplete-lista {
+   position: absolute;
+   top: 100%;
+   left: 0;
+   right: 0;
+   z-index: 30;
+   margin: 2px 0 0;
+   padding: 4px 0;
+   list-style: none;
+   max-height: 240px;
+   overflow-y: auto;
+   background: var(--cor-superficie);
+   border: 1px solid var(--cor-borda);
+   border-radius: var(--raio-md);
+   box-shadow: var(--sombra-md);
+   font-size: 12px;
+}
+
+.campo-autocomplete-lista li {
+   padding: 6px 10px;
+   cursor: pointer;
+}
+
+.campo-autocomplete-lista li.destaque {
+   background: var(--agiw-primary-light);
+}
+
+.campo-autocomplete-lista li.selecionada {
+   font-weight: 600;
+   color: var(--agiw-primary-active);
+}
+
+.campo-autocomplete-lista .campo-autocomplete-vazio {
+   color: var(--cor-texto-suave);
+   cursor: default;
+}
+
+/* Texto auxiliar abaixo de um campo */
+.campo-ajuda {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: 4px;
+   font-size: 10.5px;
+   color: var(--cor-texto-secundario);
+}
+
+.campo-ajuda-opcao {
+   display: inline-flex;
+   align-items: center;
+   gap: 4px;
+   cursor: pointer;
+}
+
+/* ============================================================================
+   Rateio por centro de custo — ata de 24/09/2026
+   ========================================================================== */
+.rateio {
+   display: grid;
+   gap: 8px;
+}
+
+.rateio-cabecalho {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+}
+
+.rateio-acoes {
+   margin-left: auto;
+   display: flex;
+   gap: 6px;
+}
+
+.rateio-vazio {
+   font-size: 11.5px;
+   color: var(--cor-texto-suave);
+}
+
+.rateio-tabela {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: 12px;
+}
+
+.rateio-tabela th {
+   padding: 0 6px 4px;
+   text-align: left;
+   font-size: 11px;
+   font-weight: 600;
+   color: var(--cor-texto-secundario);
+}
+
+.rateio-tabela th .obrigatorio {
+   color: var(--cor-saida);
+   margin-right: 2px;
+}
+
+.rateio-tabela td {
+   padding: 3px 6px;
+}
+
+.rateio-tabela .col-valor {
+   text-align: right;
+   width: 150px;
+}
+
+.rateio-tabela .rateio-percentual {
+   width: 70px;
+   color: var(--cor-texto-secundario);
+   font-variant-numeric: tabular-nums;
+}
+
+.rateio-tabela .rateio-remover {
+   width: 36px;
+   text-align: center;
+}
+
+.rateio-rodape {
+   display: flex;
+   justify-content: space-between;
+   gap: 12px;
+   font-size: 11.5px;
+   color: var(--cor-texto-secundario);
+}
+
+.rateio-rodape .diferenca-zero {
+   color: var(--cor-conciliado);
+   font-weight: 600;
+}
+
+.rateio-rodape .diferenca-aberta {
+   color: var(--cor-saida);
+   font-weight: 600;
+}
+
+/* ============================================================================
+   Transferência: conta origem ⇄ conta destino — ata de 24/09/2026
+   ========================================================================== */
+.linha-contas-transferencia {
+   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+   align-items: end;
+}
+
+.btn-inverter-contas {
+   margin-bottom: 1px;
+}
+
+@media (max-width: 720px) {
+   .linha-contas-transferencia {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .btn-inverter-contas {
+      justify-self: center;
+      transform: rotate(90deg);
+   }
 }
