@@ -535,9 +535,20 @@ sai das seguintes:
    `TAMANHO_MAXIMO_LADO` e, para cada soma, procura o conjunto de lançamentos
    que a fecha.
 
-O subset-sum ([`subsetSum.js`](../src/utils/subsetSum.js)) é uma busca em
-profundidade por **tamanho crescente**, em centavos inteiros, com três podas e
-teto de avaliações para não travar a requisição.
+O subset-sum ([`subsetSum.js`](../src/utils/subsetSum.js)) trabalha em centavos
+inteiros e devolve o **menor** conjunto, de 1 até `TAMANHO_MAXIMO_CONJUNTO` (10)
+lançamentos:
+
+- até `LIMITE_BUSCA_EXATA` (36) candidatos na janela, usa *meet in the middle*:
+  enumera as somas de cada metade (no máximo 2^18) e casa as duas. É **exato** —
+  se o grupo existe, é encontrado, em milissegundos;
+- acima disso, busca em profundidade por tamanho crescente, com corte pelas somas
+  máxima e mínima alcançáveis e dois ponteiros no último par, com prazo de
+  `PRAZO_PADRAO_MS` por busca.
+
+A execução inteira tem prazo de `LIMITE_TEMPO_TOTAL_MS` (15 s), porque a rota roda
+no mesmo processo que atende as outras requisições. Buscas interrompidas pelo
+prazo voltam contadas em `iBuscasInterrompidas`, e a tela avisa o usuário.
 
 A rota **não grava**: devolve os grupos. Quem grava é o hook, com
 `automatica: true` — o que dispensa a verificação de diferença, já que os grupos

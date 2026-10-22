@@ -63,8 +63,6 @@ export function excedePeriodoMaximo(sDataInicio, sDataFim) {
 export const SELECAO_VAZIA = null;
 export const SELECAO_CONCILIADA = true;
 export const SELECAO_NAO_CONCILIADA = false;
-/** Seleção com registros conciliados e não conciliados ao mesmo tempo */
-export const SELECAO_MISTA = 'mista';
 
 /**
  * Calcula o período inicial da tela: data inicial é a data de bloqueio + 1
@@ -214,6 +212,7 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
 
    const [aSelLancamentos, setSelLancamentos] = useState([]);
    const [aSelMovimentos, setSelMovimentos] = useState([]);
+   const [staSelecao, setStaSelecao] = useState(SELECAO_VAZIA);
 
    const [bCarregando, setCarregando] = useState(false);
    const [bImportando, setImportando] = useState(false);
@@ -277,6 +276,9 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
             const oPares = casaPorDataEValor(aLancamentosLidos, aMovimentosLidos);
             setSelLancamentos(oPares.aCodLancamentos);
             setSelMovimentos(oPares.aCodMovimentos);
+            setStaSelecao(
+               oPares.aCodMovimentos.length > 0 ? SELECAO_NAO_CONCILIADA : SELECAO_VAZIA
+            );
 
             if (oSistema.aviso) {
                notifica(oSistema.aviso, 'info');
@@ -305,6 +307,7 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    const limpaSelecao = useCallback(() => {
       setSelLancamentos([]);
       setSelMovimentos([]);
+      setStaSelecao(SELECAO_VAZIA);
    }, []);
 
    /**
@@ -354,6 +357,7 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
          const oPares = casaPorDataEValor(aLancamentosLidos, aMovimentosLidos);
          setSelLancamentos(oPares.aCodLancamentos);
          setSelMovimentos(oPares.aCodMovimentos);
+         setStaSelecao(oPares.aCodMovimentos.length > 0 ? SELECAO_NAO_CONCILIADA : SELECAO_VAZIA);
 
          if (aLancamentosLidos.length + aMovimentosLidos.length === 0) {
             notifica(
@@ -393,6 +397,7 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
          if (aCodMovimentos.length > 0) {
             setSelLancamentos(aCodLancamentos);
             setSelMovimentos(aCodMovimentos);
+            setStaSelecao(SELECAO_NAO_CONCILIADA);
          } else {
             limpaSelecao();
          }
@@ -415,29 +420,58 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    }, [oConta, sDataInicio, sDataFim, aLancamentos, notifica, limpaSelecao]);
 
    /**
-    * Alterna a seleção de uma linha.
-    *
-    * Ata de 24/09/2026: conciliados e não conciliados podem ser selecionados
-    * ao mesmo tempo. As duas linhas de somatória (item 6.1.2) separam cada
-    * grupo com a sua diferença; "Conciliar" age só sobre os não conciliados
-    * da seleção e "Estorno" só sobre os conciliados.
-    *
+    * Alterna a seleção de uma linha, impedindo a mistura de status
+    * conciliado/não conciliado (item 6.1.3.5).
     * @param {object} oRegistro Linha da grade
     * @param {'lancamento'|'movimento'} sGrade Grade de origem
     */
-   const alternaSelecao = useCallback((oRegistro, sGrade) => {
-      const sCodigo = sGrade === 'lancamento' ? oRegistro.codLancamento : oRegistro.codMovimento;
-      const fnAtualiza = sGrade === 'lancamento' ? setSelLancamentos : setSelMovimentos;
+   const alternaSelecao = useCallback(
+      (oRegistro, sGrade) => {
+         const sCodigo = sGrade === 'lancamento' ? oRegistro.codLancamento : oRegistro.codMovimento;
+         const aSelecionados = sGrade === 'lancamento' ? aSelLancamentos : aSelMovimentos;
+         const fnAtualiza = sGrade === 'lancamento' ? setSelLancamentos : setSelMovimentos;
+         const bJaSelecionado = aSelecionados.includes(sCodigo);
 
-      fnAtualiza((aAtuais) =>
-         aAtuais.includes(sCodigo) ? aAtuais.filter((sItem) => sItem !== sCodigo) : [...aAtuais, sCodigo]
-      );
-   }, []);
+         if (bJaSelecionado) {
+            const aRestantes = aSelecionados.filter((sItem) => sItem !== sCodigo);
+            fnAtualiza(aRestantes);
+
+            // Zera o status quando nenhuma linha permanece marcada
+            const iTotalOutraGrade = sGrade === 'lancamento' ? aSelMovimentos.length : aSelLancamentos.length;
+            if (aRestantes.length === 0 && iTotalOutraGrade === 0) {
+               setStaSelecao(SELECAO_VAZIA);
+            }
+            return;
+         }
+
+         const bStatusRegistro = Boolean(oRegistro.staConciliado);
+         if (staSelecao !== SELECAO_VAZIA && staSelecao !== bStatusRegistro) {
+            notifica(
+               'Não é permitido misturar registros conciliados e não conciliados na mesma seleção.',
+               'alerta'
+            );
+            return;
+         }
+
+         // Registro conciliado continua selecionável — é assim que o item
+         // 6.1.3.7 permite desfazer. O que não pode é conciliá-lo de novo,
+         // então a tela diz de saída qual é a única ação disponível.
+         if (bStatusRegistro && staSelecao === SELECAO_VAZIA) {
+            notifica(
+               'Registro já conciliado. Esta seleção habilita apenas "Desfazer conciliação".',
+               'info'
+            );
+         }
+
+         setStaSelecao(bStatusRegistro);
+         fnAtualiza([...aSelecionados, sCodigo]);
+      },
+      [aSelLancamentos, aSelMovimentos, staSelecao, notifica]
+   );
 
    /**
-    * Marca ou desmarca todos os registros visíveis de uma grade.
-    * Com algum registro da grade marcado, desmarca; senão, marca todos os
-    * visíveis — conciliados e não conciliados.
+    * Marca ou desmarca todos os registros visíveis de uma grade que
+    * compartilham o status da seleção corrente (item 6.1.3.5).
     * @param {Array<object>} aVisiveis Registros exibidos na grade
     * @param {'lancamento'|'movimento'} sGrade
     */
@@ -447,9 +481,28 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
          const aSelecionados = sGrade === 'lancamento' ? aSelLancamentos : aSelMovimentos;
          const fnAtualiza = sGrade === 'lancamento' ? setSelLancamentos : setSelMovimentos;
 
-         fnAtualiza(aSelecionados.length > 0 ? [] : aVisiveis.map(fnObtemCodigo));
+         if (aSelecionados.length > 0) {
+            fnAtualiza([]);
+            const iTotalOutraGrade = sGrade === 'lancamento' ? aSelMovimentos.length : aSelLancamentos.length;
+            if (iTotalOutraGrade === 0) {
+               setStaSelecao(SELECAO_VAZIA);
+            }
+            return;
+         }
+
+         // Sem seleção prévia, o status é definido pela primeira linha da grade
+         const bStatusAlvo = staSelecao !== SELECAO_VAZIA ? staSelecao : Boolean(aVisiveis[0]?.staConciliado);
+         const aCompativeis = aVisiveis.filter((oItem) => Boolean(oItem.staConciliado) === bStatusAlvo);
+
+         if (aCompativeis.length === 0) {
+            notifica('Não há registros com o mesmo status da seleção atual.', 'alerta');
+            return;
+         }
+
+         setStaSelecao(bStatusAlvo);
+         fnAtualiza(aCompativeis.map(fnObtemCodigo));
       },
-      [aSelLancamentos, aSelMovimentos]
+      [aSelLancamentos, aSelMovimentos, staSelecao, notifica]
    );
 
    // ---------- Registros selecionados e totalizadores ----------
@@ -465,30 +518,13 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    );
 
    /**
-    * Situação da seleção: vazia, só conciliados, só não conciliados ou mista.
-    * Colore o cabeçalho da grade e orienta as mensagens.
-    */
-   const staSelecao = useMemo(() => {
-      const aTodos = [...aLancSelecionados, ...aMovSelecionados];
-      if (aTodos.length === 0) {
-         return SELECAO_VAZIA;
-      }
-      if (aTodos.every((oItem) => oItem.staConciliado)) {
-         return SELECAO_CONCILIADA;
-      }
-      if (aTodos.every((oItem) => !oItem.staConciliado)) {
-         return SELECAO_NAO_CONCILIADA;
-      }
-      return SELECAO_MISTA;
-   }, [aLancSelecionados, aMovSelecionados]);
-
-   /**
     * Somatórias da seleção em duas linhas (item 6.1.2): uma para os
     * selecionados já conciliados e outra para os não conciliados, cada uma
     * com a sua diferença.
     *
-    * Com a seleção mista (ata de 24/09/2026), as duas linhas podem estar
-    * preenchidas ao mesmo tempo; cada ação usa a diferença da sua linha.
+    * A trava do item 6.1.3.5 impede misturar status, então na prática só uma
+    * das linhas fica preenchida por vez — mas as duas ficam visíveis, como o
+    * documento descreve, para que o usuário veja qual delas está em jogo.
     */
    const oTotais = useMemo(() => {
       const oConciliados = montaLinhaSomatoria(
@@ -646,11 +682,9 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
     * de novo com as datas da base — aqui é para o usuário saber antes de
     * clicar, e ver quais linhas estão travando.
     *
-    * @param {Array<object>} [aLanc] Lançamentos a conferir; padrão é a seleção
-    * @param {Array<object>} [aMov] Movimentos a conferir; padrão é a seleção
     * @returns {string} Mensagem de impedimento, ou string vazia
     */
-   const verificaSelecaoBloqueada = useCallback((aLanc = aLancSelecionados, aMov = aMovSelecionados) => {
+   const verificaSelecaoBloqueada = useCallback(() => {
       if (!datBloqueio) {
          return '';
       }
@@ -660,10 +694,10 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
       // a tela usa para marcar a linha é essa chave inteira — ilegível em um
       // aviso. O número do documento é o que o usuário reconhece na grade.
       const aBloqueados = [
-         ...aLanc
+         ...aLancSelecionados
             .filter((oItem) => estaBloqueada(oItem.datMovimento))
             .map((oItem) => `${oItem.numDocumento || oItem.codLancamento} (${oItem.datMovimento})`),
-         ...aMov
+         ...aMovSelecionados
             .filter((oItem) => estaBloqueada(oItem.datMovimento))
             .map((oItem) => `${oItem.numDocumento || oItem.codMovimento} (${oItem.datMovimento})`),
       ];
@@ -683,52 +717,50 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    // ---------- Conciliação e estorno ----------
 
    /**
-    * Aplica um novo status de conciliação aos registros informados e retira
-    * da seleção só eles — o restante da seleção mista continua marcado.
+    * Aplica um novo status de conciliação aos registros selecionados.
     * @param {boolean} bConciliado Status gravado nos registros
-    * @param {Array<object>} aLancAfetados Lançamentos gravados
-    * @param {Array<object>} aMovAfetados Movimentos gravados
     */
-   const aplicaStatusSelecao = useCallback((bConciliado, aLancAfetados, aMovAfetados) => {
-      const oCodLanc = new Set(aLancAfetados.map((oItem) => oItem.codLancamento));
-      const oCodMov = new Set(aMovAfetados.map((oItem) => oItem.codMovimento));
-
-      setLancamentos((aAtuais) =>
-         aAtuais.map((oItem) => (oCodLanc.has(oItem.codLancamento) ? { ...oItem, staConciliado: bConciliado } : oItem))
-      );
-      setMovimentos((aAtuais) =>
-         aAtuais.map((oItem) => (oCodMov.has(oItem.codMovimento) ? { ...oItem, staConciliado: bConciliado } : oItem))
-      );
-      setSelLancamentos((aAtuais) => aAtuais.filter((sCodigo) => !oCodLanc.has(sCodigo)));
-      setSelMovimentos((aAtuais) => aAtuais.filter((sCodigo) => !oCodMov.has(sCodigo)));
-   }, []);
+   const aplicaStatusSelecao = useCallback(
+      (bConciliado) => {
+         setLancamentos((aAtuais) =>
+            aAtuais.map((oItem) =>
+               aSelLancamentos.includes(oItem.codLancamento) ? { ...oItem, staConciliado: bConciliado } : oItem
+            )
+         );
+         setMovimentos((aAtuais) =>
+            aAtuais.map((oItem) =>
+               aSelMovimentos.includes(oItem.codMovimento) ? { ...oItem, staConciliado: bConciliado } : oItem
+            )
+         );
+         limpaSelecao();
+      },
+      [aSelLancamentos, aSelMovimentos, limpaSelecao]
+   );
 
    /**
-    * Botão "Conciliar" (item 6.1.3.6): concilia os NÃO conciliados da
-    * seleção, exigindo diferença zero na linha de somatória deles. Os
-    * conciliados que estiverem marcados junto ficam como estão.
+    * Botão "Conciliar" (item 6.1.3.6): exige diferença zero entre as
+    * somatórias dos registros não conciliados selecionados.
     */
    const concilia = useCallback(async () => {
-      const aLancPendentes = aLancSelecionados.filter((oItem) => !oItem.staConciliado);
-      const aMovPendentes = aMovSelecionados.filter((oItem) => !oItem.staConciliado);
-
       // Todas as validações ocorrem antes de gravar, conforme padrão de transações
-      if (aLancPendentes.length === 0 || aMovPendentes.length === 0) {
+      if (aSelLancamentos.length === 0 || aSelMovimentos.length === 0) {
+         notifica('Selecione ao menos um lançamento do sistema e um movimento do banco.', 'alerta');
+         return;
+      }
+      if (staSelecao === SELECAO_CONCILIADA) {
          notifica(
-            staSelecao === SELECAO_CONCILIADA
-               ? 'Os registros selecionados já estão conciliados. Use "Estorno" para desfazer antes de conciliar novamente.'
-               : 'Selecione ao menos um lançamento do sistema e um movimento do banco não conciliados.',
+            'Os registros selecionados já estão conciliados. Use "Desfazer" para estornar antes de conciliar novamente.',
             'alerta'
          );
          return;
       }
-      if (oTotais.oNaoConciliados.valDiferenca !== 0) {
-         notifica('A diferença entre as somatórias dos não conciliados deve ser zero para conciliar.', 'erro');
+      if (oTotais.valDiferenca !== 0) {
+         notifica('A diferença entre as somatórias deve ser zero para conciliar.', 'erro');
          return;
       }
 
       // Item 6.1.3.1: período fechado não aceita conciliação
-      const sBloqueio = verificaSelecaoBloqueada(aLancPendentes, aMovPendentes);
+      const sBloqueio = verificaSelecaoBloqueada();
       if (sBloqueio) {
          notifica(sBloqueio, 'erro');
          return;
@@ -736,18 +768,21 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
 
       try {
          // Persiste no banco antes de refletir a mudança na tela
-         const oRetorno = await gravaConciliacaoApi(oConta.codConta, aLancPendentes, aMovPendentes, true);
-         aplicaStatusSelecao(true, aLancPendentes, aMovPendentes);
-         notifica(
-            oRetorno.mensagem +
-               (staSelecao === SELECAO_MISTA ? ' Os registros já conciliados da seleção não foram alterados.' : ''),
-            'sucesso'
+         const oRetorno = await gravaConciliacaoApi(
+            oConta.codConta,
+            aLancSelecionados,
+            aMovSelecionados,
+            true
          );
+         aplicaStatusSelecao(true);
+         notifica(oRetorno.mensagem, 'sucesso');
       } catch (oErro) {
          notifica(oErro.message, 'erro');
       }
    }, [
       oConta,
+      aSelLancamentos,
+      aSelMovimentos,
       aLancSelecionados,
       aMovSelecionados,
       staSelecao,
@@ -758,44 +793,48 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    ]);
 
    /**
-    * Botão "Desfazer Conciliação" (item 6.1.3.7): estorna os CONCILIADOS da
-    * seleção, exigindo diferença zero na linha de somatória deles.
+    * Botão "Desfazer Conciliação" (item 6.1.3.7): estorna os registros
+    * conciliados selecionados, exigindo diferença zero.
     */
    const desfazConciliacao = useCallback(async () => {
-      const aLancConciliados = aLancSelecionados.filter((oItem) => oItem.staConciliado);
-      const aMovConciliados = aMovSelecionados.filter((oItem) => oItem.staConciliado);
-
-      if (aLancConciliados.length === 0 && aMovConciliados.length === 0) {
+      if (aSelLancamentos.length === 0 && aSelMovimentos.length === 0) {
          notifica('Selecione os registros conciliados que deseja estornar.', 'alerta');
          return;
       }
-      if (oTotais.oConciliados.valDiferenca !== 0) {
-         notifica('A diferença entre as somatórias dos conciliados deve ser zero para estornar.', 'erro');
+      if (staSelecao !== SELECAO_CONCILIADA) {
+         notifica('Somente registros já conciliados podem ser estornados.', 'alerta');
+         return;
+      }
+      if (oTotais.valDiferenca !== 0) {
+         notifica('A diferença entre as somatórias deve ser zero para estornar.', 'erro');
          return;
       }
 
       // Item 6.1.3.1: reabrir uma conciliação em período fechado alteraria um
       // mês já encerrado — a trava vale para o estorno tanto quanto para a
       // conciliação
-      const sBloqueio = verificaSelecaoBloqueada(aLancConciliados, aMovConciliados);
+      const sBloqueio = verificaSelecaoBloqueada();
       if (sBloqueio) {
          notifica(sBloqueio, 'erro');
          return;
       }
 
       try {
-         const oRetorno = await gravaConciliacaoApi(oConta.codConta, aLancConciliados, aMovConciliados, false);
-         aplicaStatusSelecao(false, aLancConciliados, aMovConciliados);
-         notifica(
-            oRetorno.mensagem +
-               (staSelecao === SELECAO_MISTA ? ' Os registros não conciliados da seleção não foram alterados.' : ''),
-            'sucesso'
+         const oRetorno = await gravaConciliacaoApi(
+            oConta.codConta,
+            aLancSelecionados,
+            aMovSelecionados,
+            false
          );
+         aplicaStatusSelecao(false);
+         notifica(oRetorno.mensagem, 'sucesso');
       } catch (oErro) {
          notifica(oErro.message, 'erro');
       }
    }, [
       oConta,
+      aSelLancamentos,
+      aSelMovimentos,
       aLancSelecionados,
       aMovSelecionados,
       staSelecao,
@@ -875,8 +914,11 @@ export function useConciliacao(oConta, notifica, atualizaContaLocal) {
             `${aGruposLivres.length} correspondência(s) conciliada(s) automaticamente.` +
                (iBloqueados > 0
                   ? ` ${iBloqueados} ficaram de fora por estarem em período bloqueado até ${datBloqueio}.`
+                  : '') +
+               (oRetorno.iBuscasInterrompidas > 0
+                  ? ` ${oRetorno.iBuscasInterrompidas} busca(s) por agrupamento pararam no tempo limite.`
                   : ''),
-            iBloqueados > 0 ? 'alerta' : 'sucesso'
+            iBloqueados > 0 || oRetorno.iBuscasInterrompidas > 0 ? 'alerta' : 'sucesso'
          );
       } catch (oErro) {
          notifica(oErro.message, 'erro');

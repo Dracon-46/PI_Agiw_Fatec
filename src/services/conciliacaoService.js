@@ -247,7 +247,6 @@ export async function gravaConciliacaoApi(sCodConta, aLancamentos, aMovimentos, 
    });
 } // gravaConciliacaoApi
 
-
 /**
  * Grava (ou remove) o bloqueio de período da conta — item 6.1.3.1.
  * @param {string} sCodConta
@@ -262,7 +261,6 @@ export async function gravaBloqueioApi(sCodConta, sDatBloqueio) {
    });
 } // gravaBloqueioApi
 
-
 /**
  * Gera uma transferência entre contas — item 6.1.3.8, ação 2.
  * @param {object} oTransferencia
@@ -275,39 +273,6 @@ export async function criaTransferenciaApi(oTransferencia) {
       body: JSON.stringify(oTransferencia),
    });
 } // criaTransferenciaApi
-
-
-
-/**
- * Consulta a situação de um boleto na instituição (cobrança).
- * @param {string} sCodConta
- * @param {string} sNumBoleto Nosso número
- * @param {string} [sSeuNumero] Seu número
- * @returns {Promise<{ boleto: object, banco: string }>}
- */
-export async function consultaBoletoBanco(sCodConta, sNumBoleto, sSeuNumero = '') {
-   const oParams = new URLSearchParams({
-      conta: sCodConta,
-      numBoleto: sNumBoleto,
-      seuNumero: sSeuNumero,
-   });
-   return requisitaJson(`/api/bank/boletos?${oParams}`);
-} // consultaBoletoBanco
-
-/**
- * Comanda a baixa de um boleto na instituição.
- * @param {string} sCodConta
- * @param {string} sNumBoleto Nosso número
- * @param {string} sSeuNumero Seu número
- * @returns {Promise<{ baixa: object, mensagem: string }>}
- */
-export async function baixaBoletoBanco(sCodConta, sNumBoleto, sSeuNumero) {
-   return requisitaJson('/api/bank/boletos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conta: sCodConta, numBoleto: sNumBoleto, seuNumero: sSeuNumero }),
-   });
-} // baixaBoletoBanco
 
 /**
  * Monta a URL de download de um relatório.

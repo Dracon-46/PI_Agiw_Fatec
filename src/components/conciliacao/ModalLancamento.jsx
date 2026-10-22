@@ -601,8 +601,8 @@ export function ModalLancamento({
                            }
                            onChange={(oEvento) => alteraTipoMovimento(oEvento.target.value === 'entrada')}
                         >
-                           <option value="entrada">Entrada (crédito)</option>
-                           <option value="saida">Saída (débito)</option>
+                           <option value="entrada">Entrada</option>
+                           <option value="saida">Saída</option>
                         </select>
                      </label>
 

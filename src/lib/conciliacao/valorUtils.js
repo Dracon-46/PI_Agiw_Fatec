@@ -1,7 +1,5 @@
 // Utilitários de valor / data - Conciliação Bancária - Ticket 37060
 
-export const ESCALA_CENTAVOS = 100;
-
 export function limpaSeparadores(sValor) {
   if (typeof sValor !== 'string') sValor = String(sValor);
   let sLimpo = sValor.trim();
@@ -20,17 +18,6 @@ export function limpaSeparadores(sValor) {
   const nValor = parseFloat(sLimpo);
   if (isNaN(nValor)) throw new Error(`Valor inválido: "${sValor}"`);
   return nValor;
-}
-
-export function valorParaCentavos(nValor) {
-  return Math.round(nValor * ESCALA_CENTAVOS);
-}
-
-export function centavosParaReais(nCentavos) {
-  return (nCentavos / ESCALA_CENTAVOS)
-    .toFixed(2)
-    .replace('.', ',')
-    .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 /** Faixa de anos aceita como válida em qualquer interpretação de data */
@@ -150,9 +137,4 @@ export function normalizaDataExibicao(sData) {
     return '';
   }
   return `${oPartes.sDia}/${oPartes.sMes}/${oPartes.sAno}`;
-}
-
-/** @deprecated Use normalizaDataExibicao */
-export function normalizaDataBradesco(sData) {
-  return normalizaDataExibicao(sData);
 }

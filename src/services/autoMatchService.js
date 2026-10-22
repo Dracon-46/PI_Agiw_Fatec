@@ -11,14 +11,48 @@
 //   3ª) 1-para-N: um lançamento do ERP corresponde a vários movimentos;
 //   4ª) N-para-N: os dois lados são conjuntos e as somas batem.
 //
+// Os agrupamentos usam `buscaConjuntoPorSoma` (até 10 lançamentos por grupo).
+// A execução inteira tem um prazo (LIMITE_TEMPO_TOTAL_MS): a rota roda no
+// mesmo processo que atende as demais requisições, e uma busca sem fim
+// travaria o servidor para todos. Buscas interrompidas pelo prazo são
+// contadas e devolvidas, para a tela avisar que pode haver grupo não testado.
+//
 // Módulo executado apenas no servidor (API Route) — não acessa o DOM.
 // ============================================================================
 
-import { encontraConjuntoPorSoma, converteParaCentavos } from '../utils/subsetSum.js';
+import { PRAZO_PADRAO_MS, buscaConjuntoPorSoma, converteParaCentavos } from '../utils/subsetSum.js';
 import { comparaDatas } from '../utils/formatters.js';
 
 /** Janela padrão, em dias, aceita entre a data do lançamento e a do banco */
 export const JANELA_DIAS_PADRAO = 3;
+
+/** Tempo máximo, em milissegundos, de uma execução da conciliação automática */
+export const LIMITE_TEMPO_TOTAL_MS = 15000;
+
+/**
+ * Busca um conjunto respeitando o prazo da execução e registrando no
+ * contexto quando a busca foi interrompida.
+ * @param {object} oPrazo { nFim, iInterrompidas }
+ * @param {Array<object>} aCandidatos
+ * @param {number} nAlvo
+ * @returns {Array<object>|null}
+ */
+function buscaComPrazo(oPrazo, aCandidatos, nAlvo) {
+   const nAgora = performance.now();
+   if (nAgora >= oPrazo.nFim) {
+      oPrazo.iInterrompidas += 1;
+      return null;
+   }
+
+   const { aConjunto, bTruncado } = buscaConjuntoPorSoma(aCandidatos, nAlvo, {
+      obtemValor: (oItem) => oItem.valMovimento,
+      nPrazo: Math.min(nAgora + PRAZO_PADRAO_MS, oPrazo.nFim),
+   });
+   if (bTruncado) {
+      oPrazo.iInterrompidas += 1;
+   }
+   return aConjunto;
+} // buscaComPrazo
 
 /** Milissegundos em um dia, usado no cálculo da janela de datas */
 const MILISSEGUNDOS_POR_DIA = 86400000;
@@ -130,7 +164,7 @@ function somaCentavos(aItens) {
  * @param {object} oContexto
  * @returns {Array<object>} Grupos localizados
  */
-function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, oMovUsados, iJanelaDias }) {
+function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, oMovUsados, iJanelaDias, oPrazo }) {
    const aGrupos = [];
    let iAvaliadas = 0;
 
@@ -141,7 +175,7 @@ function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, o
       }
 
       for (const aConjuntoMov of geraCombinacoes(aMovLivres, iTamanho, LIMITE_COMBINACOES_NN)) {
-         if (iAvaliadas >= LIMITE_COMBINACOES_NN) {
+         if (iAvaliadas >= LIMITE_COMBINACOES_NN || performance.now() >= oPrazo.nFim) {
             return aGrupos;
          }
          iAvaliadas += 1;
@@ -169,9 +203,7 @@ function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, o
             continue;
          }
 
-         const aConjuntoLanc = encontraConjuntoPorSoma(aCandidatos, somaCentavos(aConjuntoMov) / 100, {
-            obtemValor: (oItem) => oItem.valMovimento,
-         });
+         const aConjuntoLanc = buscaComPrazo(oPrazo, aCandidatos, somaCentavos(aConjuntoMov) / 100);
 
          // Um lançamento sozinho fechando N movimentos é a 3ª passada
          if (!aConjuntoLanc || aConjuntoLanc.length < 2) {
@@ -195,10 +227,12 @@ function casaConjuntoComConjunto({ aLancPendentes, aMovPendentes, oLancUsados, o
  * @param {Array<object>} aMovimentos Movimentos do extrato bancário
  * @param {object} [oOpcoes]
  * @param {number} [oOpcoes.iJanelaDias] Tolerância de dias entre as datas
- * @returns {{ aGrupos: Array<object>, iGrupos: number, iLancamentosConciliados: number, iMovimentosConciliados: number }}
+ * @returns {{ aGrupos: Array<object>, iGrupos: number, iLancamentosConciliados: number,
+ *             iMovimentosConciliados: number, iBuscasInterrompidas: number }}
  */
 export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes = {}) {
    const iJanelaDias = oOpcoes.iJanelaDias ?? JANELA_DIAS_PADRAO;
+   const oPrazo = { nFim: performance.now() + LIMITE_TEMPO_TOTAL_MS, iInterrompidas: 0 };
 
    // Trabalha apenas sobre o que ainda está pendente de conciliação
    const aLancPendentes = (aLancamentos ?? []).filter((oItem) => !oItem.staConciliado);
@@ -246,9 +280,7 @@ export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes 
          continue;
       }
 
-      const aConjunto = encontraConjuntoPorSoma(aCandidatos, oMovimento.valMovimento, {
-         obtemValor: (oItem) => oItem.valMovimento,
-      });
+      const aConjunto = buscaComPrazo(oPrazo, aCandidatos, oMovimento.valMovimento);
 
       // Conjuntos de um único item já teriam sido resolvidos na 1ª passada
       if (aConjunto && aConjunto.length > 1) {
@@ -273,9 +305,7 @@ export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes 
          continue;
       }
 
-      const aConjunto = encontraConjuntoPorSoma(aCandidatos, oLancamento.valMovimento, {
-         obtemValor: (oItem) => oItem.valMovimento,
-      });
+      const aConjunto = buscaComPrazo(oPrazo, aCandidatos, oLancamento.valMovimento);
 
       if (aConjunto && aConjunto.length > 1) {
          aConjunto.forEach((oItem) => oMovUsados.add(oItem.codMovimento));
@@ -292,6 +322,7 @@ export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes 
          oLancUsados,
          oMovUsados,
          iJanelaDias,
+         oPrazo,
       })
    );
 
@@ -300,24 +331,6 @@ export function executaConciliacaoAutomatica(aLancamentos, aMovimentos, oOpcoes 
       iGrupos: aGrupos.length,
       iLancamentosConciliados: oLancUsados.size,
       iMovimentosConciliados: oMovUsados.size,
+      iBuscasInterrompidas: oPrazo.iInterrompidas,
    };
 } // executaConciliacaoAutomatica
-
-/**
- * Sugere os lançamentos do sistema que correspondem a um movimento do banco.
- * Alimenta a ação "Buscar e associar lançamentos" (2ª parte da conciliação).
- *
- * @param {object} oMovimento Movimento do banco selecionado
- * @param {Array<object>} aCandidatos Títulos ou lançamentos disponíveis
- * @param {(item: object) => number} [fnObtemValor] Extrator do valor
- * @returns {Array<object>} Conjunto sugerido (vazio quando não há correspondência)
- */
-export function sugereAssociacao(oMovimento, aCandidatos, fnObtemValor = (oItem) => oItem.valTitulo) {
-   if (!oMovimento) {
-      return [];
-   }
-   const aConjunto = encontraConjuntoPorSoma(aCandidatos, oMovimento.valMovimento, {
-      obtemValor: fnObtemValor,
-   });
-   return aConjunto ?? [];
-} // sugereAssociacao

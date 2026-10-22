@@ -93,17 +93,6 @@ export async function registraAuditoria(oEvento) {
 } // registraAuditoria
 
 /**
- * Grava vários eventos de auditoria de uma vez.
- * @param {Array<object>} aEventos
- * @returns {Promise<void>}
- */
-export async function registraAuditoriaEmLote(aEventos) {
-   for (const oEvento of aEventos) {
-      await registraAuditoria(oEvento);
-   }
-} // registraAuditoriaEmLote
-
-/**
  * Monta o objeto de evento no formato da tela de auditoria.
  * @param {object} oLinha Linha de TBCONB009
  * @returns {object}

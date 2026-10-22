@@ -514,63 +514,6 @@ textarea {
    pointer-events: none;
 }
 
-/* Campo com prefixo (logo do banco / código) */
-.campo-com-prefixo {
-   display: flex;
-   align-items: stretch;
-   border: 1px solid var(--cor-borda);
-   border-radius: var(--raio-md);
-   background: var(--cor-superficie);
-   overflow: hidden;
-   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.campo-com-prefixo:focus-within {
-   border-color: var(--agiw-primary);
-   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.campo-com-prefixo .campo-prefixo {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   min-width: 44px;
-   padding: 0 6px;
-   background: var(--cor-canvas-alt);
-   border-right: 1px solid var(--cor-borda);
-   font-size: 11px;
-   font-weight: 600;
-   color: var(--cor-texto-secundario);
-}
-
-.campo-com-prefixo .campo-controle {
-   border: none;
-   border-radius: 0;
-   height: 28px;
-}
-
-.campo-com-prefixo .campo-controle:focus {
-   box-shadow: none;
-}
-
-/* ============================================================================
-   BARRA DE FILTROS GLOBAIS (topo da Gestão Financeira)
-   ========================================================================== */
-.barra-filtros-globais {
-   display: grid;
-   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-   gap: 10px;
-   align-items: end;
-   padding: 10px 16px;
-   background: var(--cor-superficie);
-   border-bottom: 1px solid var(--cor-borda);
-}
-
-.barra-filtros-globais .campo-acao {
-   display: flex;
-   align-items: flex-end;
-}
-
 /* ============================================================================
    PAINEL / CARD GENÉRICO
    ========================================================================== */
@@ -672,23 +615,6 @@ textarea {
    background: var(--agiw-primary-light);
 }
 
-.card-saldo-icone {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   width: 26px;
-   height: 26px;
-   border-radius: var(--raio-sm);
-   background: var(--cor-superficie);
-   color: var(--agiw-primary);
-   flex-shrink: 0;
-}
-
-.card-saldo-icone svg {
-   width: 15px;
-   height: 15px;
-}
-
 .card-saldo-rotulo {
    font-size: 11px;
    color: var(--cor-texto-secundario);
@@ -745,24 +671,25 @@ textarea {
    flex-shrink: 0;
 }
 
-/* Somatórias da seleção travadas no pé da tela */
+/* Somatórias da seleção travadas no pé da tela. Ata de 24/09/2026: as duas
+   linhas (as esmaecidas, quando fora de uso) ficam centralizadas */
 .barra-somatoria {
    position: sticky;
    bottom: 0;
    z-index: 5;
    display: flex;
    flex-direction: column;
+   align-items: center;
    gap: 6px;
    margin-top: 12px;
    padding: 8px 0 4px;
    background: var(--cor-canvas);
 }
 
-.coluna-banco {
-   display: flex;
-   flex-direction: column;
-   gap: 12px;
-   min-width: 0;
+.barra-somatoria .linha-somatoria {
+   width: 100%;
+   max-width: 860px;
+   justify-content: center;
 }
 
 .grade-wrapper {
@@ -929,15 +856,6 @@ textarea {
    color: var(--cor-texto-suave);
 }
 
-/* Ata de 24/09/2026: os textos esmaecidos das grades vazias ficam no centro
-   do quadro, e não colados no topo */
-.grade-wrapper > .grade-vazia {
-   height: 100%;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-}
-
 /* ---------- Checkbox ---------- */
 .checkbox {
    width: 14px;
@@ -966,26 +884,6 @@ textarea {
 .selo svg {
    width: 11px;
    height: 11px;
-}
-
-.selo-conciliado {
-   background: var(--cor-conciliado-bg);
-   color: var(--cor-conciliado);
-}
-
-.selo-nao-conciliado {
-   background: var(--cor-canvas);
-   color: var(--cor-texto-suave);
-}
-
-.selo-receber {
-   background: var(--agiw-primary-light);
-   color: var(--cor-entrada);
-}
-
-.selo-pagar {
-   background: var(--cor-nao-conciliado-bg);
-   color: var(--cor-saida);
 }
 
 .selo-neutro {
@@ -1077,29 +975,12 @@ textarea {
    align-items: center;
 }
 
-.grade-acoes {
-   display: grid;
-   grid-template-columns: repeat(2, minmax(0, 1fr));
-   gap: 6px;
-}
-
-.grade-acoes .btn {
-   justify-content: flex-start;
-}
-
 .totais {
    display: grid;
    grid-template-columns: auto auto;
    gap: 2px 16px;
    font-size: 11px;
    white-space: nowrap;
-}
-
-.totais-item {
-   display: flex;
-   align-items: center;
-   gap: 5px;
-   justify-content: space-between;
 }
 
 .totais-rotulo {
@@ -1422,7 +1303,6 @@ textarea {
 
 .col-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .col-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.col-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 /* ============================================================================
    MENSAGENS E ALERTAS
@@ -1450,12 +1330,6 @@ textarea {
    border-color: var(--cor-nao-conciliado-borda);
    background: var(--cor-nao-conciliado-bg);
    color: #9f1239;
-}
-
-.alerta-sucesso {
-   border-color: var(--cor-conciliado-borda);
-   background: var(--cor-conciliado-bg);
-   color: #166534;
 }
 
 .alerta-info {
@@ -1643,7 +1517,6 @@ textarea {
 }
 
 .situacao-configurado { color: var(--cor-conciliado); }
-.situacao-pendente { color: var(--cor-texto-suave); }
 
 /* ---------- Marca do banco ---------- */
 .marca-banco {
@@ -1772,14 +1645,10 @@ textarea {
 @media (max-width: 720px) {
    .filtro-conciliacao,
    .linha-campos.col-2,
-   .linha-campos.col-3,
-   .linha-campos.col-4 {
+   .linha-campos.col-3 {
       grid-template-columns: minmax(0, 1fr);
    }
 
-   .grade-acoes {
-      grid-template-columns: minmax(0, 1fr);
-   }
 }
 
 /* ============================================================================
@@ -1889,26 +1758,6 @@ textarea {
    flex: 0 0 auto;
 }
 
-/* ============================================================================
-   Campos editáveis dentro das grades (baixa de título)
-   ========================================================================== */
-
-.campo-controle.campo-grade {
-   width: 92px;
-   padding: 3px 6px;
-   font-size: 11px;
-}
-
-.campo-data.campo-data-grade {
-   width: 132px;
-   gap: 0;
-}
-
-.campo-data.campo-data-grade .campo-controle {
-   padding: 3px 22px 3px 6px;
-   font-size: 11px;
-}
-
 /* Aviso de atenção — completa a escala alerta-info / erro / sucesso */
 .alerta.alerta-atencao {
    background: var(--cor-alerta-bg);
@@ -1917,10 +1766,6 @@ textarea {
 }
 
 /* Coluna de situação do boleto na instituição (baixa de título) */
-.col-situacao-banco {
-   white-space: nowrap;
-   text-align: center;
-}
 
 /* ============================================================================
    Campo com pesquisa (CampoAutocomplete) — ata de 24/09/2026

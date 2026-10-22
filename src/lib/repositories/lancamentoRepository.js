@@ -285,19 +285,6 @@ async function geraProximoNumDocto(sCodDocum, sPrefixo) {
 } // geraProximoNumDocto
 
 /**
- * Gera o código de um novo lançamento originado na conciliação.
- *
- * Mantido para compatibilidade com quem só precisa do número do documento: a
- * chave completa é montada por `insereLancamento`.
- *
- * @param {string} [sCodDocum] Tipo de documento
- * @returns {Promise<string>} Número do documento, ex.: "MC000001"
- */
-export async function geraProximoCodigoLancamento(sCodDocum = PREFIXO_DOCUMENTO) {
-   return geraProximoNumDocto(sCodDocum, PREFIXO_DOCUMENTO);
-} // geraProximoCodigoLancamento
-
-/**
  * Gera a próxima sequência de conciliação (NUMSEQCONC).
  *
  * É a sequência que amarra os dois lados, então tem de ser única nas DUAS
@@ -903,16 +890,6 @@ export async function excluiLancamento(oConta, sCodLancamento) {
 
    return { bExcluido: true, sMotivo: '' };
 } // excluiLancamento
-
-/**
- * Gera o código que identifica as duas pernas de uma transferência.
- * @returns {Promise<string>} Código no formato "TRF|TR000001"
- */
-export async function geraProximoCodigoTransferencia() {
-   const sCodDocum = codDocumTransferencia();
-   const sNumDocto = await geraProximoNumDocto(sCodDocum, PREFIXO_TRANSFERENCIA);
-   return `${sCodDocum}${SEPARADOR_CHAVE}${sNumDocto}`;
-} // geraProximoCodigoTransferencia
 
 /**
  * Registra uma transferência entre contas, gerando simultaneamente o

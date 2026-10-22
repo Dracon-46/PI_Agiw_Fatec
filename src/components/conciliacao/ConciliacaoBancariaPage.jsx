@@ -454,8 +454,7 @@ export function ConciliacaoBancariaPage() {
          exportar: () => setExportarAberto(true),
          ajuda: () =>
             notifica(
-               'Conciliados e não conciliados podem ser selecionados juntos: "Conciliar" usa os não conciliados e ' +
-                  '"Estorno" os conciliados, e cada um exige diferença zero na sua linha de somatória. ' +
+               'Selecione lançamentos e movimentos com a mesma situação; a conciliação exige diferença zero. ' +
                   'Clique no título da coluna para ordenar; o botão direito abre detalhes, edição, lançamento, ' +
                   'transferência e exclusão.',
                'info'
@@ -855,7 +854,7 @@ export function ConciliacaoBancariaPage() {
             {/* ---------- Movimentos no Banco ---------- */}
             <div className="painel">
                <header className="painel-cabecalho">
-                  Movimentos no Banco
+                  Movimentos no Banco — {oContaSelecionada?.nomBanco}
                   <span className="chip-contador" style={{ marginLeft: 'auto' }}>
                      {aMovVisiveis.length} registro(s)
                   </span>
@@ -985,8 +984,9 @@ export function ConciliacaoBancariaPage() {
 
          {/* Item 6.1.2: as somatórias da seleção em duas linhas — uma para os
              conciliados e outra para os não conciliados —, cada uma com a sua
-             diferença. Ata de 24/09/2026: a linha fica travada no rodapé da
-             tela, junto das grades, para não sumir ao rolar. */}
+             diferença. Ata de 24/09/2026: as duas linhas ficam centralizadas e
+             travadas no rodapé da tela, junto das grades, para não sumirem ao
+             rolar. */}
          <div className="barra-somatoria">
             <LinhaSomatoria sRotulo="Selecionados não conciliados" oLinha={oConc.oTotais.oNaoConciliados} />
             <LinhaSomatoria sRotulo="Selecionados conciliados" oLinha={oConc.oTotais.oConciliados} />

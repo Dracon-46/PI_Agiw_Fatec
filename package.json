@@ -18,7 +18,6 @@
     "db:extrato": "node scripts/carrega-extrato.mjs"
   },
   "dependencies": {
-    "@nestjs/config": "^12.0.0",
     "@prisma/adapter-mssql": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@prisma/config": "^7.10.0",

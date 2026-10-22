@@ -56,9 +56,13 @@ export async function POST(oRequisicao) {
       const oResultado = executaConciliacaoAutomatica(aLancamentos, aMovimentos, { iJanelaDias });
 
       const sMensagem =
-         oResultado.iGrupos > 0
+         (oResultado.iGrupos > 0
             ? `${oResultado.iGrupos} correspondência(s) localizada(s).`
-            : 'Nenhuma correspondência automática foi encontrada no período.';
+            : 'Nenhuma correspondência automática foi encontrada no período.') +
+         (oResultado.iBuscasInterrompidas > 0
+            ? ` ${oResultado.iBuscasInterrompidas} busca(s) por agrupamento foram interrompidas pelo tempo ` +
+              'limite; reduza o período para que todas as combinações sejam testadas.'
+            : '');
 
       return NextResponse.json({ ...oResultado, mensagem: sMensagem });
    } catch (oErro) {
