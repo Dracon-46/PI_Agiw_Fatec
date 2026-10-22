@@ -13,13 +13,19 @@
 // Aberta a partir de um movimento do banco, a caixa aproveita data, documento,
 // histórico e valor da linha, e já posiciona a conta em conciliação no lado
 // correto: crédito no banco significa entrada nesta conta.
+//
+// Ata de 24/09/2026: os campos de conta passam a se chamar "Conta Origem" e
+// "Conta Destino", um botão inverte as duas, o subgrupo é obrigatório e o
+// valor pode ser rateado entre mais de um centro de custo.
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Power } from 'lucide-react';
+import { ArrowLeftRight, ArrowRightLeft, Power } from 'lucide-react';
 import { Modal } from '../comum/Modal.jsx';
 import { CampoData } from '../comum/CampoData.jsx';
+import { RateioCentroCusto, linhasParaRateio } from './RateioCentroCusto.jsx';
 import { converteTextoParaValor, formataMoeda, formataValor } from '../../utils/formatters.js';
+import { validaRateio } from '../../utils/rateio.js';
 import { useBankContext } from '../../contexts/BankContext.jsx';
 
 /** Estado inicial do formulário */
@@ -31,6 +37,7 @@ const FORMULARIO_VAZIO = {
    codSubgrupo: '',
    codContaSaida: '',
    codContaEntrada: '',
+   aRateio: [],
 };
 
 /**
@@ -99,7 +106,31 @@ export function ModalTransferencia({
       setErro('');
    } // alteraCampo
 
+   /**
+    * Inverte as contas de origem e destino (ata de 24/09/2026).
+    */
+   function inverteContas() {
+      setFormulario((oAtual) => ({
+         ...oAtual,
+         codContaSaida: oAtual.codContaEntrada,
+         codContaEntrada: oAtual.codContaSaida,
+      }));
+      setErro('');
+   } // inverteContas
+
    const nValorInformado = converteTextoParaValor(oFormulario.sValor);
+
+   // As duas pernas usam o mesmo subgrupo e cada uma resolve a categoria pelo
+   // próprio sentido, então a lista mostra cada código uma vez só
+   const aSubgrupos = useMemo(() => {
+      const oPorCodigo = new Map();
+      for (const oSubgrupo of oCatalogos.aSubgrupos) {
+         if (!oPorCodigo.has(oSubgrupo.codSubgrupo)) {
+            oPorCodigo.set(oSubgrupo.codSubgrupo, oSubgrupo);
+         }
+      }
+      return [...oPorCodigo.values()];
+   }, [oCatalogos.aSubgrupos]);
 
    const oContaSaida = useMemo(
       () => aContas.find((oItem) => oItem.codConta === oFormulario.codContaSaida) ?? null,
@@ -116,7 +147,7 @@ export function ModalTransferencia({
 
       // Todas as validações antes de acionar o servidor
       if (!oFormulario.codContaSaida || !oFormulario.codContaEntrada) {
-         setErro('Informe a conta de saída e a conta de entrada.');
+         setErro('Informe a conta origem e a conta destino.');
          return;
       }
       if (oFormulario.codContaSaida === oFormulario.codContaEntrada) {
@@ -135,6 +166,16 @@ export function ModalTransferencia({
          setErro('O valor da transferência deve ser maior que zero.');
          return;
       }
+      if (!oFormulario.codSubgrupo) {
+         setErro('Selecione o subgrupo. O subgrupo é obrigatório no ERP.');
+         return;
+      }
+      const aRateio = linhasParaRateio(oFormulario.aRateio);
+      const sErroRateio = validaRateio(aRateio, nValorInformado);
+      if (sErroRateio) {
+         setErro(sErroRateio);
+         return;
+      }
 
       setGravando(true);
       try {
@@ -146,6 +187,7 @@ export function ModalTransferencia({
             desHistorico: oFormulario.desHistorico.trim(),
             valMovimento: nValorInformado,
             codSubgrupo: oFormulario.codSubgrupo,
+            aRateio,
          });
 
          if (bSucesso) {
@@ -196,17 +238,17 @@ export function ModalTransferencia({
          ) : null}
 
          <div className="grupo-campos">
-            <div className="linha-campos col-2">
+            <div className="linha-campos linha-contas-transferencia">
                <label className="campo">
                   <span className="campo-rotulo">
-                     <span className="obrigatorio">*</span>Banco / Agência de saída (débito)
+                     <span className="obrigatorio">*</span>Conta Origem
                   </span>
                   <select
                      className="campo-controle"
                      value={oFormulario.codContaSaida}
                      onChange={(oEvento) => alteraCampo('codContaSaida', oEvento.target.value)}
                   >
-                     <option value="">Selecione a conta debitada</option>
+                     <option value="">Selecione a conta de onde sai o valor</option>
                      {aContas.map((oConta) => (
                         <option key={oConta.codConta} value={oConta.codConta}>
                            {descreveConta(oConta)}
@@ -215,16 +257,27 @@ export function ModalTransferencia({
                   </select>
                </label>
 
+               <button
+                  type="button"
+                  className="btn-icone btn-inverter-contas"
+                  onClick={inverteContas}
+                  disabled={!oFormulario.codContaSaida && !oFormulario.codContaEntrada}
+                  title="Inverter conta origem e conta destino"
+                  aria-label="Inverter conta origem e conta destino"
+               >
+                  <ArrowRightLeft size={15} />
+               </button>
+
                <label className="campo">
                   <span className="campo-rotulo">
-                     <span className="obrigatorio">*</span>Banco / Agência de entrada (crédito)
+                     <span className="obrigatorio">*</span>Conta Destino
                   </span>
                   <select
                      className="campo-controle"
                      value={oFormulario.codContaEntrada}
                      onChange={(oEvento) => alteraCampo('codContaEntrada', oEvento.target.value)}
                   >
-                     <option value="">Selecione a conta creditada</option>
+                     <option value="">Selecione a conta que recebe o valor</option>
                      {aContas.map((oConta) => (
                         <option key={oConta.codConta} value={oConta.codConta}>
                            {descreveConta(oConta)}
@@ -281,14 +334,16 @@ export function ModalTransferencia({
             </label>
 
             <label className="campo">
-               <span className="campo-rotulo">Subgrupo</span>
+               <span className="campo-rotulo">
+                  <span className="obrigatorio">*</span>Subgrupo
+               </span>
                <select
                   className="campo-controle"
                   value={oFormulario.codSubgrupo}
                   onChange={(oEvento) => alteraCampo('codSubgrupo', oEvento.target.value)}
                >
-                  <option value="">Não informado</option>
-                  {oCatalogos.aSubgrupos.map((oSubgrupo) => (
+                  <option value="">Selecione o subgrupo</option>
+                  {aSubgrupos.map((oSubgrupo) => (
                      <option key={oSubgrupo.codSubgrupo} value={oSubgrupo.codSubgrupo}>
                         {oSubgrupo.codSubgrupo} — {oSubgrupo.desSubgrupo}
                      </option>
@@ -297,11 +352,24 @@ export function ModalTransferencia({
             </label>
          </div>
 
+         <div className="grupo-campos">
+            <RateioCentroCusto
+               aLinhas={oFormulario.aRateio}
+               aoAlterar={(aLinhas) => alteraCampo('aRateio', aLinhas)}
+               nValorTotal={nValorInformado}
+               aCentrosCusto={oCatalogos.aCentrosCusto}
+            />
+         </div>
+
+         {/* O texto vai num span: .alerta é flex, e cada trecho solto viraria
+             uma coluna */}
          <div className="alerta alerta-info" style={{ marginTop: 12 }}>
-            Serão gerados <strong>dois lançamentos</strong> de {formataMoeda(nValorInformado)}: saída em{' '}
-            <strong>{oContaSaida ? descreveConta(oContaSaida) : 'conta de origem'}</strong> e entrada em{' '}
-            <strong>{oContaEntrada ? descreveConta(oContaEntrada) : 'conta de destino'}</strong>. Excluir
-            um deles remove o par inteiro.
+            <span>
+               Serão gerados <strong>dois lançamentos</strong> de {formataMoeda(nValorInformado)}: saída em{' '}
+               <strong>{oContaSaida ? descreveConta(oContaSaida) : 'conta origem'}</strong> e entrada em{' '}
+               <strong>{oContaEntrada ? descreveConta(oContaEntrada) : 'conta destino'}</strong>. Excluir
+               um deles remove o par inteiro, nas duas contas.
+            </span>
          </div>
       </Modal>
    );

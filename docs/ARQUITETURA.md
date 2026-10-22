@@ -535,9 +535,20 @@ sai das seguintes:
    `TAMANHO_MAXIMO_LADO` e, para cada soma, procura o conjunto de lançamentos
    que a fecha.
 
-O subset-sum ([`subsetSum.js`](../src/utils/subsetSum.js)) é uma busca em
-profundidade por **tamanho crescente**, em centavos inteiros, com três podas e
-teto de avaliações para não travar a requisição.
+O subset-sum ([`subsetSum.js`](../src/utils/subsetSum.js)) trabalha em centavos
+inteiros e devolve o **menor** conjunto, de 1 até `TAMANHO_MAXIMO_CONJUNTO` (10)
+lançamentos:
+
+- até `LIMITE_BUSCA_EXATA` (36) candidatos na janela, usa *meet in the middle*:
+  enumera as somas de cada metade (no máximo 2^18) e casa as duas. É **exato** —
+  se o grupo existe, é encontrado, em milissegundos;
+- acima disso, busca em profundidade por tamanho crescente, com corte pelas somas
+  máxima e mínima alcançáveis e dois ponteiros no último par, com prazo de
+  `PRAZO_PADRAO_MS` por busca.
+
+A execução inteira tem prazo de `LIMITE_TEMPO_TOTAL_MS` (15 s), porque a rota roda
+no mesmo processo que atende as outras requisições. Buscas interrompidas pelo
+prazo voltam contadas em `iBuscasInterrompidas`, e a tela avisa o usuário.
 
 A rota **não grava**: devolve os grupos. Quem grava é o hook, com
 `automatica: true` — o que dispensa a verificação de diferença, já que os grupos
@@ -637,7 +648,7 @@ a conta cadastrada na tela sempre tem precedência.
 | --- | --- |
 | **Adicionar um banco** | nova classe em `src/providers/` estendendo `BankProvider`; registre o slug em `BankProviderFactory`; acrescente o código de compensação em `utils/bancos.js` (é ele que liga TBGENE015 ao provider) e as variáveis no `.env.example`; crie um `scripts/diag-<banco>.mjs`. O banco precisa existir em TBGENE015 |
 | **Mudar uma regra de conciliação** | `useConciliacao.js` (tela) e/ou `autoMatchService.js` (automática); a trava que grava está em `api/conciliacao/conciliar` |
-| **Novo campo no lançamento** | a coluna provavelmente já existe em `TBCONB001` (confira o `prisma/schema.prisma`); acrescente em `SELECAO_LANCAMENTO`, `mapeiaLancamento` e `insereLancamento`; depois rota e `ModalNovoLancamento` |
+| **Novo campo no lançamento** | a coluna provavelmente já existe em `TBCONB001` (confira o `prisma/schema.prisma`); acrescente em `SELECAO_LANCAMENTO`, `mapeiaLancamento` e `insereLancamento`; depois rota e `ModalLancamento` (inclusão, detalhes e edição) |
 | **Nova coluna nos relatórios** | `montaBlocos` e `calculaTotais` — as quatro saídas partem dos mesmos blocos |
 | **Nova ação auditada** | constante `ACAO_*` + rótulo em `auditoriaRepository`, e a chamada na rota |
 | **Usar outra tabela do ERP** | acrescente o model ao `prisma/schema.prisma` (tire a definição de um `prisma db pull`, sem os `@relation` para tabelas fora do subconjunto), rode `prisma generate` e consulte pelo repositório do agregado |

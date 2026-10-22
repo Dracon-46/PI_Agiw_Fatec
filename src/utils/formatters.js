@@ -47,18 +47,6 @@ export function formataValor(nValor) {
 }
 
 /**
- * Formata valor com sinal explícito, conforme padrão da tela de conciliação.
- * Entradas aparecem com "+" e saídas com "-".
- * @param {number} nValor Valor absoluto do movimento
- * @param {boolean} bEntrada Indica se o movimento é de entrada (crédito)
- * @returns {string} Ex.: "+ R$ 5.727,00"
- */
-export function formataValorComSinal(nValor, bEntrada) {
-   const sSinal = bEntrada ? '+' : '-';
-   return `${sSinal} ${formataMoeda(Math.abs(nValor ?? 0))}`;
-}
-
-/**
  * Converte texto digitado pelo usuário (pt-BR) em número.
  * @param {string|number} sTexto
  * @returns {number} 0 quando não for possível converter
@@ -177,29 +165,6 @@ export function comparaDatas(sDataA, sDataB) {
 }
 
 /**
- * Verifica se uma data está contida no intervalo informado (inclusive).
- * @param {string} sData Data avaliada (DD/MM/AAAA)
- * @param {string} sDataInicio Início do intervalo (DD/MM/AAAA)
- * @param {string} sDataFim Fim do intervalo (DD/MM/AAAA)
- * @returns {boolean}
- */
-export function estaNoPeriodo(sData, sDataInicio, sDataFim) {
-   const dtData = converteDataBrParaObjeto(sData);
-   if (!dtData) {
-      return false;
-   }
-   const dtInicio = converteDataBrParaObjeto(sDataInicio);
-   const dtFim = converteDataBrParaObjeto(sDataFim);
-   if (dtInicio && dtData < dtInicio) {
-      return false;
-   }
-   if (dtFim && dtData > dtFim) {
-      return false;
-   }
-   return true;
-}
-
-/**
  * Trata a impressão de datas nulas, conforme item "Valores dos Relatórios"
  * do padrão de programação (não exibir "30/12/1899").
  * @param {string} sData
@@ -215,25 +180,6 @@ export function trataDataNula(sData) {
 // ---------------------------------------------------------------------------
 // Apoio à interface
 // ---------------------------------------------------------------------------
-
-/**
- * Retorna a classe CSS do selo correspondente à origem/situação do lançamento.
- * @param {string} sSituacao
- * @returns {string}
- */
-export function retornaClasseSituacao(sSituacao) {
-   const oMapaClasses = {
-      'Contas a Receber': 'selo-receber',
-      'Contas a Pagar': 'selo-pagar',
-      'A Receber': 'selo-receber',
-      'A Pagar': 'selo-pagar',
-      Recebimento: 'selo-receber',
-      Pagamento: 'selo-pagar',
-      Conciliado: 'selo-conciliado',
-      'Não Conciliado': 'selo-nao-conciliado',
-   };
-   return oMapaClasses[sSituacao] ?? 'selo-neutro';
-}
 
 /**
  * Formata a identificação Banco/Agência/Conta Corrente exibida na tela.

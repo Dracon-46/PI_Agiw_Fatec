@@ -8,17 +8,21 @@
 // corrente ativa (troca de banco) e saída.
 // ============================================================================
 
-import { ArrowLeftRight, Download, HelpCircle, LayoutList, LogOut, Trash2, Undo2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Download, HelpCircle, LayoutList, LogOut, Wallet } from 'lucide-react';
 import { ContaTopbar } from '../comum/ContaTopbar.jsx';
 
 /** Logotipo institucional servido de /public */
 const LOGO_AGIW = '/logo-agiw.png';
 
-/** Itens do menu lateral do módulo financeiro */
+/**
+ * Itens do menu lateral do módulo financeiro.
+ *
+ * Ata de 24/09/2026: excluir (e as ações semelhantes, como o estorno) saiu da
+ * lateral e fica só na tela principal, ao lado da seleção — uma ação que
+ * apaga ou desfaz não deve estar a um clique de distância de qualquer tela.
+ */
 const ITENS_MENU = [
    { sChave: 'conciliacao', sRotulo: 'Conciliação Bancária', Icone: LayoutList },
-   { sChave: 'excluir', sRotulo: 'Excluir', Icone: Trash2 },
-   { sChave: 'estorno', sRotulo: 'Estorno', Icone: Undo2 },
    { sChave: 'transferir', sRotulo: 'Transferir', Icone: ArrowLeftRight },
    { sChave: 'exportar', sRotulo: 'Exportar', Icone: Download },
    { sChave: 'ajuda', sRotulo: 'Ajuda', Icone: HelpCircle },

@@ -23,6 +23,7 @@ export const ACAO_ESTORNO = 'ESTORNO';
 export const ACAO_CONCILIACAO_AUTOMATICA = 'CONCILIACAO_AUTO';
 export const ACAO_LANCAMENTO_INCLUIDO = 'LANCAMENTO_INCLUIDO';
 export const ACAO_LANCAMENTO_EXCLUIDO = 'LANCAMENTO_EXCLUIDO';
+export const ACAO_LANCAMENTO_ALTERADO = 'LANCAMENTO_ALTERADO';
 export const ACAO_MOVIMENTO_EXCLUIDO = 'MOVIMENTO_EXCLUIDO';
 export const ACAO_IMPORTACAO_API = 'IMPORTACAO_API';
 export const ACAO_BLOQUEIO = 'BLOQUEIO_PERIODO';
@@ -38,6 +39,7 @@ export const ROTULOS_ACAO = {
    [ACAO_CONCILIACAO_AUTOMATICA]: 'Conciliação automática',
    [ACAO_LANCAMENTO_INCLUIDO]: 'Lançamento incluído',
    [ACAO_LANCAMENTO_EXCLUIDO]: 'Lançamento excluído',
+   [ACAO_LANCAMENTO_ALTERADO]: 'Lançamento alterado',
    [ACAO_MOVIMENTO_EXCLUIDO]: 'Movimento excluído',
    [ACAO_IMPORTACAO_API]: 'Importação via API',
    [ACAO_BLOQUEIO]: 'Bloqueio de período',
@@ -89,17 +91,6 @@ export async function registraAuditoria(oEvento) {
       console.error('[auditoriaRepository] Falha ao registrar auditoria:', oErro.message);
    }
 } // registraAuditoria
-
-/**
- * Grava vários eventos de auditoria de uma vez.
- * @param {Array<object>} aEventos
- * @returns {Promise<void>}
- */
-export async function registraAuditoriaEmLote(aEventos) {
-   for (const oEvento of aEventos) {
-      await registraAuditoria(oEvento);
-   }
-} // registraAuditoriaEmLote
 
 /**
  * Monta o objeto de evento no formato da tela de auditoria.

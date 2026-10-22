@@ -27,6 +27,7 @@
 
 import { codEmp, dataBrParaData, dataSqlParaBr, limpa, prisma } from '../db.js';
 import { filtroContaMovimento } from './contaRepository.js';
+import { sentidoDaCategoria } from '../../utils/subgrupos.js';
 
 /** Origem atribuída aos lançamentos criados dentro da própria conciliação */
 export const ORIGEM_CONCILIACAO = 'Conciliação';
@@ -90,6 +91,17 @@ function codDocumTransferencia() {
 
 /** Separador da chave composta codificada para a tela */
 const SEPARADOR_CHAVE = '|';
+
+/**
+ * Ordem de produção do rateio (TBCONB003.CODORDEM / SEQORDEM).
+ *
+ * As duas colunas fazem parte da chave de TBCONB003 e existem para o rateio
+ * que o ERP faz por ordem de produção. O lançamento da conciliação não tem
+ * ordem: as colunas vão em branco, e o centro de custo é diferenciado pela
+ * sequência SEQCCUSTO.
+ */
+const CODORDEM_SEM_ORDEM = '';
+const SEQORDEM_SEM_ORDEM = '000';
 
 /** Colunas da chave primária de TBCONB001, na ordem em que são codificadas */
 const COLUNAS_CHAVE = [
@@ -156,6 +168,8 @@ function mapeiaLancamento(oLinha) {
       tipOrigem: ORIGEM_POR_LETRA[sOrigem] ?? sOrigem,
       tipDocumento: limpa(oLinha.CODDOCUM),
       codSubgrupo: limpa(oLinha.SUBGRUPO),
+      // A categoria completa a chave do subgrupo (TBFLCX002) e diz o sentido
+      categoriaSubgrupo: limpa(oLinha.CATEGORIA),
       codContaContabil: limpa(oLinha.CTACONTRAPARTIDA),
       codCentroCusto: limpa(oLinha.CCUSTO),
       staConciliado: STATUS_CONCILIADO.includes(limpa(oLinha.STAMOVTO)),
@@ -185,6 +199,7 @@ const SELECAO_LANCAMENTO = {
    VALMOVTO: true,
    ORIGEMMOVTO: true,
    SUBGRUPO: true,
+   CATEGORIA: true,
    CTACONTRAPARTIDA: true,
    CCUSTO: true,
    STAMOVTO: true,
@@ -270,19 +285,6 @@ async function geraProximoNumDocto(sCodDocum, sPrefixo) {
 } // geraProximoNumDocto
 
 /**
- * Gera o código de um novo lançamento originado na conciliação.
- *
- * Mantido para compatibilidade com quem só precisa do número do documento: a
- * chave completa é montada por `insereLancamento`.
- *
- * @param {string} [sCodDocum] Tipo de documento
- * @returns {Promise<string>} Número do documento, ex.: "MC000001"
- */
-export async function geraProximoCodigoLancamento(sCodDocum = PREFIXO_DOCUMENTO) {
-   return geraProximoNumDocto(sCodDocum, PREFIXO_DOCUMENTO);
-} // geraProximoCodigoLancamento
-
-/**
  * Gera a próxima sequência de conciliação (NUMSEQCONC).
  *
  * É a sequência que amarra os dois lados, então tem de ser única nas DUAS
@@ -346,26 +348,127 @@ async function validaTipoDocumento(sCodDocum, bTransferencia) {
  * buscadas aqui; gravar o subgrupo sem elas deixaria o lançamento fora do
  * fluxo de caixa do ERP.
  *
+ * O mesmo código de subgrupo pode existir nas duas categorias. Vale, nesta
+ * ordem: a categoria escolhida na tela, a categoria do sentido do lançamento
+ * (débito/entrada ou crédito/saída) e, por fim, a primeira encontrada.
+ *
  * @param {string} sCodSubgrupo
+ * @param {string} [sCategoria] Categoria escolhida na tela
+ * @param {boolean} [bEntrada] Sentido do lançamento
  * @returns {Promise<{ SUBGRUPO: string|null, CATEGORIA: string|null, CODGRUPO: string|null }>}
  */
-async function completaSubgrupo(sCodSubgrupo) {
+async function completaSubgrupo(sCodSubgrupo, sCategoria, bEntrada) {
    const sSubgrupo = limpa(sCodSubgrupo);
    if (!sSubgrupo) {
       return { SUBGRUPO: null, CATEGORIA: null, CODGRUPO: null };
    }
 
-   const oLinha = await prisma.TBFLCX002.findFirst({
+   const aLinhas = await prisma.TBFLCX002.findMany({
       where: { SUBGRUPO: sSubgrupo },
       select: { SUBGRUPO: true, CATEGORIA: true, CODGRUPO: true },
    });
 
+   if (aLinhas.length === 0) {
+      throw new Error(`O subgrupo "${sSubgrupo}" não existe no fluxo de caixa do ERP (TBFLCX002).`);
+   }
+
+   const sCategoriaTela = limpa(sCategoria);
+   const oLinha =
+      aLinhas.find((oItem) => sCategoriaTela && limpa(oItem.CATEGORIA) === sCategoriaTela) ??
+      aLinhas.find((oItem) => sentidoDaCategoria(limpa(oItem.CATEGORIA)) === Boolean(bEntrada)) ??
+      aLinhas[0];
+
    return {
       SUBGRUPO: sSubgrupo,
-      CATEGORIA: oLinha ? limpa(oLinha.CATEGORIA) : null,
-      CODGRUPO: oLinha ? limpa(oLinha.CODGRUPO) : null,
+      CATEGORIA: limpa(oLinha.CATEGORIA),
+      CODGRUPO: limpa(oLinha.CODGRUPO),
    };
 } // completaSubgrupo
+
+/**
+ * Chave de TBCONB001 que TBCONB003 repete para apontar o lançamento.
+ * @param {object} oLinha Linha (ou chave) de TBCONB001
+ * @returns {object}
+ */
+function chaveRateio(oLinha) {
+   return {
+      CODEMP: limpa(oLinha.CODEMP) || codEmp(),
+      CODDOCUM: limpa(oLinha.CODDOCUM),
+      NUMDOCTO: limpa(oLinha.NUMDOCTO),
+      SERIE: limpa(oLinha.SERIE),
+      CODEMITENTE: limpa(oLinha.CODEMITENTE),
+      DESDOBRO: limpa(oLinha.DESDOBRO),
+      NUMSEQPAGTO: limpa(oLinha.NUMSEQPAGTO),
+      SEQMOVTOCONB: limpa(oLinha.SEQMOVTOCONB),
+   };
+} // chaveRateio
+
+/**
+ * Grava o rateio por centro de custo de um lançamento (TBCONB003).
+ *
+ * O rateio é regravado por inteiro: apagar e incluir é o que mantém as
+ * sequências (SEQCCUSTO) contínuas quando uma linha sai no meio.
+ *
+ * @param {object} oDb Cliente Prisma ou transação em curso
+ * @param {object} oChave Chave do lançamento em TBCONB001
+ * @param {Array<{ codCentroCusto: string, valRateio: number }>} aRateio
+ * @returns {Promise<void>}
+ */
+async function gravaRateio(oDb, oChave, aRateio) {
+   const oChaveRateio = chaveRateio(oChave);
+   await oDb.TBCONB003.deleteMany({ where: oChaveRateio });
+
+   if (!aRateio || aRateio.length === 0) {
+      return;
+   }
+
+   await oDb.TBCONB003.createMany({
+      data: aRateio.map((oLinha, iPos) => ({
+         ...oChaveRateio,
+         CODORDEM: CODORDEM_SEM_ORDEM,
+         SEQORDEM: SEQORDEM_SEM_ORDEM,
+         SEQCCUSTO: String(iPos + 1).padStart(6, '0'),
+         CCUSTO: limpa(oLinha.codCentroCusto),
+         VALMOVTOCCUSTO: Math.abs(Number(oLinha.valRateio)),
+      })),
+   });
+} // gravaRateio
+
+/**
+ * Centro de custo gravado no próprio lançamento (TBCONB001.CCUSTO).
+ *
+ * A coluna guarda um centro só. Com rateio, ela recebe o de maior parcela —
+ * é o que os relatórios do ERP que não leem TBCONB003 vão mostrar.
+ *
+ * @param {Array<object>} aRateio
+ * @param {string} [sCodCentroCusto] Centro informado sem rateio
+ * @returns {string|null}
+ */
+function centroCustoPrincipal(aRateio, sCodCentroCusto) {
+   if (aRateio && aRateio.length > 0) {
+      const oMaior = aRateio.reduce((oA, oB) => (Number(oB.valRateio) > Number(oA.valRateio) ? oB : oA));
+      return limpa(oMaior.codCentroCusto) || null;
+   }
+   return limpa(sCodCentroCusto) || null;
+} // centroCustoPrincipal
+
+/**
+ * Lê o rateio por centro de custo de um lançamento.
+ * @param {object} oChave Chave do lançamento em TBCONB001
+ * @returns {Promise<Array<{ codCentroCusto: string, valRateio: number }>>}
+ */
+export async function listaRateio(oChave) {
+   const aLinhas = await prisma.TBCONB003.findMany({
+      where: chaveRateio(oChave),
+      select: { CCUSTO: true, VALMOVTOCCUSTO: true, SEQCCUSTO: true },
+      orderBy: { SEQCCUSTO: 'asc' },
+   });
+
+   return aLinhas.map((oLinha) => ({
+      codCentroCusto: limpa(oLinha.CCUSTO),
+      valRateio: Number(oLinha.VALMOVTOCCUSTO ?? 0),
+   }));
+} // listaRateio
 
 /**
  * Insere um lançamento no movimento da conciliação (TBCONB001).
@@ -381,14 +484,23 @@ async function completaSubgrupo(sCodSubgrupo) {
  * @param {boolean} oLancamento.bEntrada Indica entrada (crédito)
  * @param {string} [oLancamento.tipDocumento] CODDOCUM (TBGENE009)
  * @param {string} [oLancamento.codSubgrupo] SUBGRUPO (TBFLCX002)
+ * @param {string} [oLancamento.categoriaSubgrupo] CATEGORIA do subgrupo
  * @param {string} [oLancamento.codContaContabil] CTACONTRAPARTIDA (TBGENE023)
  * @param {string} [oLancamento.codCentroCusto] CCUSTO (TBCOMP008)
+ * @param {Array<object>} [oLancamento.aRateio] Rateio por centro de custo (TBCONB003)
  * @param {string} [oLancamento.tipOrigem] Origem; padrão "Conciliação"
  * @param {string} [oLancamento.seqMovtoConb] Sequência; padrão "001"
  * @param {string} [oLancamento.seqMovtoConbRelac] Sequência da contrapartida
+ * @param {object} [oDb] Transação em curso; sem ela, abre a própria
  * @returns {Promise<object>} Lançamento gravado, no formato da grade
  */
-export async function insereLancamento(oConta, oLancamento) {
+export async function insereLancamento(oConta, oLancamento, oDb = null) {
+   // O lançamento e o rateio são uma gravação só: rateio pela metade deixaria
+   // o centro de custo somando diferente do valor do movimento
+   if (!oDb) {
+      return prisma.$transaction((oTransacao) => insereLancamento(oConta, oLancamento, oTransacao));
+   }
+
    const dtMovimento = dataBrParaData(oLancamento.datMovimento);
    if (!dtMovimento) {
       throw new Error(`Data do movimento inválida: "${oLancamento.datMovimento}". Use DD/MM/AAAA.`);
@@ -413,8 +525,13 @@ export async function insereLancamento(oConta, oLancamento) {
 
    const sNumDocto =
       limpa(oLancamento.numDocumento) || (await geraProximoNumDocto(sCodDocum, sPrefixo));
-   const oSubgrupo = await completaSubgrupo(oLancamento.codSubgrupo);
    const bEntrada = Boolean(oLancamento.bEntrada);
+   const oSubgrupo = await completaSubgrupo(
+      oLancamento.codSubgrupo,
+      oLancamento.categoriaSubgrupo,
+      bEntrada
+   );
+   const aRateio = Array.isArray(oLancamento.aRateio) ? oLancamento.aRateio : [];
 
    const oChave = {
       CODEMP: oConta.codEmp || codEmp(),
@@ -443,7 +560,7 @@ export async function insereLancamento(oConta, oLancamento) {
       CODAGENCIA: oConta.codAgencia,
       NUMCTACORRENTE: oConta.numContaCorrente,
       CTACONTRAPARTIDA: limpa(oLancamento.codContaContabil) || null,
-      CCUSTO: limpa(oLancamento.codCentroCusto) || null,
+      CCUSTO: centroCustoPrincipal(aRateio, oLancamento.codCentroCusto),
       ...oSubgrupo,
       // Nasce não conciliado: a conciliação é ação própria (item 6.1.3.6)
       STAMOVTO: 'N',
@@ -455,7 +572,7 @@ export async function insereLancamento(oConta, oLancamento) {
    // um lançamento não pode desfazer conciliação já feita.
    const { STAMOVTO, ...oAtualizacao } = oDados;
 
-   const oGravado = await prisma.TBCONB001.upsert({
+   const oGravado = await oDb.TBCONB001.upsert({
       where: {
          CODEMP_CODDOCUM_NUMDOCTO_SERIE_CODEMITENTE_DESDOBRO_NUMSEQPAGTO_SEQMOVTOCONB: oChave,
       },
@@ -464,8 +581,217 @@ export async function insereLancamento(oConta, oLancamento) {
       select: SELECAO_LANCAMENTO,
    });
 
+   await gravaRateio(oDb, oChave, aRateio);
+
    return { ...mapeiaLancamento(oGravado), codConta: oConta.codConta };
 } // insereLancamento
+
+/**
+ * Lê um lançamento da conta, com o rateio por centro de custo.
+ * Alimenta a tela de detalhes e a de edição.
+ * @param {object} oConta
+ * @param {string} sCodLancamento
+ * @returns {Promise<object|null>}
+ */
+export async function buscaLancamento(oConta, sCodLancamento) {
+   const oChave = chaveLancamento(sCodLancamento);
+   if (!oChave) {
+      return null;
+   }
+
+   const oLinha = await prisma.TBCONB001.findFirst({
+      where: { ...oChave, ...filtroContaMovimento(oConta) },
+      select: SELECAO_LANCAMENTO,
+   });
+   if (!oLinha) {
+      return null;
+   }
+
+   const oLancamento = mapeiaLancamento(oLinha);
+   const aRateio = await listaRateio(oLinha);
+
+   return {
+      ...oLancamento,
+      codConta: oConta.codConta,
+      // Lançamento sem rateio gravado, mas com centro de custo na própria
+      // linha (o que o Satis faz), aparece como rateio de uma linha só
+      aRateio:
+         aRateio.length > 0 || !oLancamento.codCentroCusto
+            ? aRateio
+            : [{ codCentroCusto: oLancamento.codCentroCusto, valRateio: oLancamento.valMovimento }],
+      bEditavel: ORIGENS_EXCLUIVEIS.includes(oLancamento.tipOrigem) && !oLancamento.staConciliado,
+   };
+} // buscaLancamento
+
+/**
+ * Pernas de uma transferência, com a conta de cada uma.
+ *
+ * As pernas são o mesmo documento em sequências diferentes, cada uma em uma
+ * conta. Quem altera ou exclui uma perna precisa conferir o bloqueio das DUAS
+ * contas (item 6.1.3.1): é o mesmo movimento nos dois caixas.
+ *
+ * @param {string} sCodLancamento Código de qualquer uma das pernas
+ * @returns {Promise<Array<{ codBancoErp: string, codAgencia: string, numContaCorrente: string, datMovimento: string, staConciliado: boolean }>>}
+ */
+export async function listaPernasTransferencia(sCodLancamento) {
+   const oChave = chaveLancamento(sCodLancamento);
+   if (!oChave) {
+      return [];
+   }
+
+   const aLinhas = await prisma.TBCONB001.findMany({
+      where: {
+         CODEMP: oChave.CODEMP,
+         CODDOCUM: oChave.CODDOCUM,
+         NUMDOCTO: oChave.NUMDOCTO,
+         ORIGEMMOVTO: 'T',
+      },
+      select: { ...SELECAO_LANCAMENTO, CODBANCO: true, CODAGENCIA: true, NUMCTACORRENTE: true },
+   });
+
+   return aLinhas.map((oLinha) => ({
+      codLancamento: montaCodLancamento(oLinha),
+      codBancoErp: limpa(oLinha.CODBANCO),
+      codAgencia: limpa(oLinha.CODAGENCIA),
+      numContaCorrente: limpa(oLinha.NUMCTACORRENTE),
+      datMovimento: dataSqlParaBr(oLinha.DATMOVTO),
+      staConciliado: STATUS_CONCILIADO.includes(limpa(oLinha.STAMOVTO)),
+   }));
+} // listaPernasTransferencia
+
+/**
+ * Altera um lançamento originado na conciliação (ata de 24/09/2026).
+ *
+ * O que muda: datas, histórico, valor, tipo de movimento, subgrupo, conta
+ * contábil e rateio por centro de custo. O que NÃO muda:
+ *   - a origem (a ata pede o campo bloqueado em lançamento existente);
+ *   - tipo e número do documento, que fazem parte da chave de TBCONB001 —
+ *     trocá-los é excluir e incluir outro lançamento.
+ *
+ * Na transferência, data, valor, subgrupo e rateio valem para as duas pernas:
+ * é um movimento só, visto de duas contas. O sentido de cada perna não muda,
+ * e o histórico é alterado só na perna aberta (cada uma cita a conta oposta).
+ *
+ * Bloqueio de período e permissão são conferidos pela rota, antes daqui.
+ *
+ * @param {object} oConta
+ * @param {string} sCodLancamento
+ * @param {object} oDados Mesmos campos de `insereLancamento`
+ * @returns {Promise<object>} Lançamento gravado, no formato da grade
+ */
+export async function atualizaLancamento(oConta, sCodLancamento, oDados) {
+   const oChave = chaveLancamento(sCodLancamento);
+   if (!oChave) {
+      throw new Error(`Código de lançamento inválido: "${sCodLancamento}".`);
+   }
+
+   const oLinha = await prisma.TBCONB001.findFirst({
+      where: { ...oChave, ...filtroContaMovimento(oConta) },
+      select: SELECAO_LANCAMENTO,
+   });
+   if (!oLinha) {
+      throw new Error('Lançamento não localizado.');
+   }
+
+   const oAtual = mapeiaLancamento(oLinha);
+   if (oAtual.staConciliado) {
+      throw new Error('Lançamento conciliado não pode ser alterado. Estorne a conciliação antes.');
+   }
+   if (!ORIGENS_EXCLUIVEIS.includes(oAtual.tipOrigem)) {
+      throw new Error(
+         `Somente lançamentos originados na conciliação podem ser alterados (origem atual: ${oAtual.tipOrigem}). ` +
+            'Os demais pertencem ao Contas a Pagar/Receber do ERP.'
+      );
+   }
+
+   const dtMovimento = dataBrParaData(oDados.datMovimento);
+   if (!dtMovimento) {
+      throw new Error(`Data do movimento inválida: "${oDados.datMovimento}". Use DD/MM/AAAA.`);
+   }
+   const nValor = Number(oDados.valMovimento);
+   if (!Number.isFinite(nValor) || nValor <= 0) {
+      throw new Error('O valor do lançamento deve ser maior que zero.');
+   }
+
+   const bTransferencia = Boolean(oAtual.codTransferencia);
+   // A perna da transferência não troca de sentido: inverter uma só deixaria
+   // as duas contas recebendo (ou pagando) o mesmo dinheiro
+   const bEntrada = bTransferencia ? oAtual.bEntrada : Boolean(oDados.bEntrada);
+   const aRateio = Array.isArray(oDados.aRateio) ? oDados.aRateio : [];
+   const dtBaixa = dataBrParaData(oDados.datCompensacao) ?? dtMovimento;
+
+   const aPernas = bTransferencia
+      ? await prisma.TBCONB001.findMany({
+           where: {
+              CODEMP: oChave.CODEMP,
+              CODDOCUM: oChave.CODDOCUM,
+              NUMDOCTO: oChave.NUMDOCTO,
+              ORIGEMMOVTO: 'T',
+           },
+           select: SELECAO_LANCAMENTO,
+        })
+      : [oLinha];
+
+   if (aPernas.map(mapeiaLancamento).some((oPerna) => oPerna.staConciliado)) {
+      throw new Error(
+         'A contrapartida desta transferência está conciliada. Estorne a conciliação das duas contas antes de alterar.'
+      );
+   }
+
+   // Cada perna resolve a categoria do subgrupo pelo próprio sentido
+   const aSubgrupos = await Promise.all(
+      aPernas.map((oPerna) => {
+         const bEntradaPerna = limpa(oPerna.TIPOMOVTO) !== 'S';
+         const bPernaAberta = montaCodLancamento(oPerna) === montaCodLancamento(oLinha);
+         return completaSubgrupo(
+            oDados.codSubgrupo,
+            bPernaAberta ? oDados.categoriaSubgrupo : '',
+            bPernaAberta ? bEntrada : bEntradaPerna
+         );
+      })
+   );
+
+   const oGravado = await prisma.$transaction(async (oTransacao) => {
+      let oResultado = null;
+
+      for (const [iPos, oPerna] of aPernas.entries()) {
+         const bPernaAberta = montaCodLancamento(oPerna) === montaCodLancamento(oLinha);
+         const oChavePerna = { ...chaveRateio(oPerna) };
+
+         const oAlteracao = {
+            DATMOVTO: dtMovimento,
+            DATBAIXA: dtBaixa,
+            VALMOVTO: Math.abs(nValor),
+            CCUSTO: centroCustoPrincipal(aRateio, oDados.codCentroCusto),
+            ...aSubgrupos[iPos],
+         };
+
+         if (bPernaAberta) {
+            oAlteracao.HISTMOVTO = String(oDados.desHistorico || oAtual.desHistorico).slice(0, 60);
+            oAlteracao.TIPOMOVTO = bEntrada ? 'E' : 'S';
+            oAlteracao.CTACONTRAPARTIDA = limpa(oDados.codContaContabil) || null;
+         }
+
+         const oAtualizado = await oTransacao.TBCONB001.update({
+            where: {
+               CODEMP_CODDOCUM_NUMDOCTO_SERIE_CODEMITENTE_DESDOBRO_NUMSEQPAGTO_SEQMOVTOCONB: oChavePerna,
+            },
+            data: oAlteracao,
+            select: SELECAO_LANCAMENTO,
+         });
+
+         await gravaRateio(oTransacao, oChavePerna, aRateio);
+
+         if (bPernaAberta) {
+            oResultado = oAtualizado;
+         }
+      }
+
+      return oResultado;
+   });
+
+   return { ...mapeiaLancamento(oGravado), codConta: oConta.codConta };
+} // atualizaLancamento
 
 /**
  * Exclui um lançamento do sistema.
@@ -531,12 +857,18 @@ export async function excluiLancamento(oConta, sCodLancamento) {
          };
       }
 
-      const oResultado = await prisma.TBCONB001.deleteMany({
-         where: {
-            CODEMP: oChave.CODEMP,
-            CODDOCUM: oChave.CODDOCUM,
-            NUMDOCTO: oChave.NUMDOCTO,
-         },
+      // As duas pernas e os rateios saem juntos, ou nenhum sai: excluir uma
+      // perna só deixaria o caixa da outra conta com movimento sem origem
+      const oFiltroDocumento = {
+         CODEMP: oChave.CODEMP,
+         CODDOCUM: oChave.CODDOCUM,
+         NUMDOCTO: oChave.NUMDOCTO,
+      };
+      const oResultado = await prisma.$transaction(async (oTransacao) => {
+         // TBCONB003 aponta para TBCONB001 por chave estrangeira: o rateio
+         // precisa sair antes do lançamento
+         await oTransacao.TBCONB003.deleteMany({ where: oFiltroDocumento });
+         return oTransacao.TBCONB001.deleteMany({ where: oFiltroDocumento });
       });
 
       return {
@@ -547,24 +879,17 @@ export async function excluiLancamento(oConta, sCodLancamento) {
       };
    }
 
-   await prisma.TBCONB001.delete({
-      where: {
-         CODEMP_CODDOCUM_NUMDOCTO_SERIE_CODEMITENTE_DESDOBRO_NUMSEQPAGTO_SEQMOVTOCONB: oChave,
-      },
+   await prisma.$transaction(async (oTransacao) => {
+      await oTransacao.TBCONB003.deleteMany({ where: chaveRateio(oChave) });
+      await oTransacao.TBCONB001.delete({
+         where: {
+            CODEMP_CODDOCUM_NUMDOCTO_SERIE_CODEMITENTE_DESDOBRO_NUMSEQPAGTO_SEQMOVTOCONB: oChave,
+         },
+      });
    });
 
    return { bExcluido: true, sMotivo: '' };
 } // excluiLancamento
-
-/**
- * Gera o código que identifica as duas pernas de uma transferência.
- * @returns {Promise<string>} Código no formato "TRF|TR000001"
- */
-export async function geraProximoCodigoTransferencia() {
-   const sCodDocum = codDocumTransferencia();
-   const sNumDocto = await geraProximoNumDocto(sCodDocum, PREFIXO_TRANSFERENCIA);
-   return `${sCodDocum}${SEPARADOR_CHAVE}${sNumDocto}`;
-} // geraProximoCodigoTransferencia
 
 /**
  * Registra uma transferência entre contas, gerando simultaneamente o
@@ -587,6 +912,8 @@ export async function geraProximoCodigoTransferencia() {
  * @param {number} oTransferencia.nValor Valor absoluto transferido
  * @param {string} [oTransferencia.sDesContaSaida] Identificação legível
  * @param {string} [oTransferencia.sDesContaEntrada] Identificação legível
+ * @param {string} oTransferencia.sCodSubgrupo Subgrupo (obrigatório no ERP)
+ * @param {Array<object>} [oTransferencia.aRateio] Rateio por centro de custo
  * @returns {Promise<{ sCodTransferencia: string, oSaida: object, oEntrada: object }>}
  */
 export async function insereTransferencia(oTransferencia) {
@@ -602,27 +929,47 @@ export async function insereTransferencia(oTransferencia) {
       tipDocumento: sCodDocum,
       valMovimento: Math.abs(Number(oTransferencia.nValor)),
       tipOrigem: ORIGEM_TRANSFERENCIA,
+      // O subgrupo é o mesmo; cada perna resolve a categoria pelo próprio
+      // sentido (a saída cai na categoria de crédito, a entrada na de débito)
+      codSubgrupo: oTransferencia.sCodSubgrupo,
+      // A transferência pode ter mais de um centro de custo, e o rateio vale
+      // para as duas pontas
+      aRateio: oTransferencia.aRateio,
    };
 
-   // Cada perna cita a conta oposta, para que a grade explique o movimento
-   const oSaida = await insereLancamento(oTransferencia.oContaSaida, {
-      ...oBase,
-      desHistorico:
-         `${oTransferencia.sDesHistorico} - transf. para ` +
-         `${oTransferencia.sDesContaEntrada || 'conta de destino'}`,
-      bEntrada: false,
-      seqMovtoConb: '001',
-      seqMovtoConbRelac: '002',
-   });
+   // As duas pernas na mesma transação: uma perna sem a outra é dinheiro
+   // saindo de uma conta sem entrar em nenhuma
+   const { oSaida, oEntrada } = await prisma.$transaction(async (oTransacao) => {
+      // Cada perna cita a conta oposta, para que a grade explique o movimento
+      const oPernaSaida = await insereLancamento(
+         oTransferencia.oContaSaida,
+         {
+            ...oBase,
+            desHistorico:
+               `${oTransferencia.sDesHistorico} - transf. para ` +
+               `${oTransferencia.sDesContaEntrada || 'conta de destino'}`,
+            bEntrada: false,
+            seqMovtoConb: '001',
+            seqMovtoConbRelac: '002',
+         },
+         oTransacao
+      );
 
-   const oEntrada = await insereLancamento(oTransferencia.oContaEntrada, {
-      ...oBase,
-      desHistorico:
-         `${oTransferencia.sDesHistorico} - transf. de ` +
-         `${oTransferencia.sDesContaSaida || 'conta de origem'}`,
-      bEntrada: true,
-      seqMovtoConb: '002',
-      seqMovtoConbRelac: '001',
+      const oPernaEntrada = await insereLancamento(
+         oTransferencia.oContaEntrada,
+         {
+            ...oBase,
+            desHistorico:
+               `${oTransferencia.sDesHistorico} - transf. de ` +
+               `${oTransferencia.sDesContaSaida || 'conta de origem'}`,
+            bEntrada: true,
+            seqMovtoConb: '002',
+            seqMovtoConbRelac: '001',
+         },
+         oTransacao
+      );
+
+      return { oSaida: oPernaSaida, oEntrada: oPernaEntrada };
    });
 
    return {
@@ -700,3 +1047,34 @@ export async function atualizaStatusLancamentos(oConta, aCodLancamentos, bConcil
 
    return oResultado.count;
 } // atualizaStatusLancamentos
+
+/**
+ * Contas em que um tipo de documento já foi lançado.
+ *
+ * Ata de 24/09/2026: "Ao selecionar um documento, filtrar automaticamente as
+ * opções disponíveis de banco". O ERP não amarra tipo de documento a conta,
+ * então a relação vem do uso: as contas que já têm movimento daquele
+ * documento em TBCONB001 são as que a caixa oferece primeiro.
+ *
+ * @param {string} sCodDocum Tipo de documento (TBGENE009.CODDOCUM)
+ * @returns {Promise<Array<{ codBancoErp: string, codAgencia: string, numContaCorrente: string, iQuantidade: number }>>}
+ */
+export async function listaContasPorTipoDocumento(sCodDocum) {
+   const sDocumento = limpa(sCodDocum);
+   if (!sDocumento) {
+      return [];
+   }
+
+   const aGrupos = await prisma.TBCONB001.groupBy({
+      by: ['CODBANCO', 'CODAGENCIA', 'NUMCTACORRENTE'],
+      where: { CODEMP: codEmp(), CODDOCUM: sDocumento },
+      _count: { _all: true },
+   });
+
+   return aGrupos.map((oGrupo) => ({
+      codBancoErp: limpa(oGrupo.CODBANCO),
+      codAgencia: limpa(oGrupo.CODAGENCIA),
+      numContaCorrente: limpa(oGrupo.NUMCTACORRENTE),
+      iQuantidade: oGrupo._count._all,
+   }));
+} // listaContasPorTipoDocumento

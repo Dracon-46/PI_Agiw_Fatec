@@ -18,6 +18,7 @@ import {
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
 import { dataBrParaSql } from '../../../../lib/db.js';
+import { normalizaRateio, validaRateio } from '../../../../utils/rateio.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,8 @@ function verificaBloqueio(oConta, sDatMovimento) {
 
 /**
  * POST /api/conciliacao/transferencia
- * Corpo: { contaSaida, contaEntrada, datMovimento, numDocumento?, desHistorico, valMovimento }
+ * Corpo: { contaSaida, contaEntrada, datMovimento, numDocumento?, desHistorico, valMovimento,
+ *          codSubgrupo, aRateio? }
  * @param {Request} oRequisicao
  * @returns {Promise<NextResponse>}
  */
@@ -74,6 +76,8 @@ export async function POST(oRequisicao) {
    const sDatMovimento = String(oCorpo?.datMovimento ?? '');
    const sDesHistorico = String(oCorpo?.desHistorico ?? '').trim();
    const nValor = Number(oCorpo?.valMovimento);
+   const sCodSubgrupo = String(oCorpo?.codSubgrupo ?? '').trim();
+   const aRateio = normalizaRateio(oCorpo?.aRateio);
 
    // ---------- Validações (todas antes de gravar) ----------
    if (!sContaSaida || !sContaEntrada) {
@@ -99,6 +103,17 @@ export async function POST(oRequisicao) {
          { erro: 'O valor da transferência deve ser maior que zero.' },
          { status: 400 }
       );
+   }
+   // Ata de 24/09/2026: subgrupo é obrigatório, conforme regra do ERP
+   if (!sCodSubgrupo) {
+      return NextResponse.json(
+         { erro: 'Selecione o subgrupo da transferência. O subgrupo é obrigatório no ERP.' },
+         { status: 400 }
+      );
+   }
+   const sErroRateio = validaRateio(aRateio, nValor);
+   if (sErroRateio) {
+      return NextResponse.json({ erro: sErroRateio }, { status: 400 });
    }
 
    try {
@@ -136,6 +151,8 @@ export async function POST(oRequisicao) {
          nValor,
          sDesContaSaida: descreveConta(oContaSaida),
          sDesContaEntrada: descreveConta(oContaEntrada),
+         sCodSubgrupo,
+         aRateio,
       });
 
       // A auditoria registra as duas pontas, cada uma sob a sua conta

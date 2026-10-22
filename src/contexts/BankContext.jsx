@@ -178,6 +178,23 @@ export function BankContextProvider({ children }) {
       [recarregaContas, sCodContaSelecionada, limpaSelecao]
    );
 
+   /**
+    * Atualiza na memória os dados de uma conta já carregada.
+    *
+    * Usado pelo bloqueio de período: a data gravada precisa valer para a
+    * lista de contas também. Sem isso, a tela voltava a mostrar o bloqueio
+    * antigo ao trocar de conta e retornar — dando a impressão de que a
+    * gravação não tinha acontecido (pendência da ata de 24/09/2026).
+    *
+    * @param {string} sCodConta
+    * @param {object} oAlteracao Campos a sobrepor
+    */
+   const atualizaContaLocal = useCallback((sCodConta, oAlteracao) => {
+      setContas((aAtuais) =>
+         aAtuais.map((oConta) => (oConta.codConta === sCodConta ? { ...oConta, ...oAlteracao } : oConta))
+      );
+   }, []);
+
    const oContaSelecionada = useMemo(
       () => aContas.find((oConta) => oConta.codConta === sCodContaSelecionada) ?? null,
       [aContas, sCodContaSelecionada]
@@ -212,6 +229,7 @@ export function BankContextProvider({ children }) {
          atualizaConta,
          removeContaCadastrada,
          recarregaContas,
+         atualizaContaLocal,
       }),
       [
          aContas,
@@ -229,6 +247,7 @@ export function BankContextProvider({ children }) {
          atualizaConta,
          removeContaCadastrada,
          recarregaContas,
+         atualizaContaLocal,
       ]
    );
 

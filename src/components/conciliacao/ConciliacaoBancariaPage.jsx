@@ -10,10 +10,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+   ArrowDown,
    ArrowLeftRight,
+   ArrowUp,
    CheckCircle2,
-   Download,
+   ChevronsUpDown,
+   Eye,
    Lock,
+   Pencil,
    PlusCircle,
    Search,
    ShieldCheck,
@@ -24,16 +28,16 @@ import {
 import { AppShell } from '../layout/AppShell.jsx';
 import { useBankContext } from '../../contexts/BankContext.jsx';
 import { useNotificacoes } from '../comum/Notificacoes.jsx';
-import { useConciliacao } from '../../hooks/useConciliacao.js';
+import { SELECAO_CONCILIADA, SELECAO_NAO_CONCILIADA, useConciliacao } from '../../hooks/useConciliacao.js';
 import { CampoData } from '../comum/CampoData.jsx';
 import { MenuContexto } from '../comum/MenuContexto.jsx';
-import { ModalNovoLancamento } from './ModalNovoLancamento.jsx';
+import { MODO_DETALHE, MODO_EDICAO, MODO_NOVO, ModalLancamento } from './ModalLancamento.jsx';
 import { ModalTransferencia } from './ModalTransferencia.jsx';
 import { MenuExportar } from './MenuExportar.jsx';
 import { FiltroGrade, aplicaFiltrosGrade } from '../comum/FiltroGrade.jsx';
 import { PERM_BLOQUEIO } from '../../utils/permissoes.js';
 import {
-   formataContaCorrente,
+   converteDataBrParaIso,
    formataDataBr,
    formataMoeda,
    formataValor,
@@ -75,6 +79,103 @@ function filtraPorStatus(aItens, bConciliados, bNaoConciliados) {
       return bNaoConciliados;
    });
 } // filtraPorStatus
+
+/**
+ * Valor comparável de uma coluna, para a ordenação da grade.
+ * Datas viram AAAA-MM-DD (ordem cronológica); valores, número.
+ * @param {object} oItem
+ * @param {string} sChave
+ * @returns {string|number}
+ */
+function valorOrdenacao(oItem, sChave) {
+   if (sChave === 'datMovimento') {
+      return converteDataBrParaIso(oItem.datMovimento);
+   }
+   if (sChave === 'valMovimento') {
+      return Number(oItem.valMovimento) || 0;
+   }
+   if (sChave === 'staConciliado') {
+      return oItem.staConciliado ? 1 : 0;
+   }
+   return String(oItem[sChave] ?? '');
+} // valorOrdenacao
+
+/**
+ * Ordena a grade pela coluna escolhida (ata de 24/09/2026: "ordenação pela
+ * grid ao clicar em Nome, Valor etc."). Sem coluna escolhida, mantém a ordem
+ * em que os registros chegaram do servidor.
+ * @param {Array<object>} aItens
+ * @param {{ sChave: string, bAscendente: boolean }|null} oOrdem
+ * @returns {Array<object>}
+ */
+function ordenaGrade(aItens, oOrdem) {
+   if (!oOrdem) {
+      return aItens;
+   }
+
+   const iSentido = oOrdem.bAscendente ? 1 : -1;
+   return [...aItens].sort((oA, oB) => {
+      const xA = valorOrdenacao(oA, oOrdem.sChave);
+      const xB = valorOrdenacao(oB, oOrdem.sChave);
+      const iComparacao =
+         typeof xA === 'number' && typeof xB === 'number'
+            ? xA - xB
+            : String(xA).localeCompare(String(xB), 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return iComparacao * iSentido;
+   });
+} // ordenaGrade
+
+/**
+ * Próximo estado da ordenação ao clicar no cabeçalho:
+ * crescente → decrescente → ordem original.
+ * @param {{ sChave: string, bAscendente: boolean }|null} oAtual
+ * @param {string} sChave
+ * @returns {{ sChave: string, bAscendente: boolean }|null}
+ */
+function proximaOrdem(oAtual, sChave) {
+   if (oAtual?.sChave !== sChave) {
+      return { sChave, bAscendente: true };
+   }
+   return oAtual.bAscendente ? { sChave, bAscendente: false } : null;
+} // proximaOrdem
+
+/**
+ * Cabeçalho de coluna que ordena a grade ao ser clicado.
+ *
+ * A ata pede verificar se o PrimeNG oferece a ordenação nativa. O PrimeNG é
+ * Angular; o módulo é React e não usa biblioteca de grade — a ordenação é
+ * feita aqui, sobre os registros já filtrados.
+ *
+ * @param {object} oPropriedades
+ * @param {string} oPropriedades.sChave Campo ordenado
+ * @param {string} oPropriedades.sRotulo Texto da coluna
+ * @param {{ sChave: string, bAscendente: boolean }|null} oPropriedades.oOrdem
+ * @param {(sChave: string) => void} oPropriedades.aoOrdenar
+ * @param {string} [oPropriedades.className]
+ */
+function CabecalhoOrdenavel({ sChave, sRotulo, oOrdem, aoOrdenar, className = '' }) {
+   const bAtivo = oOrdem?.sChave === sChave;
+   const Icone = !bAtivo ? ChevronsUpDown : oOrdem.bAscendente ? ArrowUp : ArrowDown;
+
+   return (
+      <th
+         className={className}
+         aria-sort={!bAtivo ? 'none' : oOrdem.bAscendente ? 'ascending' : 'descending'}
+      >
+         <button
+            type="button"
+            className={`grade-ordenar ${bAtivo ? 'ativo' : ''}`}
+            onClick={() => aoOrdenar(sChave)}
+            title={`Ordenar por ${sRotulo.toLowerCase()}`}
+         >
+            <span className="grade-cabecalho-conteudo">
+               {sRotulo}
+               <Icone />
+            </span>
+         </button>
+      </th>
+   );
+} // CabecalhoOrdenavel
 
 /**
  * Célula de valor entrada/saída da grade.
@@ -180,15 +281,20 @@ function SaldosGrade({ oSaldos }) {
 
 export function ConciliacaoBancariaPage() {
    const router = useRouter();
-   const { aContas, oContaSelecionada, limpaSelecao, oUsuario, temPermissao } = useBankContext();
+   const { aContas, oContaSelecionada, limpaSelecao, oUsuario, temPermissao, atualizaContaLocal } =
+      useBankContext();
    const { notifica } = useNotificacoes();
-   const oConc = useConciliacao(oContaSelecionada, notifica);
+   const oConc = useConciliacao(oContaSelecionada, notifica, atualizaContaLocal);
+   // Ordenação de cada grade pela coluna clicada
+   const [oOrdemLanc, setOrdemLanc] = useState(null);
+   const [oOrdemMov, setOrdemMov] = useState(null);
    // Filtros por campo de cada grade (item 6.1.3.4)
    const [oFiltrosLanc, setFiltrosLanc] = useState({});
    const [oFiltrosMov, setFiltrosMov] = useState({});
    const bPodeBloquear = temPermissao(PERM_BLOQUEIO);
    const [sDatBloqueioEdicao, setDatBloqueioEdicao] = useState('');
-   const [bLancamentoAberto, setLancamentoAberto] = useState(false);
+   // Caixa de lançamento: inclusão, detalhes ou edição, no mesmo padrão
+   const [oCaixaLancamento, setCaixaLancamento] = useState(null);
    const [bTransferenciaAberta, setTransferenciaAberta] = useState(false);
    // O menu de exportação também é acionado pelo item "Exportar" da lateral
    const [bExportarAberto, setExportarAberto] = useState(false);
@@ -212,30 +318,36 @@ export function ConciliacaoBancariaPage() {
    // depois os filtros por campo da grade
    const aLancVisiveis = useMemo(
       () =>
-         aplicaFiltrosGrade(
-            filtraPorStatus(
-               oConc.aLancamentos,
-               oConc.oFiltrosGrade.bLancConciliados,
-               oConc.oFiltrosGrade.bLancNaoConciliados
+         ordenaGrade(
+            aplicaFiltrosGrade(
+               filtraPorStatus(
+                  oConc.aLancamentos,
+                  oConc.oFiltrosGrade.bLancConciliados,
+                  oConc.oFiltrosGrade.bLancNaoConciliados
+               ),
+               oFiltrosLanc,
+               CAMPOS_LANCAMENTO
             ),
-            oFiltrosLanc,
-            CAMPOS_LANCAMENTO
+            oOrdemLanc
          ),
-      [oConc.aLancamentos, oConc.oFiltrosGrade, oFiltrosLanc]
+      [oConc.aLancamentos, oConc.oFiltrosGrade, oFiltrosLanc, oOrdemLanc]
    );
 
    const aMovVisiveis = useMemo(
       () =>
-         aplicaFiltrosGrade(
-            filtraPorStatus(
-               oConc.aMovimentos,
-               oConc.oFiltrosGrade.bMovConciliados,
-               oConc.oFiltrosGrade.bMovNaoConciliados
+         ordenaGrade(
+            aplicaFiltrosGrade(
+               filtraPorStatus(
+                  oConc.aMovimentos,
+                  oConc.oFiltrosGrade.bMovConciliados,
+                  oConc.oFiltrosGrade.bMovNaoConciliados
+               ),
+               oFiltrosMov,
+               CAMPOS_MOVIMENTO
             ),
-            oFiltrosMov,
-            CAMPOS_MOVIMENTO
+            oOrdemMov
          ),
-      [oConc.aMovimentos, oConc.oFiltrosGrade, oFiltrosMov]
+      [oConc.aMovimentos, oConc.oFiltrosGrade, oFiltrosMov, oOrdemMov]
    );
 
    /** Volta à tela de seleção de banco/agência. */
@@ -264,8 +376,19 @@ export function ConciliacaoBancariaPage() {
     */
    function abreNovoLancamento() {
       setMovimentoBase(resolveMovimentoBase());
-      setLancamentoAberto(true);
+      setCaixaLancamento({ sModo: MODO_NOVO, oLancamentoBase: null });
    } // abreNovoLancamento
+
+   /**
+    * Abre os detalhes (ou a edição) de um lançamento do sistema, na mesma
+    * caixa da inclusão (ata de 24/09/2026).
+    * @param {object} oLancamento Linha da grade
+    * @param {'detalhe'|'edicao'} [sModo]
+    */
+   function abreLancamento(oLancamento, sModo = MODO_DETALHE) {
+      setMovimentoBase(null);
+      setCaixaLancamento({ sModo, oLancamentoBase: oLancamento });
+   } // abreLancamento
 
    /** Abre a caixa de transferência entre contas (item 6.1.3.8 — ação 2). */
    function abreTransferencia() {
@@ -305,6 +428,10 @@ export function ConciliacaoBancariaPage() {
          abreTransferencia();
          return;
       }
+      if ((sChave === 'detalhe' || sChave === 'edicao') && oRegistro) {
+         abreLancamento(oRegistro, sChave === 'edicao' ? MODO_EDICAO : MODO_DETALHE);
+         return;
+      }
       if (sChave === 'excluir' && oRegistro) {
          await oConc.excluiRegistro(oRegistro, sGrade);
       }
@@ -319,16 +446,17 @@ export function ConciliacaoBancariaPage() {
     * @param {string} sChave Item escolhido
     */
    function trataMenuLateral(sChave) {
+      // Excluir e estorno saíram da lateral (ata de 24/09/2026): ficam só nos
+      // botões da tela principal e no menu do botão direito
       const oAcoes = {
          conciliacao: oConc.buscaMovimentos,
-         excluir: excluiSelecionados,
-         estorno: oConc.desfazConciliacao,
          transferir: abreTransferencia,
          exportar: () => setExportarAberto(true),
          ajuda: () =>
             notifica(
                'Selecione lançamentos e movimentos com a mesma situação; a conciliação exige diferença zero. ' +
-                  'O botão direito nas grades abre as ações de lançamento, transferência e exclusão.',
+                  'Clique no título da coluna para ordenar; o botão direito abre detalhes, edição, lançamento, ' +
+                  'transferência e exclusão.',
                'info'
             ),
       };
@@ -343,9 +471,27 @@ export function ConciliacaoBancariaPage() {
    function montaItensMenu() {
       const oRegistro = oMenuContexto?.oRegistro ?? null;
       const bConciliado = Boolean(oRegistro?.staConciliado);
+      const bLancamento = oMenuContexto?.sGrade === 'lancamento' && Boolean(oRegistro);
 
       return [
-         { sChave: 'lancamento', sRotulo: 'Novo Lançamento', Icone: PlusCircle },
+         ...(bLancamento
+            ? [
+                 { sChave: 'detalhe', sRotulo: 'Detalhes do Lançamento', Icone: Eye },
+                 {
+                    sChave: 'edicao',
+                    sRotulo: 'Editar Lançamento',
+                    Icone: Pencil,
+                    bDesabilitado: bConciliado,
+                    sMotivo: 'Lançamento conciliado não pode ser alterado. Estorne a conciliação antes.',
+                 },
+              ]
+            : []),
+         {
+            sChave: 'lancamento',
+            sRotulo: 'Novo Lançamento',
+            Icone: PlusCircle,
+            bSeparadorAntes: bLancamento,
+         },
          {
             sChave: 'transferencia',
             sRotulo: 'Nova Transferência entre Contas',
@@ -401,18 +547,9 @@ export function ConciliacaoBancariaPage() {
                Período e conta para conciliação
             </header>
             <div className="painel-corpo">
+               {/* A conta aberta já aparece na barra superior; repeti-la aqui
+                   só tomava espaço da área das grades (ata de 24/09/2026) */}
                <div className="filtro-conciliacao">
-                  <label className="campo">
-                     <span className="campo-rotulo">Banco / Agência / C.C.</span>
-                     <input
-                        type="text"
-                        className="campo-controle"
-                        value={formataContaCorrente(oContaSelecionada)}
-                        readOnly
-                        title={oContaSelecionada?.desAgencia}
-                     />
-                  </label>
-
                   {/* Sem limite cruzado entre as duas pontas: travar a data
                       inicial no valor da final impediria avançar o período a
                       partir do padrão configurado. A ordem das datas é
@@ -484,20 +621,6 @@ export function ConciliacaoBancariaPage() {
                         </button>
                      </div>
                   </div>
-               </div>
-
-               {/* Item 6.1.2: as somatórias da seleção em duas linhas — uma
-                   para os conciliados e outra para os não conciliados —,
-                   cada uma com a sua diferença. */}
-               <div className="linhas-somatoria">
-                  <LinhaSomatoria
-                     sRotulo="Selecionados não conciliados"
-                     oLinha={oConc.oTotais.oNaoConciliados}
-                  />
-                  <LinhaSomatoria
-                     sRotulo="Selecionados conciliados"
-                     oLinha={oConc.oTotais.oConciliados}
-                  />
                </div>
 
                <div className="linha-saldos">
@@ -590,9 +713,9 @@ export function ConciliacaoBancariaPage() {
             <div className="painel">
                <header
                   className={`painel-cabecalho ${
-                     oConc.staSelecao === true
+                     oConc.staSelecao === SELECAO_CONCILIADA
                         ? 'cabecalho-conciliado'
-                        : oConc.staSelecao === false
+                        : oConc.staSelecao === SELECAO_NAO_CONCILIADA
                           ? 'cabecalho-nao-conciliado'
                           : ''
                   }`}
@@ -667,12 +790,21 @@ export function ConciliacaoBancariaPage() {
                               {/* Campos do item 6.1.2 para os lançamentos do
                                   sistema: número do documento, data da baixa,
                                   descrição, valor, origem e situação */}
-                              <th>Data baixa</th>
-                              <th>Documento</th>
-                              <th className="col-historico">Descrição</th>
-                              <th className="col-valor">Valor</th>
-                              <th className="col-origem">Origem</th>
-                              <th className="col-status">Conc.</th>
+                              {[
+                                 { sChave: 'datMovimento', sRotulo: 'Data baixa' },
+                                 { sChave: 'numDocumento', sRotulo: 'Documento' },
+                                 { sChave: 'desHistorico', sRotulo: 'Descrição', className: 'col-historico' },
+                                 { sChave: 'valMovimento', sRotulo: 'Valor', className: 'col-valor' },
+                                 { sChave: 'tipOrigem', sRotulo: 'Origem', className: 'col-origem' },
+                                 { sChave: 'staConciliado', sRotulo: 'Conc.', className: 'col-status' },
+                              ].map((oColuna) => (
+                                 <CabecalhoOrdenavel
+                                    key={oColuna.sChave}
+                                    {...oColuna}
+                                    oOrdem={oOrdemLanc}
+                                    aoOrdenar={(sChave) => setOrdemLanc((oAtual) => proximaOrdem(oAtual, sChave))}
+                                 />
+                              ))}
                            </tr>
                         </thead>
                         <tbody>
@@ -685,6 +817,8 @@ export function ConciliacaoBancariaPage() {
                                        oLanc.staConciliado ? 'conciliada' : ''
                                     }`}
                                     onClick={() => oConc.alternaSelecao(oLanc, 'lancamento')}
+                                    onDoubleClick={() => abreLancamento(oLanc)}
+                                    title="Duplo clique abre os detalhes do lançamento"
                                     onContextMenu={(oEvento) => abreMenuContexto(oEvento, oLanc, 'lancamento')}
                                  >
                                     <td className="col-selecao">
@@ -789,11 +923,20 @@ export function ConciliacaoBancariaPage() {
                               </th>
                               {/* Campos do item 6.1.2 para os movimentos do
                                   banco: data, descrição e valor */}
-                              <th>Data movimento</th>
-                              <th>Documento</th>
-                              <th className="col-historico">Descrição do movimento</th>
-                              <th className="col-valor">Valor</th>
-                              <th className="col-status">Conc.</th>
+                              {[
+                                 { sChave: 'datMovimento', sRotulo: 'Data movimento' },
+                                 { sChave: 'numDocumento', sRotulo: 'Documento' },
+                                 { sChave: 'desHistorico', sRotulo: 'Descrição do movimento', className: 'col-historico' },
+                                 { sChave: 'valMovimento', sRotulo: 'Valor', className: 'col-valor' },
+                                 { sChave: 'staConciliado', sRotulo: 'Conc.', className: 'col-status' },
+                              ].map((oColuna) => (
+                                 <CabecalhoOrdenavel
+                                    key={oColuna.sChave}
+                                    {...oColuna}
+                                    oOrdem={oOrdemMov}
+                                    aoOrdenar={(sChave) => setOrdemMov((oAtual) => proximaOrdem(oAtual, sChave))}
+                                 />
+                              ))}
                            </tr>
                         </thead>
                         <tbody>
@@ -839,13 +982,26 @@ export function ConciliacaoBancariaPage() {
 
          </div>
 
-         <ModalNovoLancamento
-            aberto={bLancamentoAberto}
+         {/* Item 6.1.2: as somatórias da seleção em duas linhas — uma para os
+             conciliados e outra para os não conciliados —, cada uma com a sua
+             diferença. Ata de 24/09/2026: as duas linhas ficam centralizadas e
+             travadas no rodapé da tela, junto das grades, para não sumirem ao
+             rolar. */}
+         <div className="barra-somatoria">
+            <LinhaSomatoria sRotulo="Selecionados não conciliados" oLinha={oConc.oTotais.oNaoConciliados} />
+            <LinhaSomatoria sRotulo="Selecionados conciliados" oLinha={oConc.oTotais.oConciliados} />
+         </div>
+
+         <ModalLancamento
+            aberto={Boolean(oCaixaLancamento)}
+            sModo={oCaixaLancamento?.sModo}
+            oLancamentoBase={oCaixaLancamento?.oLancamentoBase ?? null}
             oMovimentoBase={oMovimentoBase}
             sDataSugerida={oConc.sDataFim}
             aoConfirmar={oConc.incluiLancamento}
+            aoAlterar={oConc.alteraLancamento}
             aoFechar={() => {
-               setLancamentoAberto(false);
+               setCaixaLancamento(null);
                setMovimentoBase(null);
             }}
          />

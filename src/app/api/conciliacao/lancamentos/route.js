@@ -7,21 +7,106 @@
 
 import { NextResponse } from 'next/server';
 import { dataBrParaSql } from '../../../../lib/db.js';
-import { buscaContaPorCodigo } from '../../../../lib/repositories/contaRepository.js';
+import { buscaContaPorCodigo, leBloqueioConta } from '../../../../lib/repositories/contaRepository.js';
 import {
+   atualizaLancamento,
+   buscaLancamento,
    calculaSaldoAnterior,
    excluiLancamento,
    insereLancamento,
    listaLancamentosPeriodo,
+   listaPernasTransferencia,
 } from '../../../../lib/repositories/lancamentoRepository.js';
 import {
+   ACAO_LANCAMENTO_ALTERADO,
    ACAO_LANCAMENTO_EXCLUIDO,
    ACAO_LANCAMENTO_INCLUIDO,
    registraAuditoria,
 } from '../../../../lib/repositories/auditoriaRepository.js';
 import { calculaSaldoAnteriorBanco } from '../../../../lib/repositories/movimentoRepository.js';
+import { normalizaRateio, validaRateio } from '../../../../utils/rateio.js';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Confere se a data cai no período bloqueado (item 6.1.3.1).
+ * @param {string} sDatBloqueio Bloqueio da conta (DD/MM/AAAA)
+ * @param {string} sData Data do lançamento (DD/MM/AAAA)
+ * @returns {boolean}
+ */
+function caiNoBloqueio(sDatBloqueio, sData) {
+   const sDatBloqueioSql = dataBrParaSql(sDatBloqueio);
+   const sDataSql = dataBrParaSql(sData);
+   return Boolean(sDatBloqueioSql && sDataSql && sDataSql <= sDatBloqueioSql);
+} // caiNoBloqueio
+
+/**
+ * Confere o bloqueio de período para alterar ou excluir um lançamento.
+ *
+ * Valem a data atual do registro e, na alteração, a nova data: mover um
+ * lançamento para fora de um período fechado também altera aquele período.
+ * Na transferência, as duas contas são conferidas — o movimento é o mesmo nos
+ * dois caixas, e cada conta tem o seu bloqueio.
+ *
+ * @param {object} oConta Conta aberta na tela
+ * @param {object} oLancamento Lançamento como está gravado
+ * @param {string[]} aDatas Datas a conferir
+ * @param {'alterar'|'excluir'} sAcao Ação pretendida, para a mensagem
+ * @returns {Promise<string>} Mensagem de impedimento, ou string vazia
+ */
+async function verificaBloqueioAlteracao(oConta, oLancamento, aDatas, sAcao) {
+   const aDatasValidas = aDatas.filter(Boolean);
+
+   if (!oLancamento.codTransferencia) {
+      const sDataBloqueada = aDatasValidas.find((sData) => caiNoBloqueio(oConta.datUltimoBloqueio, sData));
+      return sDataBloqueada
+         ? `A conta está bloqueada para lançamentos até ${oConta.datUltimoBloqueio}; ` +
+              `não é possível ${sAcao} lançamento com data ${sDataBloqueada}.`
+         : '';
+   }
+
+   const aPernas = await listaPernasTransferencia(oLancamento.codLancamento);
+   for (const oPerna of aPernas) {
+      const sDatBloqueio = await leBloqueioConta({ ...oPerna, codEmp: oConta.codEmp });
+      const sDataBloqueada = [...aDatasValidas, oPerna.datMovimento].find((sData) =>
+         caiNoBloqueio(sDatBloqueio, sData)
+      );
+      if (sDataBloqueada) {
+         return (
+            `A conta ${oPerna.codAgencia}/${oPerna.numContaCorrente}, ponta desta transferência, está ` +
+            `bloqueada para lançamentos até ${sDatBloqueio}. Remova o bloqueio das duas contas antes de ${sAcao}.`
+         );
+      }
+   }
+
+   return '';
+} // verificaBloqueioAlteracao
+
+/**
+ * Valida os campos comuns à inclusão e à alteração.
+ *
+ * Ata de 24/09/2026: o subgrupo é obrigatório, conforme regra do ERP, e o
+ * rateio por centro de custo, quando informado, fecha no valor do lançamento.
+ *
+ * @param {object} oCorpo
+ * @returns {string} Mensagem de erro, ou string vazia
+ */
+function validaCamposLancamento(oCorpo) {
+   if (!oCorpo.datMovimento || !dataBrParaSql(oCorpo.datMovimento)) {
+      return 'Informe a data do movimento.';
+   }
+   if (!oCorpo.desHistorico || !String(oCorpo.desHistorico).trim()) {
+      return 'Informe o histórico do lançamento.';
+   }
+   const nValor = Number(oCorpo.valMovimento);
+   if (!Number.isFinite(nValor) || nValor <= 0) {
+      return 'O valor do lançamento deve ser maior que zero.';
+   }
+   if (!oCorpo.codSubgrupo || !String(oCorpo.codSubgrupo).trim()) {
+      return 'Selecione o subgrupo do lançamento. O subgrupo é obrigatório no ERP.';
+   }
+   return validaRateio(normalizaRateio(oCorpo.aRateio), nValor);
+} // validaCamposLancamento
 
 /**
  * Monta o bloco de saldos de um dos lados da tela.
@@ -63,12 +148,33 @@ export async function GET(oRequisicao) {
    const sCodConta = oParams.get('conta') ?? '';
    const sDataInicio = oParams.get('dataInicio') ?? '';
    const sDataFim = oParams.get('dataFim') ?? '';
+   const sCodLancamento = oParams.get('lancamento') ?? '';
 
    if (!sCodConta) {
       return NextResponse.json(
          { erro: 'Selecione a conta corrente a ser conciliada.' },
          { status: 400 }
       );
+   }
+
+   // Detalhe de um lançamento (tela de detalhes e de edição)
+   if (sCodLancamento) {
+      try {
+         const oConta = await buscaContaPorCodigo(sCodConta);
+         if (!oConta) {
+            return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
+         }
+
+         const oLancamento = await buscaLancamento(oConta, sCodLancamento);
+         if (!oLancamento) {
+            return NextResponse.json({ erro: 'Lançamento não localizado.' }, { status: 404 });
+         }
+
+         return NextResponse.json({ lancamento: oLancamento });
+      } catch (oErro) {
+         console.error('[api/conciliacao/lancamentos] Falha ao ler o lançamento:', oErro);
+         return NextResponse.json({ erro: oErro.message }, { status: 500 });
+      }
    }
 
    try {
@@ -126,7 +232,8 @@ export async function GET(oRequisicao) {
 /**
  * POST /api/conciliacao/lancamentos
  * Inclui um lançamento no extrato do sistema (ação "Novo Lançamento").
- * Corpo: { conta, datMovimento, datCompensacao?, numDocumento?, desHistorico, valMovimento, bEntrada, tipOrigem? }
+ * Corpo: { conta, datMovimento, datCompensacao?, numDocumento?, desHistorico, valMovimento, bEntrada,
+ *          tipDocumento, codSubgrupo, categoriaSubgrupo?, codContaContabil?, aRateio?, tipOrigem? }
  * @param {Request} oRequisicao
  * @returns {Promise<NextResponse>}
  */
@@ -145,11 +252,9 @@ export async function POST(oRequisicao) {
    if (!sCodConta) {
       return NextResponse.json({ erro: 'Selecione a conta corrente.' }, { status: 400 });
    }
-   if (!oCorpo.desHistorico || !String(oCorpo.desHistorico).trim()) {
-      return NextResponse.json({ erro: 'Informe o histórico do lançamento.' }, { status: 400 });
-   }
-   if (!oCorpo.datMovimento) {
-      return NextResponse.json({ erro: 'Informe a data do movimento.' }, { status: 400 });
+   const sErroCampos = validaCamposLancamento(oCorpo);
+   if (sErroCampos) {
+      return NextResponse.json({ erro: sErroCampos }, { status: 400 });
    }
    // O tipo de documento é obrigatório no ERP: TBCONB001 o exige na chave e
    // tem chave estrangeira para o cadastro de documentos (TBGENE009).
@@ -158,9 +263,6 @@ export async function POST(oRequisicao) {
    }
 
    const nValor = Number(oCorpo.valMovimento);
-   if (!Number.isFinite(nValor) || nValor <= 0) {
-      return NextResponse.json({ erro: 'O valor do lançamento deve ser maior que zero.' }, { status: 400 });
-   }
 
    try {
       const oConta = await buscaContaPorCodigo(sCodConta);
@@ -193,7 +295,9 @@ export async function POST(oRequisicao) {
          // Campos do item 6.1.3.8 — ação 1
          tipDocumento: oCorpo.tipDocumento,
          codSubgrupo: oCorpo.codSubgrupo,
+         categoriaSubgrupo: oCorpo.categoriaSubgrupo,
          codContaContabil: oCorpo.codContaContabil,
+         aRateio: normalizaRateio(oCorpo.aRateio),
       });
 
       // A mensagem de sucesso é emitida somente após concluir a gravação
@@ -219,6 +323,104 @@ export async function POST(oRequisicao) {
 } // POST
 
 /**
+ * PUT /api/conciliacao/lancamentos
+ * Altera um lançamento originado na conciliação (ata de 24/09/2026).
+ * Corpo: { conta, lancamento, datMovimento, datCompensacao?, desHistorico, valMovimento, bEntrada,
+ *          codSubgrupo, categoriaSubgrupo?, codContaContabil?, aRateio? }
+ *
+ * Origem, tipo e número do documento não são alterados: a origem fica
+ * bloqueada em lançamento existente, e documento faz parte da chave.
+ *
+ * @param {Request} oRequisicao
+ * @returns {Promise<NextResponse>}
+ */
+export async function PUT(oRequisicao) {
+   let oCorpo = null;
+
+   try {
+      oCorpo = await oRequisicao.json();
+   } catch {
+      return NextResponse.json({ erro: 'Corpo da requisição inválido.' }, { status: 400 });
+   }
+
+   const sCodConta = String(oCorpo?.conta ?? '');
+   const sCodLancamento = String(oCorpo?.lancamento ?? '');
+
+   // Validações antes de iniciar a gravação
+   if (!sCodConta || !sCodLancamento) {
+      return NextResponse.json({ erro: 'Informe a conta e o lançamento a ser alterado.' }, { status: 400 });
+   }
+   const sErroCampos = validaCamposLancamento(oCorpo);
+   if (sErroCampos) {
+      return NextResponse.json({ erro: sErroCampos }, { status: 400 });
+   }
+
+   try {
+      const oConta = await buscaContaPorCodigo(sCodConta);
+      if (!oConta) {
+         return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
+      }
+
+      const oAtual = await buscaLancamento(oConta, sCodLancamento);
+      if (!oAtual) {
+         return NextResponse.json({ erro: 'Lançamento não localizado.' }, { status: 404 });
+      }
+      if (!oAtual.bEditavel) {
+         return NextResponse.json(
+            {
+               erro: oAtual.staConciliado
+                  ? 'Lançamento conciliado não pode ser alterado. Estorne a conciliação antes.'
+                  : `Somente lançamentos originados na conciliação podem ser alterados (origem atual: ${oAtual.tipOrigem}).`,
+            },
+            { status: 409 }
+         );
+      }
+
+      const sImpedimento = await verificaBloqueioAlteracao(oConta, oAtual, [
+         oAtual.datMovimento,
+         oCorpo.datMovimento,
+      ], 'alterar');
+      if (sImpedimento) {
+         return NextResponse.json({ erro: sImpedimento }, { status: 409 });
+      }
+
+      const oLancamento = await atualizaLancamento(oConta, sCodLancamento, {
+         datMovimento: oCorpo.datMovimento,
+         datCompensacao: oCorpo.datCompensacao,
+         desHistorico: String(oCorpo.desHistorico).trim(),
+         valMovimento: Number(oCorpo.valMovimento),
+         bEntrada: Boolean(oCorpo.bEntrada),
+         codSubgrupo: oCorpo.codSubgrupo,
+         categoriaSubgrupo: oCorpo.categoriaSubgrupo,
+         codContaContabil: oCorpo.codContaContabil,
+         aRateio: normalizaRateio(oCorpo.aRateio),
+      });
+
+      await registraAuditoria({
+         oConta,
+         tipAcao: ACAO_LANCAMENTO_ALTERADO,
+         desEntidade: oAtual.codTransferencia ? 'transferencia' : 'lancamento',
+         codEntidade: oAtual.codTransferencia ?? sCodLancamento,
+         desDetalhe:
+            `Lançamento ${oLancamento.numDocumento} alterado: ${oAtual.datMovimento} ${oAtual.valMovimento.toFixed(2)} ` +
+            `→ ${oLancamento.datMovimento} ${oLancamento.valMovimento.toFixed(2)}` +
+            (oAtual.codTransferencia ? ' (as duas pontas da transferência).' : '.'),
+         valReferencia: oLancamento.valMovimento,
+      });
+
+      return NextResponse.json({
+         lancamento: { ...oLancamento, codConta: sCodConta },
+         mensagem: oAtual.codTransferencia
+            ? `Transferência ${oLancamento.numDocumento} alterada nas duas contas.`
+            : `Lançamento ${oLancamento.numDocumento} alterado com sucesso.`,
+      });
+   } catch (oErro) {
+      console.error('[api/conciliacao/lancamentos] Falha ao alterar:', oErro);
+      return NextResponse.json({ erro: oErro.message }, { status: 500 });
+   }
+} // PUT
+
+/**
  * DELETE /api/conciliacao/lancamentos?conta=&lancamento=
  * Exclui um lançamento originado na conciliação (item 6.1.3.8 — ação 4).
  * @param {Request} oRequisicao
@@ -240,6 +442,16 @@ export async function DELETE(oRequisicao) {
       const oConta = await buscaContaPorCodigo(sCodConta);
       if (!oConta) {
          return NextResponse.json({ erro: `Conta "${sCodConta}" não localizada.` }, { status: 404 });
+      }
+
+      // Excluir também altera o período: a trava do item 6.1.3.1 vale aqui,
+      // e na transferência vale para as duas contas
+      const oAtual = await buscaLancamento(oConta, sCodLancamento);
+      if (oAtual) {
+         const sImpedimento = await verificaBloqueioAlteracao(oConta, oAtual, [oAtual.datMovimento], 'excluir');
+         if (sImpedimento) {
+            return NextResponse.json({ erro: sImpedimento }, { status: 409 });
+         }
       }
 
       const oResultado = await excluiLancamento(oConta, sCodLancamento);

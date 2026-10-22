@@ -8,8 +8,9 @@
 // bloqueio de período e exclusão de registros.
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+   alteraLancamentoApi,
    buscaLancamentosSistema,
    criaTransferenciaApi,
    excluiLancamentoApi,
@@ -26,7 +27,13 @@ import {
    PERIODO_PADRAO_INICIO,
    temPeriodoPadraoFixo,
 } from '../utils/configPeriodo.js';
-import { ORIGEM_CONCILIACAO } from '../utils/origens.js';
+import { ORIGEM_CONCILIACAO, ORIGEM_TRANSFERENCIA } from '../utils/origens.js';
+
+/**
+ * Origens que a tela pode alterar e excluir: as nascidas na própria
+ * conciliação. A transferência entra aqui — excluí-la remove as duas pontas.
+ */
+const ORIGENS_EDITAVEIS = [ORIGEM_CONCILIACAO, ORIGEM_TRANSFERENCIA];
 
 /**
  * Período máximo, em dias, aceito na busca da conciliação.
@@ -191,8 +198,10 @@ function casaPorDataEValor(aLancamentos, aMovimentos) {
  * Hook principal da tela de conciliação.
  * @param {object|null} oConta Conta corrente selecionada
  * @param {(texto: string, tipo?: string) => void} notifica Emissor de mensagens
+ * @param {(sCodConta: string, oAlteracao: object) => void} [atualizaContaLocal]
+ *        Reflete na lista de contas o que foi gravado (bloqueio de período)
  */
-export function useConciliacao(oConta, notifica) {
+export function useConciliacao(oConta, notifica, atualizaContaLocal) {
    const [sDataInicio, setDataInicio] = useState('');
    const [sDataFim, setDataFim] = useState('');
    const [datBloqueio, setDatBloqueio] = useState('');
@@ -216,8 +225,16 @@ export function useConciliacao(oConta, notifica) {
       bMovNaoConciliados: true,
    });
 
+   // A carga inicial acompanha a TROCA de conta, não cada atualização do
+   // objeto: gravar o bloqueio atualiza a conta na lista, e isso não pode
+   // recarregar as grades nem devolver o período ao padrão
+   const oContaRef = useRef(oConta);
+   oContaRef.current = oConta;
+   const sCodContaAtual = oConta?.codConta ?? '';
+
    // Preenche o período automaticamente ao abrir a tela e carrega sistema + extrato
    useEffect(() => {
+      const oConta = oContaRef.current;
       if (!oConta) {
          return;
       }
@@ -284,7 +301,7 @@ export function useConciliacao(oConta, notifica) {
       return () => {
          bAtivo = false;
       };
-   }, [oConta, notifica]);
+   }, [sCodContaAtual, notifica]);
 
    /** Limpa a seleção de ambas as grades. */
    const limpaSelecao = useCallback(() => {
@@ -618,6 +635,7 @@ export function useConciliacao(oConta, notifica) {
          try {
             const oRetorno = await gravaBloqueioApi(oConta.codConta, sNovaData);
             setDatBloqueio(oRetorno.datUltimoBloqueio);
+            atualizaContaLocal?.(oConta.codConta, { datUltimoBloqueio: oRetorno.datUltimoBloqueio });
             notifica(oRetorno.mensagem, 'sucesso');
             return true;
          } catch (oErro) {
@@ -625,7 +643,7 @@ export function useConciliacao(oConta, notifica) {
             return false;
          }
       },
-      [oConta, notifica]
+      [oConta, notifica, atualizaContaLocal]
    );
 
    /** Remove o bloqueio da conta (item 6.1.3.1). */
@@ -637,13 +655,14 @@ export function useConciliacao(oConta, notifica) {
       try {
          const oRetorno = await gravaBloqueioApi(oConta.codConta, '');
          setDatBloqueio('');
+         atualizaContaLocal?.(oConta.codConta, { datUltimoBloqueio: '' });
          notifica(oRetorno.mensagem, 'sucesso');
          return true;
       } catch (oErro) {
          notifica(oErro.message, 'erro');
          return false;
       }
-   }, [oConta, notifica]);
+   }, [oConta, notifica, atualizaContaLocal]);
 
    /**
     * Indica se uma data está dentro do período bloqueado.
@@ -895,8 +914,11 @@ export function useConciliacao(oConta, notifica) {
             `${aGruposLivres.length} correspondência(s) conciliada(s) automaticamente.` +
                (iBloqueados > 0
                   ? ` ${iBloqueados} ficaram de fora por estarem em período bloqueado até ${datBloqueio}.`
+                  : '') +
+               (oRetorno.iBuscasInterrompidas > 0
+                  ? ` ${oRetorno.iBuscasInterrompidas} busca(s) por agrupamento pararam no tempo limite.`
                   : ''),
-            iBloqueados > 0 ? 'alerta' : 'sucesso'
+            iBloqueados > 0 || oRetorno.iBuscasInterrompidas > 0 ? 'alerta' : 'sucesso'
          );
       } catch (oErro) {
          notifica(oErro.message, 'erro');
@@ -910,19 +932,31 @@ export function useConciliacao(oConta, notifica) {
    /**
     * Inclui um lançamento gerado pela própria conciliação
     * (ações 1 e 2 do menu do botão direito).
+    *
+    * A caixa permite escolher outra conta (filtro de bancos pelo documento);
+    * nesse caso o lançamento é gravado lá e não entra na grade aberta.
+    *
     * @param {object} oLancamento Registro já normalizado
+    * @param {string} [sCodConta] Conta do lançamento; padrão é a conta aberta
     */
    const incluiLancamento = useCallback(
-      async (oLancamento) => {
+      async (oLancamento, sCodConta) => {
          if (!oConta) {
             notifica('Selecione a conta corrente antes de lançar.', 'alerta');
             return false;
          }
 
+         const sContaDestino = sCodConta || oConta.codConta;
          try {
-            const oRetorno = await incluiLancamentoApi(oConta.codConta, oLancamento);
-            setLancamentos((aAtuais) => [...aAtuais, oRetorno.lancamento]);
-            notifica(oRetorno.mensagem, 'sucesso');
+            const oRetorno = await incluiLancamentoApi(sContaDestino, oLancamento);
+            if (sContaDestino === oConta.codConta) {
+               setLancamentos((aAtuais) => [...aAtuais, oRetorno.lancamento]);
+            }
+            notifica(
+               oRetorno.mensagem +
+                  (sContaDestino === oConta.codConta ? '' : ' O lançamento foi gravado em outra conta.'),
+               'sucesso'
+            );
             return true;
          } catch (oErro) {
             notifica(oErro.message, 'erro');
@@ -930,6 +964,39 @@ export function useConciliacao(oConta, notifica) {
          }
       },
       [oConta, notifica]
+   );
+
+   /**
+    * Altera um lançamento originado na conciliação (ata de 24/09/2026).
+    * @param {string} sCodLancamento
+    * @param {object} oDados Dados informados na caixa de edição
+    * @returns {Promise<boolean>} true quando a alteração é gravada
+    */
+   const alteraLancamento = useCallback(
+      async (sCodLancamento, oDados) => {
+         if (!oConta) {
+            return false;
+         }
+         if (estaBloqueada(oDados.datMovimento)) {
+            notifica(`A conta está bloqueada para lançamentos até ${datBloqueio}. Informe uma data posterior.`, 'erro');
+            return false;
+         }
+
+         try {
+            const oRetorno = await alteraLancamentoApi(oConta.codConta, sCodLancamento, oDados);
+            const oAlterado = oRetorno.lancamento;
+
+            setLancamentos((aAtuais) =>
+               aAtuais.map((oItem) => (oItem.codLancamento === sCodLancamento ? { ...oItem, ...oAlterado } : oItem))
+            );
+            notifica(oRetorno.mensagem, 'sucesso');
+            return true;
+         } catch (oErro) {
+            notifica(oErro.message, 'erro');
+            return false;
+         }
+      },
+      [oConta, datBloqueio, estaBloqueada, notifica]
    );
 
    /**
@@ -950,9 +1017,12 @@ export function useConciliacao(oConta, notifica) {
             notifica('O período do registro está bloqueado para alterações.', 'erro');
             return;
          }
-         if (sGrade === 'lancamento' && oRegistro.tipOrigem !== ORIGEM_CONCILIACAO) {
+         // A transferência também nasce nesta tela; a rota exclui as duas
+         // pontas juntas, nos dois bancos
+         if (sGrade === 'lancamento' && !ORIGENS_EDITAVEIS.includes(oRegistro.tipOrigem)) {
             notifica(
-               `Somente lançamentos com origem "${ORIGEM_CONCILIACAO}" podem ser excluídos (origem atual: ${oRegistro.tipOrigem}).`,
+               `Somente lançamentos com origem "${ORIGEM_CONCILIACAO}" ou "${ORIGEM_TRANSFERENCIA}" podem ser ` +
+                  `excluídos (origem atual: ${oRegistro.tipOrigem}).`,
                'erro'
             );
             return;
@@ -1086,6 +1156,7 @@ export function useConciliacao(oConta, notifica) {
       desfazConciliacao,
       conciliaAutomaticamente,
       incluiLancamento,
+      alteraLancamento,
       criaTransferencia,
       excluiRegistro,
       associaLancamento,

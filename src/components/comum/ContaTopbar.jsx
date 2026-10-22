@@ -47,14 +47,3 @@ export function ContaTopbar({ oConta, aoTrocarConta }) {
       </button>
    );
 } // ContaTopbar
-
-/**
- * Versão compacta apenas com o identificador Banco/Agência/C.C.
- * @param {{ oConta: object }} oPropriedades
- */
-export function RotuloContaCompacto({ oConta }) {
-   if (!oConta) {
-      return null;
-   }
-   return <span className="rotulo-conta">{formataContaCorrente(oConta)}</span>;
-} // RotuloContaCompacto
