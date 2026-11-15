@@ -293,6 +293,9 @@ Amazon ECS (Elastic Container Service)
 
 ## 6. Logs e CloudWatch
 
+**Estado ativo na EC2 i-011e7c2ecaed16641 (us-east-1):** perfil LabInstanceProfile com role LabRole associado; agente CloudWatch instalado e ativo; grupos /aws/conciliacao-agiw/app e /aws/conciliacao-agiw/nginx-access confirmados; métricas de memória e disco publicadas; alarmes conciliacao-agiw-cpu-high e conciliacao-agiw-instance-status-failed criados e em estado OK. Os alarmes não têm ação SNS/e-mail configurada.
+
+
 ### Logs da aplicação
 
 O Next.js escreve no stdout/stderr, que o Docker captura. Para enviar ao CloudWatch, instale o **CloudWatch Logs Agent** na EC2:
@@ -818,7 +821,7 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | ✅ CI funcionando | Implementado | `.github/workflows/ci.yml` |
 | ✅ CD implementado | Implementado | `.github/workflows/cd.yml` + secrets do GitHub |
 | Logs disponiveis | Docker logs da app e logs locais do Nginx | docker compose logs; /var/log/nginx |
-| CloudWatch utilizado | Pendente: a instancia nao tem IAM instance profile associado | LabInstanceProfile precisa ser associado a EC2 |
+| CloudWatch utilizado | Ativo: agente rodando via LabInstanceProfile/LabRole; logs app + Nginx no CloudWatch; métricas de memória/disco e alarmes CPU/status em OK | Região us-east-1; infra/cloudwatch-agent.json; EC2 i-011e7c2ecaed16641 |
 | Backup definido | Ativo: backup inicial validado e rotina diaria; retencao local de 14 dias, sem copia externa | /home/ec2-user/backups |
 | Restore definido | Backup importado em schema temporario (8 tabelas); banco principal intacto; script operacional documentado | infra/restore-conciliacao.sh |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
