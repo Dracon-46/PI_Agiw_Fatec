@@ -47,7 +47,7 @@ EC2 t3.small (Amazon Linux 2023)
 |---|---|---|
 | **EC2 t3.small** | Executa app + MySQL | Suficiente para o módulo. 2 vCPU / 2 GiB RAM suporta Next.js + MySQL sem folga mínima. |
 | **Elastic IP** | IP fixo para a instância | Sem EIP, o IP público muda toda vez que o Learner Lab reinicia a EC2 — inviabilizaria acesso consistente. |
-| **Security Group** | Firewall da instância | Regras: SSH só ao IP do time, HTTP/HTTPS público, MySQL nunca exposto. |
+| **Security Group** | Firewall da instância | Portas 80/443 públicas; 3000 e MySQL 3306 não expostos. SSH 22 está aberto publicamente no laboratório e deve ser limitado ao IP administrativo em produção. |
 | **CloudWatch Logs** | Logs da aplicação | Coleta logs do Docker via agent. |
 | **CloudWatch Metrics** | Monitoramento | CPU, memória, disco da EC2 + métricas customizadas. |
 
@@ -661,7 +661,10 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | Volume EBS `gp3` 20 GiB | Armazenamento da instância | ~$1,60 |
 | Transfer de dados | 10 GB saída estimada | ~$0,90 |
 | CloudWatch Logs | 5 GB ingestão/mês | ~$2,50 |
+| Amazon S3 Standard (backup) | 30 backups diários retidos por 30 dias; tamanho observado ~2,9 KB por arquivo | <$0,01 |
 | **TOTAL** | | **~$20/mês** |
+
+**Estimativa do backup S3:** os arquivos compactados atuais têm aproximadamente 2,9 KB. Com um backup diário e retenção de 30 dias, são cerca de 87 KB armazenados; armazenamento e 30 gravações mensais ficam abaixo de US$ 0,01/mês. Para dimensionamento, se o banco crescer para 100 MB por backup diário, 30 cópias representam aproximadamente 3 GB-mês, cerca de US$ 0,07/mês de armazenamento S3 Standard, mais menos de US$ 0,001 em gravações e uma restauração pontual. A estimativa usa US$ 0,023/GB-mês e US$ 0,005 por 1.000 gravações; transferência de saída, impostos, crescimento e solicitações adicionais podem alterar a fatura. A AWS cobra armazenamento, solicitações e transferência conforme o uso; consulte a [página oficial de preços do S3](https://aws.amazon.com/s3/pricing/) antes de provisionar.
 
 #### Configuração recomendada para produção (alta disponibilidade)
 
@@ -718,7 +721,7 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 │  │  └──────────────────────────────────────────────┘   │   │
 │  │                                                      │   │
 │  │  Security Group: sg-conciliacao-agiw                 │   │
-│  │    IN: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3000       │   │
+│  │    IN: 22 (SSH), 80 (HTTP), 443 (HTTPS)             │   │
 │  │    OUT: all                                          │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                │                            │
