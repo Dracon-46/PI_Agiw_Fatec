@@ -35,10 +35,10 @@ Parameters:
       Tipo de instância EC2.
       AWS Academy limita a t2/t3 até medium. t3.small é suficiente.
 
-  AppPort:
-    Type: Number
-    Default: 3000
-    Description: Porta da aplicação Next.js
+  InstanceProfileName:
+    Type: String
+    Default: LabInstanceProfile
+    Description: Existing instance profile for CloudWatch Agent permissions
 
   AllowedSSHCidr:
     Type: String
@@ -85,14 +85,6 @@ Resources:
           CidrIp: '0.0.0.0/0'
           Description: HTTPS
 
-        # Porta da app (manter restrita; Nginx expõe 80/443)
-        # Comentar após configurar Nginx em produção
-        - IpProtocol: tcp
-          FromPort: !Ref AppPort
-          ToPort: !Ref AppPort
-          CidrIp: '0.0.0.0/0'
-          Description: Next.js direto (remover apos configurar Nginx)
-
       # Sem regra para 3306 — MySQL nunca exposto para a internet
       Tags:
         - Key: Name
@@ -112,20 +104,20 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref InstanceProfileName
       # Amazon Linux 2023 (us-east-1) — AMI pública e atualizada
       # Em outras regiões, substitua pelo ID correto via:
       #   aws ec2 describe-images --owners amazon --filters "Name=name,Values=al2023-ami-*-x86_64"
       ImageId: ami-0453ec754f44f9a4a
       SecurityGroups:
         - !Ref SecurityGroupConciliacao
-      # IamInstanceProfile: LabInstanceProfile  # Descomentar se precisar de acesso a S3/SSM
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
             VolumeSize: 20
             VolumeType: gp3
             DeleteOnTermination: true
-            Encrypted: false  # Em produção: true (usar KMS)
+            Encrypted: true
 
       # -----------------------------------------------------------------------
       # UserData: bootstrap automático da instância
@@ -221,6 +213,39 @@ Resources:
       Tags:
         - Key: Name
           Value: eip-conciliacao-agiw
+  CpuHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: conciliacao-agiw-cpu-high
+      AlarmDescription: EC2 CPU above 80 percent for five minutes
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2ConciliacaoAgiw
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  InstanceStatusAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: conciliacao-agiw-instance-status-failed
+      AlarmDescription: EC2 instance status check failed
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2ConciliacaoAgiw
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
 
 # ==============================================================================
 # Outputs
@@ -239,8 +264,8 @@ Outputs:
       Name: !Sub '${AWS::StackName}-PublicIP'
 
   AppUrl:
-    Description: URL da aplicação (HTTP direto na porta da app)
-    Value: !Sub 'http://${ElasticIPConciliacao}:3000'
+    Description: Application HTTPS URL through Nginx
+    Value: !Sub 'https://${ElasticIPConciliacao}'
 
   AppUrlHttp:
     Description: URL após configurar Nginx na porta 80

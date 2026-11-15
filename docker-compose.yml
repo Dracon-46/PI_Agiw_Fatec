@@ -76,7 +76,7 @@ services:
       NEXT_PUBLIC_PERIODO_FIM: ${NEXT_PUBLIC_PERIODO_FIM:-}
       NODE_ENV: production
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     volumes:
       # Certificados mTLS entram por volume, nunca dentro da imagem
       - ./certs:/app/certs:ro
