@@ -15,10 +15,14 @@ configuração de servidor para o deploy na AWS.
 | [`setup-ec2.sh`](setup-ec2.sh) | Script de bootstrap manual da EC2 (Docker, Nginx, backup, cron) |
 | [`nginx.conf`](nginx.conf) | Nginx: HTTP :80 + HTTPS :443 (certificado autoassinado no lab) |
 | [`cloudwatch-agent.json`](cloudwatch-agent.json) | Configuração do CloudWatch Agent (logs Docker/Nginx + métricas) |
-| [`restore-conciliacao.sh`](restore-conciliacao.sh) | Restore do MySQL a partir de `~/backups/*.sql.gz` |
-| [backup-conciliacao.sh](backup-conciliacao.sh) | Backup MySQL compactado, validado e com retenção local de 14 dias |
+| [`restore-conciliacao.sh`](restore-conciliacao.sh) | Restore do MySQL a partir de backup local ou URI s3:// |
+| [backup-conciliacao.sh](backup-conciliacao.sh) | Dump MySQL validado, upload SSE-S3 ao bucket AWS, retenção local de 14 dias e expiração S3 em 30 dias |
 
 ---
+
+### Backups no Amazon S3
+
+A instância atual envia os dumps para `s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/` usando o Instance Profile `LabInstanceProfile`. O bucket bloqueia acesso público, aplica SSE-S3 e exige transporte HTTPS. O lifecycle remove objetos após 30 dias. O restore aceita o URI S3 diretamente.
 
 ## Fluxo de uso
 

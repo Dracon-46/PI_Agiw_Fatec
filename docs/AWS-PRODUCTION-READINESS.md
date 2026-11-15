@@ -453,74 +453,33 @@ Em produção, criar um **CloudWatch Dashboard** com:
 
 #### Backup diário automático (MySQL em contêiner)
 
-O script [`infra/setup-ec2.sh`](../infra/setup-ec2.sh) instala um cron job que roda às **02:00** todo dia:
+O cron `/etc/cron.d/conciliacao-backup` executa diariamente `infra/backup-conciliacao.sh`. O script gera um dump consistente do MySQL, valida o gzip e envia o arquivo para o S3 antes de remover arquivos locais antigos.
+
+- Bucket: `conciliacao-334393066436-backup-i011e7c2ecaed16641` (us-east-1), privado e com bloqueio de acesso público.
+- Criptografia no S3: SSE-S3 (AES256); política do bucket exige HTTPS.
+- Retenção: 30 dias no S3 e 14 dias no volume local da EC2.
+- Chave S3: `mysql/conciliacao_AAAA-MM-DD_HHMMSS.sql.gz` (timestamp UTC).
+- O perfil da EC2 fornece acesso ao bucket; não há access key AWS no script ou no `.env`.
+
+#### Backup manual
+
+Use o mesmo script da rotina automática para validar e enviar o dump ao S3:
 
 ```bash
-# O que o cron executa:
-docker compose exec -T mysql \
-  mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
-  | gzip > "/home/ec2-user/backups/conciliacao_$(date +%Y-%m-%d_%H%M%S).sql.gz"
-
-# Retém os últimos 7 backups (automaticamente apaga os mais antigos)
-find "$BACKUP_DIR" -name "conciliacao_*.sql.gz" -mtime +7 -delete
-```
-
-#### Backup manual (qualquer momento)
-
-```bash
-cd /home/ec2-user/conciliacao-agiw
-
-# Backup completo
-docker compose exec -T mysql \
-  mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
-  | gzip > ~/backups/backup-manual-$(date +%Y-%m-%d_%H%M%S).sql.gz
-
-# Verificar backup gerado
-ls -lh ~/backups/
-```
-
-#### Backup do volume Docker (dados brutos)
-
-```bash
-# Para e faz backup do volume completo
-docker compose stop mysql
-sudo tar -czf ~/backups/volume-mysql-$(date +%Y-%m-%d).tar.gz \
-  /var/lib/docker/volumes/conciliacao-agiw_dados-mysql/
-docker compose start mysql
+sudo /usr/local/bin/backup-conciliacao.sh
+aws s3 ls s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/ --region us-east-1
 ```
 
 ### Restore
 
-#### Restore completo a partir do `.sql.gz`
-
-Script pronto: [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh).
+O script [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh) aceita um arquivo local ou um URI S3. Para restaurar um objeto S3 no banco configurado da aplicação:
 
 ```bash
 cd /home/ec2-user/conciliacao-agiw
-bash infra/restore-conciliacao.sh ~/backups/conciliacao_2026-10-10_020000.sql.gz
+sudo bash infra/restore-conciliacao.sh s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/<arquivo>.sql.gz
 ```
 
-Ou, passo a passo:
-
-```bash
-cd /home/ec2-user/conciliacao-agiw
-
-# 1. Parar a aplicação (evitar gravações durante restore)
-docker compose stop app
-
-# 2. Restaurar backup
-gunzip -c ~/backups/conciliacao_2026-10-10_020000.sql.gz \
-  | docker compose exec -T mysql \
-    mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
-
-# 3. Verificar integridade (contar registros principais)
-docker compose exec mysql mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
-  -e "SELECT COUNT(*) as lancamentos FROM lancamento; SELECT COUNT(*) as movimentos FROM movimento_bancario;"
-
-# 4. Restartar aplicação
-docker compose start app
-docker compose logs -f app
-```
+O script baixa o objeto usando o Instance Profile, para a aplicação, importa o dump e sobe a aplicação novamente. Em 15/11/2026, validamos o objeto do S3 importando-o em um schema temporário: 8 tabelas foram restauradas e o banco principal não foi alterado.
 
 ### Em produção real: RDS com backups automáticos
 
@@ -822,8 +781,8 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | ✅ CD implementado | Implementado | `.github/workflows/cd.yml` + secrets do GitHub |
 | Logs disponiveis | Docker logs da app e logs locais do Nginx | docker compose logs; /var/log/nginx |
 | CloudWatch utilizado | Ativo: agente rodando via LabInstanceProfile/LabRole; logs app + Nginx no CloudWatch; métricas de memória/disco e alarmes CPU/status em OK | Região us-east-1; infra/cloudwatch-agent.json; EC2 i-011e7c2ecaed16641 |
-| Backup definido | Ativo: backup inicial validado e rotina diaria; retencao local de 14 dias, sem copia externa | /home/ec2-user/backups |
-| Restore definido | Backup importado em schema temporario (8 tabelas); banco principal intacto; script operacional documentado | infra/restore-conciliacao.sh |
+| Backup definido | Ativo: dump diário local enviado ao Amazon S3; SSE-S3, acesso público bloqueado, transporte HTTPS obrigatório; 30 dias no S3 e 14 dias local | bucket `conciliacao-334393066436-backup-i011e7c2ecaed16641`, prefixo `mysql/` |
+| Restore definido | Restore do objeto S3 testado em schema temporário (8 tabelas); banco principal preservado; script também aceita URI S3 | `infra/restore-conciliacao.sh` |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
 | ✅ Serviços AWS justificados | Documentado | Seção 1 deste documento |
 | ✅ Configuração preparada para ambientes | Implementado | `.env.example` + variáveis de ambiente |

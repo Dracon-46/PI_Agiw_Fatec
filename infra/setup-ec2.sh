@@ -147,42 +147,18 @@ log_success "Logrotate configurado para logs do Docker"
 # 9. Script de backup diário do banco
 # ==============================================================================
 BACKUP_SCRIPT="/usr/local/bin/backup-conciliacao.sh"
-sudo tee "$BACKUP_SCRIPT" > /dev/null << BACKUP_SH
-#!/bin/bash
-# Backup diário do MySQL - Conciliação Bancária
-# Executado pelo cron às 02:00
-set -e
-
-APP_DIR="$APP_DIR"
-BACKUP_DIR="/home/ec2-user/backups"
-DATE=\$(date +%Y-%m-%d_%H%M%S)
-BACKUP_FILE="\$BACKUP_DIR/conciliacao_\$DATE.sql.gz"
-
-mkdir -p "\$BACKUP_DIR"
-
-# Carrega variáveis do .env
-set -a; source "\$APP_DIR/.env"; set +a
-
-cd "\$APP_DIR"
-
-# Executa mysqldump dentro do container e comprime
-docker compose exec -T mysql \
-  mysqldump -u"\$MYSQL_USER" -p"\$MYSQL_PASSWORD" "\$MYSQL_DATABASE" \
-  | gzip > "\$BACKUP_FILE"
-
-echo "[\$(date)] Backup criado: \$BACKUP_FILE"
-
-# Manter apenas os últimos 7 backups
-find "\$BACKUP_DIR" -name "conciliacao_*.sql.gz" -mtime +7 -delete
-echo "[\$(date)] Backups antigos removidos"
-BACKUP_SH
-
-sudo chmod +x "$BACKUP_SCRIPT"
-
-# Adicionar ao cron (02:00 todo dia)
-(crontab -l 2>/dev/null || true; echo "0 2 * * * $BACKUP_SCRIPT >> /var/log/backup-conciliacao.log 2>&1") \
-  | sort -u | crontab -
-log_success "Backup diário agendado (cron 02:00)"
+BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-conciliacao-334393066436-backup-i011e7c2ecaed16641}"
+sudo install -o root -g root -m 0750 "$APP_DIR/infra/backup-conciliacao.sh" "$BACKUP_SCRIPT"
+sudo tee /etc/cron.d/conciliacao-backup > /dev/null <<BACKUP_CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+APP_DIR=$APP_DIR
+BACKUP_S3_BUCKET=$BACKUP_S3_BUCKET
+AWS_REGION=us-east-1
+@daily root /usr/local/bin/backup-conciliacao.sh >> /var/log/backup-conciliacao.log 2>&1
+BACKUP_CRON
+sudo chmod 0644 /etc/cron.d/conciliacao-backup
+log_success "Backup diario para S3 agendado"
 
 # ==============================================================================
 # 10. CloudWatch Agent (logs + métricas)

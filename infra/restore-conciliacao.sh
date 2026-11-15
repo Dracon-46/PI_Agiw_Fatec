@@ -11,9 +11,15 @@ set -euo pipefail
 
 BACKUP_FILE="${1:-}"
 APP_DIR="${APP_DIR:-/home/ec2-user/conciliacao-agiw}"
+if [[ "$BACKUP_FILE" == s3://* ]]; then
+  RESTORE_TMP="$(mktemp /tmp/conciliacao-restore.XXXXXX.sql.gz)"
+  trap 'rm -f "$RESTORE_TMP"' EXIT
+  aws s3 cp "$BACKUP_FILE" "$RESTORE_TMP" --region "${AWS_REGION:-us-east-1}" --only-show-errors
+  BACKUP_FILE="$RESTORE_TMP"
+fi
 
 if [[ -z "$BACKUP_FILE" || ! -f "$BACKUP_FILE" ]]; then
-  echo "Uso: bash infra/restore-conciliacao.sh <arquivo.sql.gz>"
+  echo "Uso: bash infra/restore-conciliacao.sh <arquivo.sql.gz|s3://bucket/mysql/arquivo.sql.gz>"
   echo ""
   echo "Backups disponíveis:"
   ls -lh /home/ec2-user/backups/conciliacao_*.sql.gz 2>/dev/null || echo "  (nenhum backup encontrado em ~/backups)"
