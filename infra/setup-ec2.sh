@@ -6,12 +6,13 @@
 # USO (após conectar via SSH na EC2):
 #   git clone <URL-DO-REPO> conciliacao-agiw
 #   cd conciliacao-agiw
-#   bash infra/setup-ec2.sh
+#   BACKUP_S3_BUCKET=<BUCKET-DESTA-CONTA> AWS_REGION=us-east-1 bash infra/setup-ec2.sh
 #
 # O script é idempotente: pode ser re-executado sem problemas.
 # =============================================================================
 
 set -euo pipefail
+: "${BACKUP_S3_BUCKET:?Defina BACKUP_S3_BUCKET com o bucket S3 desta conta antes de executar o setup}"
 
 # Cores para output
 RED='\033[0;31m'
@@ -147,7 +148,6 @@ log_success "Logrotate configurado para logs do Docker"
 # 9. Script de backup diário do banco
 # ==============================================================================
 BACKUP_SCRIPT="/usr/local/bin/backup-conciliacao.sh"
-BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-conciliacao-334393066436-backup-i011e7c2ecaed16641}"
 sudo install -o root -g root -m 0750 "$APP_DIR/infra/backup-conciliacao.sh" "$BACKUP_SCRIPT"
 sudo tee /etc/cron.d/conciliacao-backup > /dev/null <<BACKUP_CRON
 SHELL=/bin/bash
@@ -214,5 +214,5 @@ echo "  5. Acesse via browser (HTTPS com aviso de certificado autoassinado):"
 echo "     https://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo '<IP-PUBLICO>')"
 echo ""
 echo "  6. Restore de backup:"
-echo "     bash infra/restore-conciliacao.sh ~/backups/<arquivo>.sql.gz"
+echo "     bash infra/restore-conciliacao.sh s3://<BUCKET-DA-CONTA>/mysql/<arquivo>.sql.gz"
 echo ""

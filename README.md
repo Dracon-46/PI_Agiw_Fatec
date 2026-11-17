@@ -180,7 +180,7 @@ Ambientes:
 | --- | --- |
 | `.env.example` | Desenvolvimento local (XAMPP / MySQL na máquina) |
 | `.env.lab.example` | AWS Academy (`MYSQL_HOST=mysql` no Docker Compose) |
-| `.env.prod.example` | Produção (RDS). Senhas reais ficam no Secrets Manager, não no Git |
+| `.env.prod.example` | Modelo de variáveis para produção com RDS; não integra Secrets Manager automaticamente |
 
 `Dockerfile` e `docker-compose.yml` prontos na raiz. A infraestrutura completa
 (EC2 + Security Group + Elastic IP) pode ser provisionada via CloudFormation:
@@ -192,12 +192,13 @@ aws cloudformation create-stack \
   --template-body file://infra/cloudformation.yml \
   --parameters \
       ParameterKey=KeyPairName,ParameterValue=<SEU-PAR-DE-CHAVES> \
-      ParameterKey=GitRepoUrl,ParameterValue=<URL-DO-REPO>
+      ParameterKey=GitRepoUrl,ParameterValue=https://github.com/Dracon-46/PI_Agiw_Fatec.git \
+      ParameterKey=AllowedSSHCidr,ParameterValue=<SEU-IP-PUBLICO>/32
 
 # 2. Conectar na EC2 e fazer setup
 ssh -i <chave>.pem ec2-user@<ELASTIC-IP>
 cd conciliacao-agiw
-bash infra/setup-ec2.sh
+BACKUP_S3_BUCKET=<SEU-BUCKET-S3> AWS_REGION=us-east-1 bash infra/setup-ec2.sh
 
 # 3. Configurar credenciais
 nano .env
@@ -210,7 +211,7 @@ docker compose logs -f app
 
 ### Deploy automático (CD)
 
-Após configurar os **GitHub Secrets** abaixo, todo merge na `main` faz deploy automático:
+Após configurar os **GitHub Secrets/variables** abaixo, push para `main` ou `projeto-nuvem-glauco`, ou execução manual do workflow, faz deploy automático para **um único host**. Para cinco contas, veja o tutorial de replicação: o CD atual não distribui para cinco EC2.
 
 | Secret | Valor |
 |---|---|
@@ -240,18 +241,19 @@ Para reproduzir uma instalação independente em cada uma das cinco contas AWS, 
 | Pipeline | Disparo | O que faz |
 |---|---|---|
 | **CI** (`.github/workflows/ci.yml`) | Push em qualquer branch / PR para main | Lint → Build → Validação Docker → Verificação de credenciais |
-| **CD** (`.github/workflows/cd.yml`) | Merge na `main` | Repete CI → SSH na EC2 → git pull → docker compose up → Health check |
+| **CD** (`.github/workflows/cd.yml`) | Push em `main`/`projeto-nuvem-glauco` ou execução manual | Repete build/lint → SSH para um host configurado → atualiza Compose/schema → health check interno; check externo informativo |
 
 ---
 
 ## Segurança
 
-- `.env`, certificados (`*.key`, `*.crt`, `*.pfx`) e arquivos de credenciais em
-  `docs/` estão fora do Git e fora da imagem Docker
+- `.env` e certificados (`*.key`, `*.crt`, `*.pfx`) são ignorados pelo Git e
+  excluídos do contexto Docker; não coloque credenciais em documentação
 - Credenciais das APIs bancárias só existem no servidor — nunca chegam ao
   navegador
 - Certificados mTLS entram por volume somente leitura, nunca dentro da imagem
 - O contêiner roda com usuário sem privilégios (`nextjs`, UID 1001)
 - Porta MySQL (`3306`) vinculada a `127.0.0.1` — nunca exposta para a internet
-- O CI verifica automaticamente a ausência de credenciais hardcoded no código
+- O CI bloqueia `.env` versionado e alguns padrões de credenciais em `src/`;
+  essa verificação heurística não substitui auditoria do histórico Git
 - Health check em `/api/health` para monitoramento e deploys automatizados

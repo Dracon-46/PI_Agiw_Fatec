@@ -2,7 +2,8 @@
 # cd.yml — Continuous Deployment
 # Projeto Banco · Ticket 37060 · Agiw Sistemas
 #
-# Executa apenas quando há merge na branch main.
+# Executa em push para main/projeto-nuvem-glauco ou manualmente (workflow_dispatch).
+# Usa um único destino configurado nos Actions secrets/variables.
 # Pipeline: build → testes → deploy via SSH na EC2 AWS
 #
 # Secrets necessários no GitHub (Settings → Secrets and variables → Actions):

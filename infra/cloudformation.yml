@@ -42,11 +42,9 @@ Parameters:
 
   AllowedSSHCidr:
     Type: String
-    Default: '0.0.0.0/0'
     Description: |
-      CIDR autorizado para SSH (porta 22).
-      IMPORTANTE: Em produção, restrinja ao seu IP (ex. 203.0.113.10/32).
-      Para o lab, 0.0.0.0/0 é usado por conveniência apenas.
+      CIDR obrigatório autorizado para SSH (porta 22). Restrinja ao IP
+      administrativo atual (ex. 203.0.113.10/32); não use 0.0.0.0/0.
 
 # ==============================================================================
 # Recursos

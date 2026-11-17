@@ -50,6 +50,8 @@ EC2 t3.small (Amazon Linux 2023)
 | **Security Group** | Firewall da instância | Portas 80/443 públicas; 3000 e MySQL 3306 não expostos. SSH 22 está aberto publicamente no laboratório e deve ser limitado ao IP administrativo em produção. |
 | **CloudWatch Logs** | Logs da aplicação | Coleta logs do Docker via agent. |
 | **CloudWatch Metrics** | Monitoramento | CPU, memória, disco da EC2 + métricas customizadas. |
+| **Amazon S3** | Backups MySQL | Cópia fora da EC2, bucket privado, SSE-S3, exigência de TLS e expiração em 30 dias. Cada conta mantém bucket próprio. |
+| **IAM Instance Profile** | Permissões AWS da EC2 | `LabInstanceProfile`/`LabRole` no ambiente de referência; em contas comuns, role mínima para S3 e CloudWatch Agent. |
 
 ### Arquitetura ideal em produção
 
@@ -126,7 +128,7 @@ EC2 (HTTP interno 80 apenas)
 
 ### Verificação automatizada
 
-O workflow de CI (`ci.yml`) inclui uma etapa que **bloqueia o merge** se detectar padrões de credenciais hardcoded no código-fonte:
+O workflow de CI (`ci.yml`) falha se encontrar `.env` versionado ou alguns padrões de credenciais hardcoded em `src/`. É uma proteção heurística, não um scanner completo nem uma auditoria do histórico Git; proteção de merge também depende de regras de branch no GitHub.
 
 ```yaml
 - name: Verificar ausência de credenciais no repositório
@@ -137,7 +139,9 @@ O workflow de CI (`ci.yml`) inclui uma etapa que **bloqueia o merge** se detecta
     fi
 ```
 
-### Em produção real: AWS Secrets Manager
+### Evolução proposta: AWS Secrets Manager (não integrado ao código atual)
+
+O exemplo abaixo é uma configuração-alvo. Hoje a aplicação lê credenciais de variáveis de ambiente; não consulta Secrets Manager pelo SDK. `.env.prod.example` é apenas um modelo de nomes/valores vazios. Antes de afirmar que os secrets são carregados do Secrets Manager, é necessário implementar e validar essa integração ou configurar um mecanismo externo seguro para injetar as variáveis no processo.
 
 ```bash
 # Criar secret no Secrets Manager
@@ -153,7 +157,7 @@ aws secretsmanager create-secret \
 # import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager"
 ```
 
-Em produção, nenhuma credencial estaria no `.env` da EC2. Todas viriam do Secrets Manager via SDK, e a Role da EC2 teria permissão apenas de leitura nos secrets específicos.
+No desenho futuro, a aplicação não receberia credenciais persistidas em `.env`: seria necessário implementar a leitura via SDK do Secrets Manager ou usar um mecanismo de injeção seguro no runtime. A role teria apenas leitura nos secrets específicos. Isso ainda não está implementado neste projeto.
 
 ---
 
@@ -187,15 +191,15 @@ Role: role-conciliacao-app
     └── cloudwatch:PutMetricData       → namespace ConciliacaoBancaria
 ```
 
-**Permissões que a aplicação realmente precisa:**
+**Permissões necessárias à instância e aos agentes (alvo de produção):**
 
 | Permissão | Serviço | Motivo |
 |---|---|---|
 | `secretsmanager:GetSecretValue` | Secrets Manager | Ler credenciais bancárias e do banco |
-| `logs:*` (nas streams da app) | CloudWatch Logs | Enviar logs da aplicação |
-| `cloudwatch:PutMetricData` | CloudWatch | Métricas customizadas |
-| `s3:PutObject` (no bucket de backup) | S3 | Upload de backups SQL |
-| `s3:GetObject` (nos certs mTLS) | S3 | Baixar certificados mTLS na inicialização |
+| Permissões de escrita em streams específicas | CloudWatch Logs | CloudWatch Agent envia logs de Docker, Nginx e backup |
+| `cloudwatch:PutMetricData` | CloudWatch | CloudWatch Agent publica CPU/memória/disco customizados |
+| `s3:PutObject` (prefixo `mysql/`) | S3 | Upload dos backups SQL |
+| `s3:GetObject` (prefixo `mysql/`) | S3 | Restore de backup; certificados mTLS são enviados por SCP no fluxo atual |
 
 **O que a aplicação NÃO precisa:**
 
@@ -236,10 +240,12 @@ Verifica ausência de credenciais no código
 
 **Arquivo:** [`.github/workflows/cd.yml`](../.github/workflows/cd.yml)
 
+**Disparadores atuais:** push para `main` ou `projeto-nuvem-glauco`, ou execução manual (`workflow_dispatch`). Cada execução usa um único host/chave, portanto faz deploy em um destino só. Para as outras contas, use o deploy manual do [tutorial de replicação](TUTORIAL-REPLICAR-AWS.md), ou adapte o workflow com GitHub Environments e secrets separados.
+
 **Fluxo:**
 
 ```
-Merge na branch main
+Push em `main`/`projeto-nuvem-glauco` ou execução manual
     ↓
 GitHub Actions
     ↓
@@ -247,27 +253,29 @@ Repete CI (lint + build)
     ↓
 SSH na EC2 (via secret EC2_SSH_KEY)
     ↓
-git pull origin main
+git fetch e reset para a branch disparada
     ↓
 docker compose up -d --build --remove-orphans
     ↓
-Health check: GET http://localhost:3000
+Health check interno: GET http://localhost:3000/api/health
     ↓
-Health check externo: GET http://<EC2_HOST>
+Health check externo: GET http://<EC2_HOST> (aceita 200/301/302)
     ↓
 docker image prune (limpeza de imagens antigas)
 ```
 
+O health check externo é informativo: mesmo após esgotar tentativas, o passo termina com sucesso. O health check interno em `localhost:3000/api/health` é o que falha o deploy.
+
 ### Secrets necessários no GitHub
 
-Configurar em **Settings → Secrets and variables → Actions → New repository secret**:
+Configurar em **Settings → Secrets and variables → Actions**. `EC2_SSH_KEY` deve ser secret; host, usuário e diretório podem ser secrets ou variables:
 
 | Secret | Valor |
 |---|---|
-| `EC2_HOST` | IP público ou DNS da instância EC2 |
-| `EC2_USER` | `ec2-user` |
+| `EC2_HOST` | IP público ou DNS da única instância alvo (secret ou variable) |
+| `EC2_USER` | `ec2-user` (secret ou variable) |
 | `EC2_SSH_KEY` | Conteúdo completo do arquivo `.pem` |
-| `EC2_APP_DIR` | `/home/ec2-user/conciliacao-agiw` |
+| `EC2_APP_DIR` | `/home/ec2-user/conciliacao-agiw` (secret ou variable) |
 
 ### Limitação do AWS Academy para CD
 
@@ -293,7 +301,7 @@ Amazon ECS (Elastic Container Service)
 
 ## 6. Logs e CloudWatch
 
-**Estado ativo na EC2 i-011e7c2ecaed16641 (us-east-1):** perfil LabInstanceProfile com role LabRole associado; agente CloudWatch instalado e ativo; grupos /aws/conciliacao-agiw/app e /aws/conciliacao-agiw/nginx-access confirmados; métricas de memória e disco publicadas; alarmes conciliacao-agiw-cpu-high e conciliacao-agiw-instance-status-failed criados e em estado OK. Os alarmes não têm ação SNS/e-mail configurada.
+**Estado verificado na EC2 de referência i-011e7c2ecaed16641 (us-east-1):** perfil LabInstanceProfile com role LabRole associado; agente CloudWatch ativo; grupos `/aws/conciliacao-agiw/app`, `nginx-access`, `nginx-error` e `backup` configurados; métricas de memória/disco publicadas; alarmes de CPU/status em OK. Os alarmes não têm ação SNS/e-mail. Cada integrante deve validar seus próprios grupos, métricas e alarmes após provisionar.
 
 
 ### Logs da aplicação
@@ -421,7 +429,7 @@ O endpoint `/api/health` retorna:
 
 ```bash
 # Health check da app
-curl http://<EC2-IP>/api/health | jq .
+curl -k https://<EC2-IP>/api/health | jq .
 
 # Logs em tempo real
 docker compose logs -f app
@@ -455,7 +463,7 @@ Em produção, criar um **CloudWatch Dashboard** com:
 
 O cron `/etc/cron.d/conciliacao-backup` executa diariamente `infra/backup-conciliacao.sh`. O script gera um dump consistente do MySQL, valida o gzip e envia o arquivo para o S3 antes de remover arquivos locais antigos.
 
-- Bucket: `conciliacao-334393066436-backup-i011e7c2ecaed16641` (us-east-1), privado e com bloqueio de acesso público.
+- Bucket da conta de referência: `conciliacao-334393066436-backup-i011e7c2ecaed16641` (us-east-1), privado e com bloqueio de acesso público. As outras contas precisam de um bucket próprio; ver [tutorial](TUTORIAL-REPLICAR-AWS.md).
 - Criptografia no S3: SSE-S3 (AES256); política do bucket exige HTTPS.
 - Retenção: 30 dias no S3 e 14 dias no volume local da EC2.
 - Chave S3: `mysql/conciliacao_AAAA-MM-DD_HHMMSS.sql.gz` (timestamp UTC).
@@ -466,17 +474,17 @@ O cron `/etc/cron.d/conciliacao-backup` executa diariamente `infra/backup-concil
 Use o mesmo script da rotina automática para validar e enviar o dump ao S3:
 
 ```bash
-sudo /usr/local/bin/backup-conciliacao.sh
-aws s3 ls s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/ --region us-east-1
+sudo env BACKUP_S3_BUCKET=<BUCKET-DA-CONTA> AWS_REGION=us-east-1 /usr/local/bin/backup-conciliacao.sh
+aws s3 ls s3://<BUCKET-DA-CONTA>/mysql/ --region us-east-1
 ```
 
 ### Restore
 
-O script [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh) aceita um arquivo local ou um URI S3. Para restaurar um objeto S3 no banco configurado da aplicação:
+O script [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh) aceita um arquivo local ou um URI S3. Ele para a aplicação, importa o dump no banco configurado e a inicia novamente; isso substitui os dados atuais. Para ensaiar, importe primeiro em schema temporário conforme [tutorial de replicação](TUTORIAL-REPLICAR-AWS.md), sem executar o script de restore contra o banco real.
 
 ```bash
 cd /home/ec2-user/conciliacao-agiw
-sudo bash infra/restore-conciliacao.sh s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/<arquivo>.sql.gz
+sudo bash infra/restore-conciliacao.sh s3://<BUCKET-DA-CONTA>/mysql/<arquivo>.sql.gz
 ```
 
 O script baixa o objeto usando o Instance Profile, para a aplicação, importa o dump e sobe a aplicação novamente. Em 15/11/2026, validamos o objeto do S3 importando-o em um schema temporário: 8 tabelas foram restauradas e o banco principal não foi alterado.
@@ -562,22 +570,22 @@ Upload extrato → SQS → Lambda/Worker → MySQL → Notificação
 
 ### Rollback no AWS Academy (via Git + Docker)
 
-#### Rollback automático (falha no deploy)
+#### Comportamento do workflow quando o deploy falha
 
-O workflow de CD detecta falha e **não avança** — a versão anterior continua rodando:
+Falha de build/lint impede o deploy. Depois que o deploy SSH começa, não há rollback automático: o Compose pode já ter substituído os containers e o schema pode ter sido alterado. O health check local falha o job, mas não restaura os containers anteriores; o health check externo é informativo.
 
 ```
-Merge na main
+Push em uma branch configurada / execução manual
     ↓
 GitHub Actions: build + lint
-    ↓ FALHA → deploy não acontece, versão anterior permanece ativa
+    ↓ FALHA → deploy não começa; versão atual permanece
     ↓ SUCESSO
 Deploy via SSH
     ↓
-Health check falha após 3 tentativas
+Health check interno falha
     ↓
 Job marcado como falho no GitHub Actions
-    ↓ versão anterior ainda está rodando na EC2
+    ↓ exige inspeção e, se necessário, rollback manual
 ```
 
 #### Rollback manual (versão anterior funcionando mas com bug)
@@ -594,11 +602,9 @@ git checkout <COMMIT_HASH_ANTERIOR>
 docker compose up -d --build
 
 # Verificar
-curl http://localhost:3000/api/health
+curl -f http://localhost:3000/api/health
 
-# Se funcionou, fixar no git (opcional — criar branch de hotfix é melhor)
-# Se não funcionou, voltar para main
-git checkout main
+# Não faça commits diretamente no checkout de produção.
 ```
 
 #### Rollback para backup do banco
@@ -609,9 +615,8 @@ Se o rollback de código precisar ser acompanhado de rollback de dados:
 # 1. Parar app
 docker compose stop app
 
-# 2. Restaurar banco do backup do dia anterior
-gunzip -c ~/backups/conciliacao_<DATA>.sql.gz \
-  | docker compose exec -T mysql mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
+# 2. Restaura o backup escolhido. Esta operação SUBSTITUI os dados atuais.
+sudo bash infra/restore-conciliacao.sh s3://<BUCKET-DA-CONTA>/mysql/<ARQUIVO.sql.gz>
 
 # 3. Fazer rollback do código
 git checkout <COMMIT_ANTERIOR>
@@ -663,6 +668,8 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | CloudWatch Logs | 5 GB ingestão/mês | ~$2,50 |
 | Amazon S3 Standard (backup) | 30 backups diários retidos por 30 dias; tamanho observado ~2,9 KB por arquivo | <$0,01 |
 | **TOTAL** | | **~$20/mês** |
+
+Para cinco implantações independentes com a mesma configuração mínima, a referência simples é aproximadamente 5 × US$ 20 = **US$ 100/mês** em uma conta AWS paga. É uma extrapolação do cenário acima, não cotação; créditos do Academy, uso real, transferência, logs e preços regionais alteram o valor. Cada integrante deve acompanhar a própria conta.
 
 **Estimativa do backup S3:** os arquivos compactados atuais têm aproximadamente 2,9 KB. Com um backup diário e retenção de 30 dias, são cerca de 87 KB armazenados; armazenamento e 30 gravações mensais ficam abaixo de US$ 0,01/mês. Para dimensionamento, se o banco crescer para 100 MB por backup diário, 30 cópias representam aproximadamente 3 GB-mês, cerca de US$ 0,07/mês de armazenamento S3 Standard, mais menos de US$ 0,001 em gravações e uma restauração pontual. A estimativa usa US$ 0,023/GB-mês e US$ 0,005 por 1.000 gravações; transferência de saída, impostos, crescimento e solicitações adicionais podem alterar a fatura. A AWS cobra armazenamento, solicitações e transferência conforme o uso; consulte a [página oficial de preços do S3](https://aws.amazon.com/s3/pricing/) antes de provisionar.
 
@@ -735,6 +742,17 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
                Usuário / Equipe
 ```
 
+Fluxos AWS adicionais da implantação atual:
+
+```mermaid
+flowchart LR
+  DB[MySQL no container da EC2] -->|dump diário, HTTPS/TLS| S3[S3 privado, SSE-S3, expiração em 30 dias]
+  APP[Docker e Nginx na EC2] -->|CloudWatch Agent| LOGS[CloudWatch Logs, retenção 30 dias]
+  EC2[EC2] -->|métricas| CW[CloudWatch Metrics e alarmes de CPU/status]
+```
+
+Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a regra SSH atual está pública e é um débito de segurança do laboratório. O template para novas instâncias agora exige `AllowedSSHCidr` e o tutorial orienta limitar a origem SSH ao IP administrativo (`/32`). As portas 3000 e 3306 não são entradas públicas.
+
 ### Produção (conta real)
 
 ```
@@ -777,14 +795,14 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | Item | Status | Onde |
 |---|---|---|
 | ✅ Aplicação funcionando na AWS | Lab: após `setup-ec2.sh` + `.env` + `docker compose up` | EC2 via `docker compose up -d --build` |
-| HTTPS habilitado | Ativo na EC2, certificado autoassinado; HTTPS respondeu 200 no teste externo | infra/nginx.conf; porta 443 |
+| HTTPS habilitado | Ativo na EC2 com certificado autoassinado; valide `https://<ELASTIC-IP>/api/health` (aviso do navegador esperado) | `infra/nginx.conf`; porta 443 |
 | ✅ Código no GitHub | Implementado | `.gitignore` correto; `.env` e certs excluídos |
-| ✅ Nenhuma credencial no repositório | Implementado | CI verifica automaticamente |
+| Nenhuma credencial no repositório | `.env` e certificados ignorados; CI faz verificações heurísticas, não auditoria completa do histórico Git | `.gitignore`, `.dockerignore`, CI |
 | ✅ CI funcionando | Implementado | `.github/workflows/ci.yml` |
-| ✅ CD implementado | Implementado | `.github/workflows/cd.yml` + secrets do GitHub |
-| Logs disponiveis | Docker logs da app e logs locais do Nginx | docker compose logs; /var/log/nginx |
-| CloudWatch utilizado | Ativo: agente rodando via LabInstanceProfile/LabRole; logs app + Nginx no CloudWatch; métricas de memória/disco e alarmes CPU/status em OK | Região us-east-1; infra/cloudwatch-agent.json; EC2 i-011e7c2ecaed16641 |
-| Backup definido | Ativo: dump diário local enviado ao Amazon S3; SSE-S3, acesso público bloqueado, transporte HTTPS obrigatório; 30 dias no S3 e 14 dias local | bucket `conciliacao-334393066436-backup-i011e7c2ecaed16641`, prefixo `mysql/` |
+| CD implementado/documentado | Workflow aponta para um host único; deploy nas outras contas é manual conforme tutorial | `.github/workflows/cd.yml`; [tutorial](TUTORIAL-REPLICAR-AWS.md) |
+| Logs disponíveis | Docker, Nginx e CloudWatch; grupos configurados com retenção de 30 dias | `docker compose logs`; `/var/log/nginx`; seção 6 |
+| CloudWatch utilizado | Verificado em 15/11/2026: agente via LabInstanceProfile/LabRole; logs app, Nginx e backup; métricas de memória/disco e alarmes CPU/status em OK | Região us-east-1; infra/cloudwatch-agent.json; EC2 i-011e7c2ecaed16641 |
+| Backup definido | Ativo na conta de referência: dump diário enviado ao S3, SSE-S3, acesso público bloqueado, TLS obrigatório; 30 dias no S3 e 14 dias local. Cada integrante cria bucket próprio | bucket de referência; [tutorial cinco contas](TUTORIAL-REPLICAR-AWS.md) |
 | Restore definido | Restore do objeto S3 testado em schema temporário (8 tabelas); banco principal preservado; script também aceita URI S3 | `infra/restore-conciliacao.sh` |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
 | ✅ Serviços AWS justificados | Documentado | Seção 1 deste documento |
@@ -818,7 +836,7 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 ## Respondendo às perguntas do PI
 
 > **Nossa aplicação está funcionando na AWS?**
-> Sim. EC2 t3.small com Docker Compose — app + MySQL. Acesse `http://<ELASTIC_IP>`.
+> Sim na conta de referência. EC2 t3.small com Docker Compose — app + MySQL. Acesse `https://<ELASTIC_IP>`; o certificado do laboratório é autoassinado.
 
 > **Como identificamos erros?**
 > `docker compose logs -f app`, CloudWatch Logs (`/aws/conciliacao-agiw/`), e o endpoint `/api/health`.
@@ -827,10 +845,10 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 > CloudWatch Metrics (CPU, memória, disco da EC2), health check automático no CD, e logs estruturados.
 
 > **Como recuperamos dados?**
-> Backup diário automático em `~/backups/`. Restore com `mysqldump` + restore via `docker exec`. Detalhes na Seção 8.
+> Backup diário enviado ao S3, com cópia local em `/home/ec2-user/backups/`. Restore pelo script `infra/restore-conciliacao.sh`, usando arquivo local ou URI S3. Detalhes na Seção 8.
 
 > **Como publicamos uma nova versão?**
-> Push para a branch `main` no GitHub dispara o CD automaticamente — build, lint, deploy via SSH, health check.
+> Push em `main`/`projeto-nuvem-glauco` ou execução manual dispara CD para o único host configurado. Para as outras contas, deploy manual conforme o tutorial; o workflow não distribui para cinco EC2.
 
 > **Como voltamos para uma versão anterior?**
 > `git checkout <commit>` + `docker compose up -d --build` na EC2. Detalhes na Seção 10.
@@ -842,4 +860,4 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 > ~$20/mês (config mínima) a ~$92/mês (alta disponibilidade). Detalhes na Seção 11.
 
 > **O que precisaria mudar para colocá-la realmente em produção?**
-> ALB + ACM (HTTPS), RDS Multi-AZ (banco gerenciado), Secrets Manager (credenciais), ECR + ECS (deploys), WAF (segurança), ASG (escalabilidade), Route 53 (domínio). A app em si não precisa de alterações — apenas a infraestrutura.
+> ALB + ACM (HTTPS confiável), RDS Multi-AZ (banco gerenciado), integração de carregamento de secrets pelo Secrets Manager ou injeção segura no runtime, ECR + ECS (deploys), WAF, ASG e Route 53. Parte é mudança de infraestrutura; o carregamento de secrets exige implementação ou configuração adicional, ainda não feita neste projeto.

@@ -22,7 +22,7 @@ configuração de servidor para o deploy na AWS.
 
 ### Backups no Amazon S3
 
-A instância atual envia os dumps para `s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/` usando o Instance Profile `LabInstanceProfile`. O bucket bloqueia acesso público, aplica SSE-S3 e exige transporte HTTPS. O lifecycle remove objetos após 30 dias. O restore aceita o URI S3 diretamente.
+Na conta de referência, os dumps são enviados a `s3://conciliacao-334393066436-backup-i011e7c2ecaed16641/mysql/` pelo Instance Profile `LabInstanceProfile`. Cada conta nova deve criar seu bucket privado, configurar SSE-S3, exigir HTTPS e expirar o prefixo `mysql/` após 30 dias. Antes do `setup-ec2.sh`, informe `BACKUP_S3_BUCKET=<bucket-da-conta>` e `AWS_REGION=us-east-1`; não use o bucket da conta de referência em outras contas. O restore aceita URI S3. Veja [`docs/TUTORIAL-REPLICAR-AWS.md`](../docs/TUTORIAL-REPLICAR-AWS.md).
 
 ## Fluxo de uso
 
@@ -35,7 +35,8 @@ aws cloudformation create-stack \
   --template-body file://infra/cloudformation.yml \
   --parameters \
       ParameterKey=KeyPairName,ParameterValue=<SEU-PAR-DE-CHAVES> \
-      ParameterKey=GitRepoUrl,ParameterValue=https://github.com/ORG/REPO.git
+      ParameterKey=GitRepoUrl,ParameterValue=https://github.com/Dracon-46/PI_Agiw_Fatec.git \
+      ParameterKey=AllowedSSHCidr,ParameterValue=<SEU-IP-PUBLICO>/32
 
 # Verificar progresso
 aws cloudformation describe-stacks \
@@ -55,7 +56,7 @@ aws cloudformation describe-stacks \
 ssh -i <chave>.pem ec2-user@<ELASTIC-IP>
 git clone <URL-DO-REPO> conciliacao-agiw
 cd conciliacao-agiw
-bash infra/setup-ec2.sh
+BACKUP_S3_BUCKET=<SEU-BUCKET-S3> AWS_REGION=us-east-1 bash infra/setup-ec2.sh
 ```
 
 ### 3. Configurar a aplicação
@@ -83,7 +84,7 @@ docker compose logs -f app
 - A porta MySQL (`3306`) está vinculada a `127.0.0.1` no `docker-compose.yml` — nunca exposta externamente
 - O Security Group não abre a porta 3306 para a internet
 - Os certificados mTLS nunca entram na imagem Docker — apenas via volume `:ro`
-- Para o CD automático, a chave SSH da EC2 fica como GitHub Secret (`EC2_SSH_KEY`), nunca no repositório
+- Para o CD do host de referência, a chave SSH da EC2 fica como GitHub Secret (`EC2_SSH_KEY`), nunca no repositório. O workflow atual atende um host por execução; as contas adicionais usam deploy manual conforme o tutorial.
 
 ---
 

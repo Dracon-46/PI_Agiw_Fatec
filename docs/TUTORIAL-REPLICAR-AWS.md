@@ -177,13 +177,36 @@ Se falhar, confira se o instance profile está associado e tem permissões de Cl
 Faça uma execução inicial e confira o objeto no bucket próprio:
 
 ```bash
-sudo /usr/local/bin/backup-conciliacao.sh
+sudo env BACKUP_S3_BUCKET='<SEU-BUCKET>' AWS_REGION=us-east-1 /usr/local/bin/backup-conciliacao.sh
 aws s3 ls s3://<SEU-BUCKET>/mysql/ --region us-east-1
 ```
 
 Confira arquivo `.sql.gz`, SSE-S3 e logs no CloudWatch. O cron fica em `/etc/cron.d/conciliacao-backup`; mantém 14 dias localmente e 30 dias no S3.
 
-Restore substitui dados da instalação. Não o use para teste no banco real; primeiro valide em banco/schema descartável. Para restaurar um backup escolhido:
+### Ensaiar restore sem alterar o banco da aplicação
+
+Este ensaio importa o dump em um schema temporário separado. Troque bucket e arquivo pelo backup da conta. O bloco remove apenas o schema temporário criado neste ensaio:
+
+```bash
+cd /home/ec2-user/conciliacao-agiw
+set -euo pipefail
+set -a; source .env; set +a
+TEST_DB="restore_verify_$(date -u +%Y%m%d%H%M%S)"
+sudo docker compose exec -T mysql mysql -uroot -p"$MYSQL_PASSWORD" \
+  -e "CREATE DATABASE \`$TEST_DB\`;"
+aws s3 cp s3://<SEU-BUCKET>/mysql/<ARQUIVO.sql.gz> - --region us-east-1 \
+  | gzip -dc \
+  | sudo docker compose exec -T mysql mysql -uroot -p"$MYSQL_PASSWORD" "$TEST_DB"
+sudo docker compose exec mysql mysql -uroot -p"$MYSQL_PASSWORD" "$TEST_DB" -e 'SHOW TABLES;'
+sudo docker compose exec -T mysql mysql -uroot -p"$MYSQL_PASSWORD" \
+  -e "DROP DATABASE \`$TEST_DB\`;"
+```
+
+Confirme que as tabelas esperadas aparecem e registre a evidência. Se algum comando falhar, não execute o `DROP DATABASE` até entender o estado do schema temporário. Este ensaio não altera o schema configurado pela aplicação.
+
+### Restore de dados da aplicação
+
+O script abaixo restaura sobre o banco configurado e **substitui os dados atuais**. Use-o somente quando a intenção for recuperar aquela instalação, após escolher o arquivo correto:
 
 ```bash
 cd /home/ec2-user/conciliacao-agiw
