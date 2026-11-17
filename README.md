@@ -182,57 +182,13 @@ Ambientes:
 | `.env.lab.example` | AWS Academy (`MYSQL_HOST=mysql` no Docker Compose) |
 | `.env.prod.example` | Modelo de variáveis para produção com RDS; não integra Secrets Manager automaticamente |
 
-`Dockerfile` e `docker-compose.yml` prontos na raiz. A infraestrutura completa
-(EC2 + Security Group + Elastic IP) pode ser provisionada via CloudFormation:
+`Dockerfile` e `docker-compose.yml` ficam na raiz do projeto. A arquitetura AWS,
+o checklist de entrega, os custos, a estratégia de rollback e as diferenças
+entre AWS Academy e produção estão em
+[`docs/AWS-PRODUCTION-READINESS.md`](docs/AWS-PRODUCTION-READINESS.md).
 
-```bash
-# 1. Provisionar infraestrutura AWS (uma vez)
-aws cloudformation create-stack \
-  --stack-name conciliacao-agiw \
-  --template-body file://infra/cloudformation.yml \
-  --parameters \
-      ParameterKey=KeyPairName,ParameterValue=<SEU-PAR-DE-CHAVES> \
-      ParameterKey=GitRepoUrl,ParameterValue=https://github.com/Dracon-46/PI_Agiw_Fatec.git \
-      ParameterKey=AllowedSSHCidr,ParameterValue=<SEU-IP-PUBLICO>/32
-
-# 2. Conectar na EC2 e fazer setup
-ssh -i <chave>.pem ec2-user@<ELASTIC-IP>
-cd conciliacao-agiw
-BACKUP_S3_BUCKET=<SEU-BUCKET-S3> AWS_REGION=us-east-1 bash infra/setup-ec2.sh
-
-# 3. Configurar credenciais
-nano .env
-
-# 4. Subir aplicação
-docker compose up -d --build
-docker compose exec app node scripts/init-db.mjs
-docker compose logs -f app
-```
-
-### Deploy automático (CD)
-
-Após configurar os **GitHub Secrets/variables** abaixo, push para `main` ou `projeto-nuvem-glauco`, ou execução manual do workflow, faz deploy automático para **um único host**. Para cinco contas, veja o tutorial de replicação: o CD atual não distribui para cinco EC2.
-
-| Secret | Valor |
-|---|---|
-| `EC2_HOST` | IP público da EC2 (Elastic IP) |
-| `EC2_USER` | `ec2-user` |
-| `EC2_SSH_KEY` | Conteúdo completo do arquivo `.pem` |
-| `EC2_APP_DIR` | `/home/ec2-user/conciliacao-agiw` |
-
-### Documentação completa de produção
-
-Consulte [`docs/AWS-PRODUCTION-READINESS.md`](docs/AWS-PRODUCTION-READINESS.md) para:
-
-- Diagrama de arquitetura (lab e produção)
-- Configuração HTTPS com Nginx e certificado auto-assinado
-- IAM: Academy vs. produção (Least Privilege)
-- Estratégia de backup e restore
-- Plano de rollback
-- Escalabilidade e estimativa de custos
-- Checklist completo de entrega do PI
-
-Para reproduzir uma instalação independente em cada uma das cinco contas AWS, siga o [tutorial de replicação](docs/TUTORIAL-REPLICAR-AWS.md). Ele explica os recursos individuais e o limite atual do CD, que aponta para uma única EC2.
+O roteiro de provisionamento e configuração AWS está centralizado em
+[`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md).
 
 ---
 
@@ -241,7 +197,7 @@ Para reproduzir uma instalação independente em cada uma das cinco contas AWS, 
 | Pipeline | Disparo | O que faz |
 |---|---|---|
 | **CI** (`.github/workflows/ci.yml`) | Push em qualquer branch / PR para main | Lint → Build → Validação Docker → Verificação de credenciais |
-| **CD** (`.github/workflows/cd.yml`) | Push em `main`/`projeto-nuvem-glauco` ou execução manual | Repete build/lint → SSH para um host configurado → atualiza Compose/schema → health check interno; check externo informativo |
+| **CD** (`.github/workflows/cd.yml`) | Push em `main`/`projeto-nuvem-glauco` ou execução manual | Publica no host configurado; detalhes e limites estão no guia AWS |
 
 ---
 

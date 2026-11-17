@@ -240,7 +240,7 @@ Verifica ausência de credenciais no código
 
 **Arquivo:** [`.github/workflows/cd.yml`](../.github/workflows/cd.yml)
 
-**Disparadores atuais:** push para `main` ou `projeto-nuvem-glauco`, ou execução manual (`workflow_dispatch`). Cada execução usa um único host/chave, portanto faz deploy em um destino só. Para as outras contas, use o deploy manual do [tutorial de replicação](TUTORIAL-REPLICAR-AWS.md), ou adapte o workflow com GitHub Environments e secrets separados.
+**Disparadores atuais:** push para `main` ou `projeto-nuvem-glauco`, ou execução manual (`workflow_dispatch`). Cada execução usa um único host/chave e faz deploy em um destino. Para configurar ou operar a implantação, consulte o [guia AWS](DEPLOY-AWS.md).
 
 **Fluxo:**
 
@@ -301,7 +301,7 @@ Amazon ECS (Elastic Container Service)
 
 ## 6. Logs e CloudWatch
 
-**Estado verificado na EC2 de referência i-011e7c2ecaed16641 (us-east-1):** perfil LabInstanceProfile com role LabRole associado; agente CloudWatch ativo; grupos `/aws/conciliacao-agiw/app`, `nginx-access`, `nginx-error` e `backup` configurados; métricas de memória/disco publicadas; alarmes de CPU/status em OK. Os alarmes não têm ação SNS/e-mail. Cada integrante deve validar seus próprios grupos, métricas e alarmes após provisionar.
+**Estado verificado na EC2 de referência i-011e7c2ecaed16641 (us-east-1):** perfil LabInstanceProfile com role LabRole associado; agente CloudWatch ativo; grupos `/aws/conciliacao-agiw/app`, `nginx-access`, `nginx-error` e `backup` configurados; métricas de memória/disco publicadas; alarmes de CPU/status em OK. Os alarmes não têm ação SNS/e-mail. Após provisionar outro ambiente, valide os grupos, métricas e alarmes dessa instância.
 
 
 ### Logs da aplicação
@@ -463,7 +463,7 @@ Em produção, criar um **CloudWatch Dashboard** com:
 
 O cron `/etc/cron.d/conciliacao-backup` executa diariamente `infra/backup-conciliacao.sh`. O script gera um dump consistente do MySQL, valida o gzip e envia o arquivo para o S3 antes de remover arquivos locais antigos.
 
-- Bucket da conta de referência: `conciliacao-334393066436-backup-i011e7c2ecaed16641` (us-east-1), privado e com bloqueio de acesso público. As outras contas precisam de um bucket próprio; ver [tutorial](TUTORIAL-REPLICAR-AWS.md).
+- Bucket da implantação de referência: `conciliacao-334393066436-backup-i011e7c2ecaed16641` (us-east-1), privado e com bloqueio de acesso público. O guia AWS explica como definir o bucket do ambiente.
 - Criptografia no S3: SSE-S3 (AES256); política do bucket exige HTTPS.
 - Retenção: 30 dias no S3 e 14 dias no volume local da EC2.
 - Chave S3: `mysql/conciliacao_AAAA-MM-DD_HHMMSS.sql.gz` (timestamp UTC).
@@ -480,7 +480,7 @@ aws s3 ls s3://<BUCKET-DA-CONTA>/mysql/ --region us-east-1
 
 ### Restore
 
-O script [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh) aceita um arquivo local ou um URI S3. Ele para a aplicação, importa o dump no banco configurado e a inicia novamente; isso substitui os dados atuais. Para ensaiar, importe primeiro em schema temporário conforme [tutorial de replicação](TUTORIAL-REPLICAR-AWS.md), sem executar o script de restore contra o banco real.
+O script [`infra/restore-conciliacao.sh`](../infra/restore-conciliacao.sh) aceita um arquivo local ou um URI S3. Ele para a aplicação, importa o dump no banco configurado e a inicia novamente; isso substitui os dados atuais. O [guia AWS](DEPLOY-AWS.md) documenta como ensaiar em schema temporário antes de restaurar o banco real.
 
 ```bash
 cd /home/ec2-user/conciliacao-agiw
@@ -669,8 +669,6 @@ O Learner Lab fornece créditos — não há cobrança real. As estimativas abai
 | Amazon S3 Standard (backup) | 30 backups diários retidos por 30 dias; tamanho observado ~2,9 KB por arquivo | <$0,01 |
 | **TOTAL** | | **~$20/mês** |
 
-Para cinco implantações independentes com a mesma configuração mínima, a referência simples é aproximadamente 5 × US$ 20 = **US$ 100/mês** em uma conta AWS paga. É uma extrapolação do cenário acima, não cotação; créditos do Academy, uso real, transferência, logs e preços regionais alteram o valor. Cada integrante deve acompanhar a própria conta.
-
 **Estimativa do backup S3:** os arquivos compactados atuais têm aproximadamente 2,9 KB. Com um backup diário e retenção de 30 dias, são cerca de 87 KB armazenados; armazenamento e 30 gravações mensais ficam abaixo de US$ 0,01/mês. Para dimensionamento, se o banco crescer para 100 MB por backup diário, 30 cópias representam aproximadamente 3 GB-mês, cerca de US$ 0,07/mês de armazenamento S3 Standard, mais menos de US$ 0,001 em gravações e uma restauração pontual. A estimativa usa US$ 0,023/GB-mês e US$ 0,005 por 1.000 gravações; transferência de saída, impostos, crescimento e solicitações adicionais podem alterar a fatura. A AWS cobra armazenamento, solicitações e transferência conforme o uso; consulte a [página oficial de preços do S3](https://aws.amazon.com/s3/pricing/) antes de provisionar.
 
 #### Configuração recomendada para produção (alta disponibilidade)
@@ -751,7 +749,7 @@ flowchart LR
   EC2[EC2] -->|métricas| CW[CloudWatch Metrics e alarmes de CPU/status]
 ```
 
-Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a regra SSH atual está pública e é um débito de segurança do laboratório. O template para novas instâncias agora exige `AllowedSSHCidr` e o tutorial orienta limitar a origem SSH ao IP administrativo (`/32`). As portas 3000 e 3306 não são entradas públicas.
+Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a regra SSH atual está pública e é um débito de segurança do laboratório. O template exige `AllowedSSHCidr`; o guia AWS orienta limitar a origem SSH ao IP administrativo (`/32`). As portas 3000 e 3306 não são entradas públicas.
 
 ### Produção (conta real)
 
@@ -799,10 +797,10 @@ Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a reg
 | ✅ Código no GitHub | Implementado | `.gitignore` correto; `.env` e certs excluídos |
 | Nenhuma credencial no repositório | `.env` e certificados ignorados; CI faz verificações heurísticas, não auditoria completa do histórico Git | `.gitignore`, `.dockerignore`, CI |
 | ✅ CI funcionando | Implementado | `.github/workflows/ci.yml` |
-| CD implementado/documentado | Workflow aponta para um host único; deploy nas outras contas é manual conforme tutorial | `.github/workflows/cd.yml`; [tutorial](TUTORIAL-REPLICAR-AWS.md) |
+| CD implementado/documentado | Workflow deploya no host configurado; o guia AWS documenta operação e atualização | `.github/workflows/cd.yml`; [guia AWS](DEPLOY-AWS.md) |
 | Logs disponíveis | Docker, Nginx e CloudWatch; grupos configurados com retenção de 30 dias | `docker compose logs`; `/var/log/nginx`; seção 6 |
 | CloudWatch utilizado | Verificado em 15/11/2026: agente via LabInstanceProfile/LabRole; logs app, Nginx e backup; métricas de memória/disco e alarmes CPU/status em OK | Região us-east-1; infra/cloudwatch-agent.json; EC2 i-011e7c2ecaed16641 |
-| Backup definido | Ativo na conta de referência: dump diário enviado ao S3, SSE-S3, acesso público bloqueado, TLS obrigatório; 30 dias no S3 e 14 dias local. Cada integrante cria bucket próprio | bucket de referência; [tutorial cinco contas](TUTORIAL-REPLICAR-AWS.md) |
+| Backup definido | Ativo na implantação de referência: dump diário enviado ao S3, SSE-S3, acesso público bloqueado, TLS obrigatório; 30 dias no S3 e 14 dias local | bucket da implantação de referência; [guia AWS](DEPLOY-AWS.md) |
 | Restore definido | Restore do objeto S3 testado em schema temporário (8 tabelas); banco principal preservado; script também aceita URI S3 | `infra/restore-conciliacao.sh` |
 | ✅ Diagrama AWS | Implementado | Seção 12 deste documento |
 | ✅ Serviços AWS justificados | Documentado | Seção 1 deste documento |
@@ -848,7 +846,7 @@ Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a reg
 > Backup diário enviado ao S3, com cópia local em `/home/ec2-user/backups/`. Restore pelo script `infra/restore-conciliacao.sh`, usando arquivo local ou URI S3. Detalhes na Seção 8.
 
 > **Como publicamos uma nova versão?**
-> Push em `main`/`projeto-nuvem-glauco` ou execução manual dispara CD para o único host configurado. Para as outras contas, deploy manual conforme o tutorial; o workflow não distribui para cinco EC2.
+> Push em `main`/`projeto-nuvem-glauco` ou execução manual dispara CD para o host configurado. O workflow não distribui para múltiplos hosts; operações e atualização estão no [guia AWS](DEPLOY-AWS.md).
 
 > **Como voltamos para uma versão anterior?**
 > `git checkout <commit>` + `docker compose up -d --build` na EC2. Detalhes na Seção 10.
