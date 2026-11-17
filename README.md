@@ -231,6 +231,8 @@ Consulte [`docs/AWS-PRODUCTION-READINESS.md`](docs/AWS-PRODUCTION-READINESS.md) 
 - Escalabilidade e estimativa de custos
 - Checklist completo de entrega do PI
 
+Para reproduzir uma instalação independente em cada uma das cinco contas AWS, siga o [tutorial de replicação](docs/TUTORIAL-REPLICAR-AWS.md). Ele explica os recursos individuais e o limite atual do CD, que aponta para uma única EC2.
+
 ---
 
 ## CI/CD
