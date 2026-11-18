@@ -1,17 +1,14 @@
-# Entrega: ao publicar uma release no GitHub (com a tag vX.Y.Z da versão
-# fechada no git flow), a imagem é construída e publicada no GitHub Container
-# Registry com a tag da versão e "latest".
-#
-# A release pode ser publicada pelo site (Releases > Draft a new release) ou
-# pela linha de comando (gh release create vX.Y.Z --target main).
+# Entrega: ao publicar uma tag de versão (vX.Y.Z), gerada no fechamento de uma
+# release ou hotfix do git flow, a imagem é construída e publicada no GitHub
+# Container Registry com a tag da versão e "latest".
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*.*.*']
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -43,3 +40,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    name: Criar release no GitHub
+    needs: imagem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Criar release com as notas geradas
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes --verify-tag

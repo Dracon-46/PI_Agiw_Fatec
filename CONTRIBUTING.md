@@ -37,25 +37,21 @@ git checkout -b release/X.Y.Z develop
 npm version X.Y.Z --no-git-tag-version   # atualiza package.json e package-lock.json
 # registre as mudanças no CHANGELOG.md e faça o commit
 git checkout main && git merge --no-ff release/X.Y.Z
+git tag -a vX.Y.Z -m "vX.Y.Z"
 git checkout develop && git merge --no-ff release/X.Y.Z
 git branch -d release/X.Y.Z
-git push origin main develop
-gh release create vX.Y.Z --target main --generate-notes   # dispara o workflow de release
+git push origin main develop --tags      # a tag dispara o workflow de release
 ```
-
-A release também pode ser publicada pelo site: **Releases > Draft a new release**,
-tag `vX.Y.Z` (criada na publicação), alvo `main` e **Generate release notes**.
 
 ### Correção urgente em produção
 
 ```bash
 git checkout -b hotfix/X.Y.Z main
 # ... correção e versão ...
-git checkout main && git merge --no-ff hotfix/X.Y.Z
+git checkout main && git merge --no-ff hotfix/X.Y.Z && git tag -a vX.Y.Z -m "vX.Y.Z"
 git checkout develop && git merge --no-ff hotfix/X.Y.Z
 git branch -d hotfix/X.Y.Z
-git push origin main develop
-gh release create vX.Y.Z --target main --generate-notes
+git push origin main develop --tags
 ```
 
 ## Antes de abrir um pull request
