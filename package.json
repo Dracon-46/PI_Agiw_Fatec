@@ -24,7 +24,7 @@
     "@prisma/adapter-mssql": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@prisma/config": "^7.10.1",
-    "dotenv": "^16.4.5",
+    "dotenv": "^18.0.10",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.383.0",
     "mssql": "^12.7.14",
