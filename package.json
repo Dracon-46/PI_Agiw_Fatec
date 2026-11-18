@@ -15,7 +15,10 @@
     "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs",
     "diag:bb": "node scripts/diag-bb.mjs",
-    "db:extrato": "node scripts/carrega-extrato.mjs"
+    "db:extrato": "node scripts/carrega-extrato.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/adapter-mssql": "^7.10.0",
@@ -30,8 +33,10 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.1.1",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.3",
-    "prisma": "^7.10.0"
+    "prisma": "^7.10.0",
+    "vitest": "^5.1.1"
   }
 }
