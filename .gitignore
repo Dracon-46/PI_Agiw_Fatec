@@ -1,10 +1,24 @@
-.env
+# Dependências e build
 node_modules/
 .next/
+out/
+coverage/
+
+# Variáveis de ambiente (copie de .env.example)
+.env
+.env*.local
+
+# Logs e arquivos de sistema
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+next-env.d.ts
 
 # ---------------------------------------------------------------------------
-# Certificados e chaves privadas — NUNCA versionar, em qualquer diretório
-# (as APIs bancárias exigem mTLS; o vazamento da chave compromete o acesso)
+# Certificados e chaves privadas: NUNCA versionar, em qualquer diretório.
+# As APIs bancárias exigem mTLS e o vazamento da chave compromete o acesso.
 # ---------------------------------------------------------------------------
 *.pem
 *.crt
@@ -13,16 +27,13 @@ node_modules/
 *.pfx
 *.p12
 *.jks
-!certs/.gitkeep
 
-# A pasta certs/ inteira fica fora do Git: além das chaves mTLS, ela recebe
-# manuais e kits enviados pelos bancos, que trazem credenciais de integração.
+# A pasta certs/ recebe as chaves mTLS e os kits enviados pelos bancos
 certs/**
 !certs/.gitkeep
 !certs/LEIA-ME.txt
 
-# ---------------------------------------------------------------------------
-# Credenciais soltas em documentação
-# ---------------------------------------------------------------------------
-docs/**/credenciais.txt
-docs/**/*Welcome*.zip
+# Manuais, kits e credenciais dos bancos são confidenciais e ficam fora do Git
+docs/**/credenciais*.txt
+docs/**/*Welcome*
+docs/**/Safra/

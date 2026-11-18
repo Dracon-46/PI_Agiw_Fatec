@@ -2,7 +2,8 @@
 // SafraProvider.js - Provider para o Banco Safra
 // Projeto Banco - Ticket 37060 | Agiw Sistemas
 //
-// Baseado no "Kit Welcome API COB V3.0" entregue pela Agiw (docs/Safra):
+// Baseado no "Kit Welcome API COB V3.0" do Banco Safra (material confidencial
+// do banco, mantido fora do repositório):
 //
 //   Token .............. POST {SAFRA_API_URL}/gateway/v1/oauth2/token
 //                        (grant_type=password + client_id + username + password)
