@@ -2,6 +2,18 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [2.2.1] - 2026-11-18
+
+### Corrigido
+- O workflow de release não para mais quando o GitHub recusa a tag de uma versão
+  antiga: a recusa vira aviso com o comando para criá-la. Releases, imagem,
+  sincronização da `develop` e limpeza de branches rodam sempre e só fazem o que
+  falta, então o workflow pode ser executado de novo a qualquer momento.
+
+### Alterado
+- `docker/setup-buildx-action` v4 e `docker/metadata-action` v6.
+- Dependabot deixa de propor trocas de versão principal de qualquer pacote npm.
+
 ## [2.2.0] - 2026-11-18
 
 ### Adicionado

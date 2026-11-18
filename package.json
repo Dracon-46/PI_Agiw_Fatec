@@ -1,6 +1,6 @@
 {
   "name": "conciliacao-bancaria-agiw",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Módulo Conciliação Bancária - Agiw Sistemas | Ticket 37060",
   "private": true,
   "scripts": {

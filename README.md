@@ -200,8 +200,7 @@ flowchart LR
   de volta para a `develop` e apaga as branches já integradas. Nenhuma tag é criada à
   mão.
 - **[Dependabot](.github/dependabot.yml)** — abre PRs de atualização para a `develop`;
-  trocas de versão principal do Next.js, React e ESLint ficam de fora, porque exigem
-  migração planejada.
+  trocas de versão principal ficam de fora, porque exigem migração planejada.
 
 ---
 
