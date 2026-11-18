@@ -2,6 +2,12 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [2.1.1] - 2026-11-18
+
+### Alterado
+- O workflow de release passa a disparar na publicação de uma release do GitHub,
+  que cria a tag da versão. Assim a versão pode ser publicada pelo próprio site.
+
 ## [2.1.0] - 2026-11-18
 
 ### Adicionado
