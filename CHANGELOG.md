@@ -2,6 +2,31 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [2.2.1] - 2026-11-18
+
+### Corrigido
+- O workflow de release não para mais quando o GitHub recusa a tag de uma versão
+  antiga: a recusa vira aviso com o comando para criá-la. Releases, imagem,
+  sincronização da `develop` e limpeza de branches rodam sempre e só fazem o que
+  falta, então o workflow pode ser executado de novo a qualquer momento.
+
+### Alterado
+- `docker/setup-buildx-action` v4 e `docker/metadata-action` v6.
+- Dependabot deixa de propor trocas de versão principal de qualquer pacote npm.
+
+## [2.2.0] - 2026-11-18
+
+### Adicionado
+- Entrega automatizada: a cada merge na `main`, a pipeline cria a tag da versão, a
+  release no GitHub e a imagem no GHCR, sincroniza a `develop` e apaga as branches
+  já integradas.
+
+### Alterado
+- Prisma 7.10.1 e driver `mssql` 12.7.14.
+- GitHub Actions atualizadas: checkout v7, setup-node v7, upload-artifact v7,
+  login-action v4 e build-push-action v7.
+- Dependabot deixa de propor trocas de versão principal do Next.js, React e ESLint.
+
 ## [2.1.2] - 2026-11-18
 
 ### Alterado

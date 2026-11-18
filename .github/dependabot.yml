@@ -1,8 +1,8 @@
 # Atualização automática de dependências, sempre em PR para a develop.
 #
-# Trocas de versão principal do framework (Next.js, React e ESLint) mudam a API
-# e exigem migração planejada do código; por isso não são abertas
-# automaticamente. Correções e versões menores continuam chegando agrupadas.
+# Trocas de versão principal de pacotes npm mudam a API e exigem migração
+# planejada do código; por isso não são abertas automaticamente. Correções e
+# versões menores continuam chegando agrupadas.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -15,15 +15,7 @@ updates:
       dependencias-menores:
         update-types: [minor, patch]
     ignore:
-      - dependency-name: next
-        update-types: [version-update:semver-major]
-      - dependency-name: react
-        update-types: [version-update:semver-major]
-      - dependency-name: react-dom
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint-config-next
+      - dependency-name: "*"
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
