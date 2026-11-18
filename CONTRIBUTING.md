@@ -33,26 +33,36 @@ git push -u origin feature/nome-curto
 ### Nova versão
 
 ```bash
-git checkout -b release/X.Y.Z develop
+git checkout develop && git pull
+git checkout -b release/X.Y.Z
 npm version X.Y.Z --no-git-tag-version   # atualiza package.json e package-lock.json
-# registre as mudanças no CHANGELOG.md e faça o commit
-git checkout main && git merge --no-ff release/X.Y.Z
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git checkout develop && git merge --no-ff release/X.Y.Z
-git branch -d release/X.Y.Z
-git push origin main develop --tags      # a tag dispara o workflow de release
+# registre as mudanças no CHANGELOG.md
+git commit -am "Prepara a versão X.Y.Z"
+git push -u origin release/X.Y.Z
 ```
+
+Abra um pull request de `release/X.Y.Z` para a `main` e faça o merge quando a CI
+passar. O merge é o único passo manual: o workflow de **Release** cria a tag `vX.Y.Z`,
+a release no GitHub e a imagem no GHCR, traz a `main` de volta para a `develop` e apaga
+a branch `release/X.Y.Z`.
 
 ### Correção urgente em produção
 
 ```bash
-git checkout -b hotfix/X.Y.Z main
-# ... correção e versão ...
-git checkout main && git merge --no-ff hotfix/X.Y.Z && git tag -a vX.Y.Z -m "vX.Y.Z"
-git checkout develop && git merge --no-ff hotfix/X.Y.Z
-git branch -d hotfix/X.Y.Z
-git push origin main develop --tags
+git checkout main && git pull
+git checkout -b hotfix/X.Y.Z
+# ... correção ...
+npm version X.Y.Z --no-git-tag-version
+git commit -am "Corrige ..."
+git push -u origin hotfix/X.Y.Z
 ```
+
+Abra o pull request de `hotfix/X.Y.Z` para a `main`; o restante é igual ao da versão.
+
+### Executar a entrega manualmente
+
+Em **Actions > Release > Run workflow**. A execução é idempotente: só cria as tags e
+releases que faltam e só apaga branches já integradas.
 
 ## Antes de abrir um pull request
 
