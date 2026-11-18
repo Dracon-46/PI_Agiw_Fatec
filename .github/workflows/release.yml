@@ -3,13 +3,14 @@
 #
 #   1. cria a tag da versão do package.json (e as de versões antigas que
 #      estiverem faltando);
-#   2. cria a release no GitHub com as notas geradas;
-#   3. publica a imagem Docker no GHCR com a versão e "latest";
+#   2. cria no GitHub a release de toda tag que ainda não tem uma;
+#   3. publica a imagem Docker da versão atual no GHCR, se ainda não existir;
 #   4. traz a main de volta para a develop;
 #   5. apaga as branches feature/release/hotfix já integradas e as do
 #      Dependabot sem pull request aberto.
 #
-# Também pode ser executado manualmente em Actions > Release > Run workflow.
+# Cada etapa só faz o que falta, então o workflow pode ser executado de novo a
+# qualquer momento em Actions > Release > Run workflow.
 name: Release
 
 on:
@@ -32,11 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       versao: ${{ steps.tags.outputs.versao }}
-      tags: ${{ steps.tags.outputs.tags }}
-      nova: ${{ steps.tags.outputs.nova }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
 
       - id: tags
@@ -44,20 +44,21 @@ jobs:
         run: .github/scripts/marca-versoes.sh
 
   github-release:
-    name: Release no GitHub
+    name: Releases no GitHub
     needs: versao
-    if: needs.versao.outputs.tags != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: Criar uma release para cada tag nova
+      - name: Criar a release de cada tag que ainda não tem uma
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAGS: ${{ needs.versao.outputs.tags }}
           ATUAL: v${{ needs.versao.outputs.versao }}
         run: |
-          for TAG in $TAGS; do
+          git fetch --tags --force
+          for TAG in $(git tag -l 'v*' --sort=v:refname); do
             if gh release view "$TAG" >/dev/null 2>&1; then continue; fi
             if [ "$TAG" = "$ATUAL" ]; then ULTIMA=true; else ULTIMA=false; fi
             gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag --latest="$ULTIMA"
@@ -66,12 +67,16 @@ jobs:
   imagem:
     name: Imagem no GHCR
     needs: versao
-    if: needs.versao.outputs.nova == 'true'
     runs-on: ubuntu-latest
+    env:
+      IMAGEM: ghcr.io/${{ github.repository }}
+      VERSAO: ${{ needs.versao.outputs.versao }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.versao.outputs.versao }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
         with:
@@ -79,15 +84,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: existe
+        name: Conferir se a imagem da versão já foi publicada
+        run: |
+          IMAGEM_MINUSCULA="${IMAGEM,,}"
+          if docker buildx imagetools inspect "$IMAGEM_MINUSCULA:$VERSAO" >/dev/null 2>&1; then
+            echo "publicada=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publicada=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - id: meta
-        uses: docker/metadata-action@v5
+        if: steps.existe.outputs.publicada == 'false'
+        uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGEM }}
           tags: |
-            type=raw,value=${{ needs.versao.outputs.versao }}
+            type=raw,value=${{ env.VERSAO }}
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v7
+      - if: steps.existe.outputs.publicada == 'false'
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -96,7 +113,6 @@ jobs:
 
   develop:
     name: Sincronizar a develop
-    needs: versao
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

@@ -12,6 +12,8 @@
 #   tags    tags criadas nesta execução, da mais antiga para a mais nova
 #   nova    "true" quando a tag da versão atual foi criada agora
 #
+# A execução é idempotente: rodar de novo só cria o que ainda falta.
+#
 # Uso local, sem enviar nada:  SIMULAR=1 .github/scripts/marca-versoes.sh
 # ============================================================================
 set -euo pipefail
@@ -51,9 +53,34 @@ for VERSAO in "${ORDEM[@]}"; do
    CRIADAS+=("$TAG")
 done
 
-if [ "${#CRIADAS[@]}" -gt 0 ] && [ "${SIMULAR:-0}" != "1" ]; then
-   git push origin "${CRIADAS[@]}"
+# Envia uma tag por vez: o GitHub recusa ao token das Actions tags que apontem
+# para commits com workflows diferentes dos atuais. Para versões antigas isso
+# vira aviso (a tag pode ser enviada por um integrante); para a versão atual é
+# erro, porque a entrega depende dela.
+ENVIADAS=()
+RECUSADAS=()
+if [ "${SIMULAR:-0}" != "1" ]; then
+   for TAG in "${CRIADAS[@]}"; do
+      if git push origin "refs/tags/$TAG" 2>&1; then
+         ENVIADAS+=("$TAG")
+      else
+         git tag -d "$TAG" >/dev/null
+         RECUSADAS+=("$TAG")
+      fi
+   done
+else
+   ENVIADAS=("${CRIADAS[@]}")
 fi
+
+for TAG in "${RECUSADAS[@]}"; do
+   COMMIT="$(git rev-parse --short "${ULTIMO_COMMIT[${TAG#v}]}")"
+   if [ "$TAG" = "v$VERSAO_ATUAL" ]; then
+      echo "::error::A tag $TAG da versão atual foi recusada."
+      exit 1
+   fi
+   echo "::warning::A tag $TAG foi recusada pelo GitHub. Crie-a com: git tag -a $TAG $COMMIT -m $TAG && git push origin $TAG"
+done
+CRIADAS=("${ENVIADAS[@]}")
 
 NOVA=false
 for TAG in "${CRIADAS[@]}"; do
