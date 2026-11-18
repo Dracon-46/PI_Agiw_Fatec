@@ -24,6 +24,7 @@ export default defineConfig({
             'src/lib/conciliacao/**',
             'src/lib/relatorios/**',
             'src/app/api/conciliacao/conciliar/**',
+            'src/app/api/health/**',
          ],
       },
    },
