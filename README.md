@@ -183,16 +183,16 @@ flowchart LR
     A[push ou pull request] --> B[Lint e testes<br/>com cobertura]
     B --> C[Build do Next.js]
     B --> D[Build da imagem Docker<br/>e teste de fumaça]
-    E[release vX.Y.Z<br/>publicada no GitHub] --> F[Publica a imagem<br/>no GHCR]
+    E[tag vX.Y.Z] --> F[Publica a imagem<br/>no GHCR]
+    F --> G[Cria a release<br/>no GitHub]
 ```
 
 - **[CI](.github/workflows/ci.yml)** — roda em todo push das branches do git flow e em
   todo pull request para `develop` e `main`: lint, testes com cobertura (publicada como
   artefato), build de produção e build da imagem Docker, que é iniciada e testada no
   `/api/health`.
-- **[Release](.github/workflows/release.yml)** — a cada release publicada no GitHub
-  (tag `vX.Y.Z`), constrói e publica a imagem em `ghcr.io/dracon-46/pi_agiw_fatec`
-  com a versão e `latest`.
+- **[Release](.github/workflows/release.yml)** — a cada tag de versão, publica a imagem
+  em `ghcr.io/dracon-46/pi_agiw_fatec` e cria a release com as notas geradas.
 - **[Dependabot](.github/dependabot.yml)** — abre PRs semanais de atualização de
   dependências para a `develop`.
 
