@@ -1,0 +1,13 @@
+# Sobe o módulo em contêiner, apontando para o SQL Server do ERP informado no
+# .env (DB_SERVER, DB_NAME, DB_USER, DB_PASS). Uso: docker compose up -d --build
+services:
+  app:
+    build: .
+    image: conciliacao-bancaria:local
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      # Certificados mTLS dos bancos, somente leitura
+      - ./certs:/app/certs:ro
+    restart: unless-stopped

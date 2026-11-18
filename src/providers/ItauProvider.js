@@ -20,8 +20,8 @@
 // Aparecem aqui apenas eventos de títulos (entradas na carteira, liquidações e
 // baixas). TED, PIX, tarifas avulsas e pagamentos a fornecedores não transitam
 // por ela; para esses movimentos o Itaú publica um produto de Conta Corrente
-// separado, ainda não contratado. É a mesma limitação registrada para o Safra
-// em docs/SOLICITACAO-EXTRATO-SAFRA.md.
+// separado, ainda não contratado. O Safra tem a mesma limitação: o extrato de
+// conta corrente é um produto contratado à parte.
 // ============================================================================
 
 import { BankProvider } from './BankProvider.js';

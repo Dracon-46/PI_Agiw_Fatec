@@ -9,7 +9,6 @@
 
 import { ChevronDown, RefreshCw } from 'lucide-react';
 import { MarcaBanco } from './MarcaBanco.jsx';
-import { formataContaCorrente } from '../../utils/formatters.js';
 
 /**
  * @param {object} oPropriedades

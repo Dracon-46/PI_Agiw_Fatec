@@ -1,215 +1,292 @@
-# Módulo Conciliação Bancária
+# Conciliação Bancária — Módulo Financeiro do ERP Satis
 
-Projeto Banco · Ticket 37060 · **Agiw Sistemas**
+[![CI](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Dracon-46/PI_Agiw_Fatec/actions/workflows/ci.yml)
+![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL%20Server-ERP%20Satis-CC2927?logo=microsoftsqlserver&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white)
 
-Módulo que confronta a movimentação financeira registrada no Satis com o
-extrato da instituição bancária, permitindo conciliar, estornar, lançar,
-transferir entre contas e bloquear períodos já fechados.
+Projeto Integrador II do curso de **Análise e Desenvolvimento de Sistemas (AMS)** da
+**Fatec Sorocaba**, desenvolvido em parceria com a **Agiw Sistemas** (Ticket 37060 —
+Projeto Banco).
 
-Implementa o *Documento de Visão — Projeto Banco* (`docs/37060_Documento_Projeto Banco.pdf`).
+O módulo confronta, em uma única tela, os lançamentos registrados no ERP Satis com o
+extrato obtido **diretamente das APIs dos bancos**, e permite conciliar de forma manual
+ou automática, estornar, lançar tarifas, transferir entre contas, bloquear períodos já
+conferidos, exportar relatórios e auditar tudo o que foi feito.
 
-Explicação do código (camadas, fluxos e decisões de projeto):
-[`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+![Tela de conciliação](docs/telas/02-conciliacao.png)
 
 ---
 
-## Stack
+## Sumário
+
+- [Funcionalidades](#funcionalidades)
+- [Arquitetura](#arquitetura)
+- [Tecnologias](#tecnologias)
+- [Como executar](#como-executar)
+- [Testes e qualidade](#testes-e-qualidade)
+- [CI/CD](#cicd)
+- [Fluxo de trabalho (git flow)](#fluxo-de-trabalho-git-flow)
+- [Integrações bancárias](#integrações-bancárias)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Documentação](#documentação)
+- [Segurança](#segurança)
+- [Equipe](#equipe)
+
+---
+
+## Funcionalidades
+
+Cada funcionalidade atende um item do [Documento de Visão](docs/requisitos/Documento_de_Visao_Projeto_Banco.pdf).
+
+| Item | Funcionalidade |
+| --- | --- |
+| 6.1.1 | Tela inicial com um cartão por conta corrente: banco, agência, saldo previsto e data do último bloqueio |
+| 6.1.2 | Extrato do sistema e extrato do banco lado a lado, com saldo anterior, entradas, saídas e saldo final |
+| 6.1.3.1 | Bloqueio e desbloqueio de período, com permissão conferida no servidor |
+| 6.1.3.2 | Período sugerido automaticamente: último bloqueio + 1 até ontem (máximo de 60 dias) |
+| 6.1.3.3 | Importação do extrato pela API do banco, consultando apenas os dias ainda não lidos |
+| 6.1.3.4 | Filtros de situação (conciliado / não conciliado) e filtro combinável por qualquer campo |
+| 6.1.3.5 | Seleção sem misturar status e somatórias em duas linhas, com a diferença |
+| 6.1.3.6 / 6.1.3.7 | Conciliar e estornar somente com diferença zero |
+| 6.1.3.8 | Menu do botão direito: novo lançamento, transferência entre contas e exclusão |
+| 6.2 | Relatórios em Excel, PDF, CSV e OFX com saldos e totais |
+| — | **Conciliação automática** 1:1, N:1, 1:N e N:N por soma de subconjuntos |
+| — | Trilha de auditoria de todas as ações do módulo |
+
+A conciliação automática trata o caso de um movimento do banco que corresponde à soma de
+vários lançamentos como o problema da **soma de subconjuntos** (*Subset Sum*): até 36
+candidatos a busca é exata, pela técnica *meet in the middle*; acima disso, uma busca em
+profundidade com prazo informa quando foi interrompida. Os valores são comparados em
+centavos inteiros, nunca em ponto flutuante.
+
+---
+
+## Arquitetura
+
+![Arquitetura](docs/diagramas/arquitetura.png)
+
+O módulo é uma aplicação **Next.js** em camadas. No navegador ficam as páginas React, o
+estado da tela (`BankContext` e `useConciliacao`) e um único serviço HTTP; no servidor
+ficam as rotas da API, os serviços de domínio, a integração bancária e os repositórios.
+Nenhum componente acessa o banco de dados ou as APIs dos bancos diretamente: credenciais
+e certificados nunca chegam ao navegador.
+
+O módulo **não tem banco próprio**: trabalha dentro do SQL Server do ERP Satis, sobre as
+tabelas que o ERP já usa. Só duas tabelas foram criadas, porque não tinham equivalente:
+`TBCONB008` (dias de extrato já consultados) e `TBCONB009` (auditoria).
+
+| Padrão de projeto | Onde |
+| --- | --- |
+| Strategy + Template Method | `BankProvider` e um provider por banco |
+| Factory | `BankProviderFactory`, com uma instância por banco para preservar o token |
+| Adapter | normalização das respostas de cada API para um formato único de movimento |
+| Repository | `src/lib/repositories/`, um arquivo por tabela/agregado do ERP |
+| Singleton | `src/lib/db.js`, um único cliente Prisma por processo |
+| Facade | `conciliacaoService`, que centraliza as chamadas HTTP do navegador |
+
+Os diagramas de casos de uso, classes, atividades e o modelo de dados estão em
+[`docs/diagramas`](docs/diagramas).
+
+---
+
+## Tecnologias
 
 | Camada | Tecnologia |
 | --- | --- |
 | Interface | Next.js 14 (App Router) + React 18 |
-| API | Route Handlers do Next.js |
-| Banco | SQL Server — o banco do ERP (Prisma + adapter `mssql`) |
+| API | Route Handlers do Next.js (Node.js 20) |
+| Banco de dados | Microsoft SQL Server do ERP, via Prisma 7 + adapter `mssql` |
 | Relatórios | ExcelJS (xlsx), CSV, HTML de impressão (PDF) e OFX |
-| Integração bancária | Strategy + Factory por banco (`src/providers/`) |
+| Testes | Vitest + cobertura V8 |
+| Qualidade | ESLint (`next/core-web-vitals`) e EditorConfig |
+| Contêiner | Docker multi-stage (Next.js standalone) e Docker Compose |
+| CI/CD | GitHub Actions, GitHub Container Registry e Dependabot |
 
 ---
 
-## Começando
+## Como executar
+
+### Pré-requisitos
+
+- Node.js 20 (há um `.nvmrc` na raiz)
+- Acesso a um SQL Server com o banco do ERP Satis (`BDAPRESENTACAO`)
+- Credenciais de desenvolvedor dos bancos a integrar e, para Bradesco e Banco do Brasil,
+  o certificado de cliente exigido pelo mTLS (colocado em `certs/`)
+
+### Localmente
 
 ```bash
-npm install
-
-cp .env.example .env      # preencha DB_* e as credenciais dos bancos
-npm run db:init           # cria as duas tabelas do módulo no banco do ERP
-npm run db:extrato        # opcional: carrega o extrato das contas configuradas
-
-npm run dev               # http://localhost:3000
+npm install                 # instala as dependências e gera o cliente do Prisma
+cp .env.example .env        # preencha DB_* e as credenciais dos bancos
+npm run db:init             # cria TBCONB008 e TBCONB009 (não altera o ERP)
+npm run dev                 # http://localhost:3000
 ```
 
-Precisa de um SQL Server com o banco do ERP (`BDAPRESENTACAO`) acessível. O
-módulo trabalha dentro dele, sobre as tabelas do Satis — o `npm run db:init`
-confere se elas estão lá antes de criar as duas tabelas que são do módulo.
+Para produção: `npm run build` e `npm start`.
+
+### Com Docker
+
+```bash
+cp .env.example .env        # aponte DB_SERVER para o SQL Server do ERP
+docker compose up -d --build
+curl http://localhost:3000/api/health        # aplicação no ar
+curl http://localhost:3000/api/health?db=1   # aplicação e banco de dados
+```
+
+A imagem roda com usuário sem privilégios, tem `HEALTHCHECK` e recebe os certificados
+de `certs/` como volume somente leitura.
 
 ### Scripts
 
 | Comando | O que faz |
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
-| `npm run build` / `npm start` | Build de produção e execução |
-| `npm run db:init` | Confere as tabelas do ERP e cria `TBCONB008` e `TBCONB009` |
-| `npm run db:extrato` | Carrega o extrato das contas configuradas pelo caminho da tela |
-| `npm run db:espelho` | Cria a massa espelhada no lado do sistema, a partir do extrato que a API trouxe |
-| `npm run diag:safra` | Diagnostica a integração Safra ponta a ponta |
-| `npm run diag:bradesco` | Diagnostica a integração Bradesco |
-| `npm run diag:itau` | Diagnostica a integração Itaú |
-| `npm run diag:bb` | Diagnostica a integração Banco do Brasil |
+| `npm run build` / `npm start` | Build e execução de produção |
+| `npm run lint` | ESLint em `src`, `scripts` e `tests` |
+| `npm test` | Testes automatizados |
+| `npm run test:coverage` | Testes com relatório de cobertura em `coverage/` |
+| `npm run db:init` | Confere as tabelas do ERP e cria as duas tabelas do módulo |
+| `npm run db:extrato` | Carrega antecipadamente o extrato das contas configuradas |
+| `npm run db:espelho` | Gera a massa de homologação espelhando o extrato importado |
+| `npm run diag:itau` · `diag:bradesco` · `diag:bb` · `diag:safra` | Diagnóstico ponta a ponta de cada integração: configuração, token e extrato |
 
 ---
 
-## Funcionalidades
+## Testes e qualidade
 
-### Tela inicial — escolha da conta (item 6.1.1)
+```bash
+npm run lint
+npm run test:coverage
+```
 
-Cartão por conta corrente com o logotipo do banco, agência, saldo previsto no
-sistema e data do último bloqueio. Permite cadastrar, **alterar** e remover
-contas, que ficam em `TBGENE016` — o cadastro de contas do próprio ERP.
+São 75 testes automatizados, entre unitários e de integração:
 
-Só aparecem as contas cujo banco tem a integração configurada: sem credencial
-não há extrato, e exibi-las levaria o usuário direto a um erro. A conferência
-é por conta: credencial global válida com agência/conta incompleta também
-reprova.
+- algoritmo de soma de subconjuntos, inclusive com alvo próximo de R$ 1 milhão e
+  interrupção por prazo;
+- as quatro passadas da conciliação automática;
+- regras de período, datas, valores, rateio por centro de custo e subgrupos;
+- adaptadores do Banco do Brasil e do Bradesco e a factory de providers;
+- cache do extrato por dia e geração de CSV, OFX e Excel;
+- rotas `/api/conciliacao/conciliar` e `/api/health`, com os repositórios simulados.
 
-### Tela de conciliação (itens 6.1.2 e 6.1.3)
+A cobertura das regras de negócio fica acima de 85% e a pipeline falha se ela cair
+abaixo desse limite.
 
-- **Período automático:** data inicial = último bloqueio + 1; data final = ontem
-- **Grades lado a lado** com saldo anterior, entradas, saídas e saldo final
-- **Seleção com trava de status:** não é possível misturar conciliados e não
-  conciliados na mesma seleção
-- **Conciliar / Estorno:** exigem diferença zero entre as somatórias
-- **Auto conciliar:** quatro passadas, da correspondência mais forte para a
-  mais fraca — 1:1 exata, N:1 (vários lançamentos fechando um movimento),
-  1:N (um lançamento para vários movimentos) e N:N (os dois lados em conjunto)
-- **Extrato gravado, API consultada uma vez:** o extrato da instituição é
-  copiado para `TBCONB006`, o extrato do ERP, na primeira leitura. A cada busca o sistema confere
-  quais dias já tem e consulta o banco **apenas para os que faltam** — sem
-  isso, períodos antigos ficariam inacessíveis (o BB não devolve nada além de
-  5 anos) e cada abertura de tela gastaria cota do gateway. Concluída a busca,
-  os pares de mesma data e valor já vêm selecionados
-- **Período limitado a 60 dias:** intervalos maiores são recusados com aviso —
-  conferir dois meses de uma vez já não é conciliação, e o custo cai no
-  gateway do banco
-- **Bloqueio de período:** gravado em `TBGENE016.DATULTBLOQUEIO`, recusa
-  lançamentos em data já fechada. Exige a permissão `conciliacao.bloqueio`,
-  conferida no servidor — a tela apenas reflete o que a rota autoriza
-- **Filtros de situação** nos dois lados, com contadores, mais o filtro por
-  qualquer campo da grade — combinável e com a quantidade aplicada à vista
-- **Somatórias em duas linhas:** uma para os selecionados conciliados e outra
-  para os não conciliados, cada uma com a sua diferença
-- **Saldos por extrato:** saldo anterior, entradas, saídas e saldo final nos
-  dois lados
+---
 
-### Menu do botão direito (item 6.1.3.8)
+## CI/CD
 
-Clicar com o botão direito em qualquer grade abre as ações previstas,
-aproveitando os dados da linha sob o cursor:
+```mermaid
+flowchart LR
+    A[push ou pull request] --> B[Lint e testes<br/>com cobertura]
+    B --> C[Build do Next.js]
+    B --> D[Build da imagem Docker<br/>e teste de fumaça]
+    E[tag vX.Y.Z] --> F[Publica a imagem<br/>no GHCR]
+    F --> G[Cria a release<br/>no GitHub]
+```
 
-1. **Novo Lançamento** — lançamento avulso no extrato do sistema
-2. **Nova Transferência entre Contas** — gera o débito e o crédito
-   simultaneamente; as duas pernas compartilham um código e são excluídas juntas
-3. **Excluir Registro** — respeita as travas: nada conciliado é excluído, e
-   somente lançamentos do ERP originados na própria conciliação. O extrato do
-   banco não é editável: ele é o registro da instituição
+- **[CI](.github/workflows/ci.yml)** — roda em todo push das branches do git flow e em
+  todo pull request para `develop` e `main`: lint, testes com cobertura (publicada como
+  artefato), build de produção e build da imagem Docker, que é iniciada e testada no
+  `/api/health`.
+- **[Release](.github/workflows/release.yml)** — a cada tag de versão, publica a imagem
+  em `ghcr.io/dracon-46/pi_agiw_fatec` e cria a release com as notas geradas.
+- **[Dependabot](.github/dependabot.yml)** — abre PRs semanais de atualização de
+  dependências para a `develop`.
 
-### Relatórios (item 6.2)
+---
 
-Botão **Exportar** com duas escolhas: *qual* extrato (Satis, banco ou os dois) e
-*em que* formato (Excel, CSV, PDF ou **OFX**, o padrão bancário que a
-contabilidade importa direto). O arquivo reproduz o que está na tela — os
-filtros de situação são aplicados e descritos no cabeçalho — e sempre traz saldo
-inicial, movimentos, saldo final e os totais de entradas, saídas, conciliado e
-não conciliado.
+## Fluxo de trabalho (git flow)
 
-### Usuários e permissões
-
-O usuário corrente vem de `USUARIO_ATUAL` no `.env` enquanto o módulo não
-recebe a sessão do Satis: é o `USER_ID` conferido em `TBSENH006` (suspensão e
-bloqueio no ERP barram o acesso). As permissões saem de `TBSENH005`, a mesma
-tabela que o Satis usa — cada uma é uma operação em um módulo do ERP:
-
-| Permissão | Cobre |
+| Branch | Uso |
 | --- | --- |
-| `conciliacao.bloqueio` | Fechar e reabrir período (item 6.1.3.1) — ALTERACAO em CONB002 |
-| `conciliacao.conciliar` | Conciliar e estornar (itens 6.1.3.6 e 6.1.3.7) — ALTERACAO em CONB001 |
-| `conciliacao.lancamento` | Lançar e transferir entre contas (item 6.1.3.8) — INCLUSAO em CONB001 |
-| `conciliacao.exclusao` | Excluir lançamento (item 6.1.3.8 — ação 4) — EXCLUSAO em CONB001 |
+| `main` | Código em produção. Só recebe merges de `release/*` e `hotfix/*`, sempre com tag de versão |
+| `develop` | Integração das funcionalidades prontas |
+| `feature/<nome>` | Uma funcionalidade, criada a partir da `develop` e integrada nela |
+| `release/<versão>` | Preparação de uma versão, da `develop` para a `main` |
+| `hotfix/<versão>` | Correção urgente, da `main` para a `main` e a `develop` |
 
-Quem libera cada operação é o cadastro de permissões do Satis, então o acesso
-ao módulo é mantido onde o cliente já mantém os outros.
-
-### Catálogos
-
-Tipos de documento, subgrupos de fluxo de caixa (TBFLCX002), contas contábeis
-(TBGENE023) e centros de custo (TBCOMP008) vêm das tabelas do ERP e alimentam as caixas
-de lançamento e transferência.
-
-### Auditoria
-
-Trilha de todas as ações do módulo (conciliação, estorno, bloqueio, lançamento,
-exclusão, exportação), com filtro por ação e período.
+As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/) e estão
+descritas no [CHANGELOG](CHANGELOG.md). O passo a passo está no
+[guia de contribuição](CONTRIBUTING.md).
 
 ---
 
 ## Integrações bancárias
 
 Cada banco é uma classe que estende `BankProvider` e é registrada na
-`BankProviderFactory`. Incluir um novo banco não altera os existentes.
+`BankProviderFactory`; incluir um banco novo não altera os existentes.
 
-| Banco | Situação |
+| Banco | Autenticação | Situação |
+| --- | --- | --- |
+| Itaú | OAuth 2.0 *client credentials* | Extrato da carteira de cobrança obtido no sandbox |
+| Bradesco | OAuth 2.0 + mTLS | Extrato de conta corrente obtido com certificado de cliente |
+| Banco do Brasil | OAuth 2.0 + mTLS no extrato | Autenticação validada; extrato depende do certificado e-CNPJ |
+| Safra | OAuth 2.0 *password* | Autenticação validada; extrato depende da contratação do produto |
+
+---
+
+## Estrutura do repositório
+
+```
+.
+├── .github/              workflows de CI/CD, Dependabot e template de PR
+├── certs/                certificados mTLS (fora do Git)
+├── database/schema.sql   DDL das duas tabelas do módulo
+├── docs/                 monografia, requisitos, atas, padrões, diagramas e telas
+├── prisma/               esquema do subconjunto de tabelas do ERP usado pelo módulo
+├── public/               logotipos
+├── scripts/              inicialização do banco, carga de extrato e diagnósticos
+├── src/
+│   ├── app/              páginas e rotas da API (Next.js App Router)
+│   ├── components/       telas, modais, menu de contexto e campos
+│   ├── contexts/         conta selecionada, usuário e catálogos
+│   ├── hooks/            regras da tela de conciliação
+│   ├── lib/              acesso ao banco, extrato, relatórios e repositórios
+│   ├── providers/        integrações bancárias (Strategy + Factory)
+│   ├── services/         cliente HTTP e conciliação automática
+│   └── utils/            soma de subconjuntos, datas, valores e catálogos
+├── tests/                testes unitários e de integração
+├── Dockerfile
+└── docker-compose.yml
+```
+
+---
+
+## Documentação
+
+| Pasta | Conteúdo |
 | --- | --- |
-| **Bradesco** | Extrato de conta corrente via OAuth2 + mTLS. Exige certificado de cliente (`.crt` + `.key`) do portal do desenvolvedor. |
-| **Safra** | Autenticação OAuth2 (`grant_type=password`) **funcionando** contra o gateway de homologação. Cobrança (consulta, baixa e instrução de boleto) implementada conforme o *Kit Welcome API COB V3.0*. O extrato de conta corrente é um produto contratado à parte — o caminho fica em `SAFRA_EXTRATO_PATH` e o provider já trata a resposta; sem liberação, a API devolve 404 e o sistema informa a pendência. |
-| **Itaú** | Extrato da carteira de cobrança (*API Boletos — Extrato Boleto Cobrança*) **funcionando** no sandbox: OAuth2 `client_credentials`, `/francesas` e `/francesas/{id}/movimentacoes`. A conciliação importa apenas as **liquidações**, o único evento da francesa que credita a conta. Débitos (TED, PIX, tarifas avulsas) exigem a API de Conta Corrente, ainda não contratada. Produção pede `private_key_jwt` + mTLS. Diagnóstico: `npm run diag:itau`. |
-| **Banco do Brasil** | Extrato de conta corrente (*API Extratos v2*) implementado: OAuth2 `client_credentials`, paginação e separação de lançamentos, saldos e limites pelo `indicadorTipoLancamento`. Autenticação **validada** contra o gateway de homologação. O extrato exige mTLS com certificado A1 e-CNPJ cadastrado no Portal Developers. Diagnóstico: `npm run diag:bb`. |
-
-Sem a API liberada, a conta não aparece na tela inicial: sem extrato não há o
-que conciliar, e exibi-la levaria direto a um erro.
-
----
-
-## Estrutura
-
-```
-src/
-├── app/
-│   ├── api/
-│   │   ├── auditoria/            trilha de auditoria
-│   │   ├── bank/                 providers, contas, extrato (API e arquivo)
-│   │   ├── conciliacao/          lançamentos, movimentos, conciliar,
-│   │   │                         auto-match, bloqueio, transferência, títulos
-│   │   └── relatorios/           exportação xlsx / csv / pdf
-│   ├── auditoria/ conciliacao/   páginas
-├── components/                   telas, modais, menu de contexto, campo de data
-├── contexts/                     conta corrente selecionada
-├── hooks/useConciliacao.js       regras da tela de conciliação
-├── lib/
-│   ├── conciliacao/              parser de extrato (OFX/CSV) e utilitários
-│   ├── relatorios/               geração dos relatórios
-│   └── repositories/             acesso ao banco do ERP
-├── providers/                    integrações bancárias (Strategy + Factory)
-├── services/                     chamadas HTTP do cliente
-└── utils/                        formatação, subset-sum, catálogos
-```
-
----
-
-## Publicação
-
-O módulo é um app Next.js: `npm run build` e `npm start` no servidor que
-alcança o SQL Server do ERP.
-
-Os arquivos de contêiner e o passo a passo da AWS ficam na branch
-`infra/docker-aws`, fora do main — publicação é assunto de infraestrutura, e
-mantê-la separada evita que a raiz do projeto acumule configuração que o
-desenvolvimento não usa.
+| [`docs/monografia`](docs/monografia) | Monografia do Projeto Integrador (PDF e DOCX) |
+| [`docs/requisitos`](docs/requisitos) | Documento de Visão e protótipo de tela fornecidos pela Agiw |
+| [`docs/atas`](docs/atas) | Atas das reuniões com a empresa parceira |
+| [`docs/padroes`](docs/padroes) | Padrões de programação e de interface da Agiw |
+| [`docs/diagramas`](docs/diagramas) | Casos de uso, arquitetura, DER, classes e atividades |
+| [`docs/telas`](docs/telas) | Capturas das telas do sistema |
 
 ---
 
 ## Segurança
 
-- `.env`, os certificados (`*.key`, `*.crt`, `*.pfx`) e a pasta `docs/` estão
-  fora do Git
-- Credenciais das APIs bancárias só existem no servidor — nunca chegam ao
-  navegador
-- Os segredos de banco ficam nas variáveis `DB_*`, lidas só no servidor
-- O usuário corrente e as permissões são conferidos no ERP a cada gravação
+- `.env`, certificados (`*.key`, `*.crt`, `*.pfx`) e kits dos bancos ficam fora do Git
+- Credenciais das APIs e do banco de dados são lidas apenas no servidor
+- Toda gravação valida dados, permissão (tabelas de permissão do Satis) e período
+  bloqueado no servidor, antes de gravar
+- O contêiner roda sem privilégios de root
+
+---
+
+## Equipe
+
+| Integrante |
+| --- |
+| Arthur Gaspare Camzano |
+| Felipe Ferreira De Souza |
+| Gabriel Silva |
+| Giovanni Camargo Maruccio |
+| Luiz Felipe Glauser Lucas |
+
+**Orientador:** Prof. Antonio Cesar de Barros Munari — Fatec Sorocaba
+**Empresa parceira:** Agiw Sistemas

@@ -1,6 +1,6 @@
 {
   "name": "conciliacao-bancaria-agiw",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Módulo Conciliação Bancária - Agiw Sistemas | Ticket 37060",
   "private": true,
   "scripts": {
@@ -8,14 +8,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --dir src --dir scripts --dir tests",
     "db:init": "node scripts/init-db.mjs",
     "db:espelho": "node scripts/seed-espelho.mjs",
     "diag:bradesco": "node scripts/diag-bradesco.mjs",
     "diag:itau": "node scripts/diag-itau.mjs",
     "diag:safra": "node scripts/diag-safra.mjs",
     "diag:bb": "node scripts/diag-bb.mjs",
-    "db:extrato": "node scripts/carrega-extrato.mjs"
+    "db:extrato": "node scripts/carrega-extrato.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/adapter-mssql": "^7.10.0",
@@ -30,8 +33,13 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.1.1",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.3",
-    "prisma": "^7.10.0"
+    "prisma": "^7.10.0",
+    "vitest": "^5.1.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
