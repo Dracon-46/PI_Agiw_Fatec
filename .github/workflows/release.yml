@@ -16,7 +16,7 @@ jobs:
     name: Publicar imagem no GHCR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v3
 
@@ -46,7 +46,7 @@ jobs:
     needs: imagem
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Criar release com as notas geradas
         env:
