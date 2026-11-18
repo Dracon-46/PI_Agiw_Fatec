@@ -2,6 +2,12 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [2.1.2] - 2026-11-18
+
+### Alterado
+- O workflow de release volta a disparar no push da tag de versão (`vX.Y.Z`),
+  como definido no fluxo do git flow.
+
 ## [2.1.1] - 2026-11-18
 
 ### Alterado
