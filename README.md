@@ -183,18 +183,25 @@ flowchart LR
     A[push ou pull request] --> B[Lint e testes<br/>com cobertura]
     B --> C[Build do Next.js]
     B --> D[Build da imagem Docker<br/>e teste de fumaça]
-    E[tag vX.Y.Z] --> F[Publica a imagem<br/>no GHCR]
-    F --> G[Cria a release<br/>no GitHub]
+    E[merge de release/hotfix<br/>na main] --> F[Tag vX.Y.Z]
+    F --> G[Release no GitHub]
+    F --> H[Imagem no GHCR]
+    F --> I[main de volta<br/>na develop]
+    I --> J[Limpeza das branches<br/>integradas]
 ```
 
 - **[CI](.github/workflows/ci.yml)** — roda em todo push das branches do git flow e em
   todo pull request para `develop` e `main`: lint, testes com cobertura (publicada como
   artefato), build de produção e build da imagem Docker, que é iniciada e testada no
   `/api/health`.
-- **[Release](.github/workflows/release.yml)** — a cada tag de versão, publica a imagem
-  em `ghcr.io/dracon-46/pi_agiw_fatec` e cria a release com as notas geradas.
-- **[Dependabot](.github/dependabot.yml)** — abre PRs semanais de atualização de
-  dependências para a `develop`.
+- **[Release](.github/workflows/release.yml)** — a cada push na `main` (merge de uma
+  `release/*` ou `hotfix/*`), cria a tag da versão do `package.json`, a release com as
+  notas geradas, publica a imagem em `ghcr.io/dracon-46/pi_agiw_fatec`, traz a `main`
+  de volta para a `develop` e apaga as branches já integradas. Nenhuma tag é criada à
+  mão.
+- **[Dependabot](.github/dependabot.yml)** — abre PRs de atualização para a `develop`;
+  trocas de versão principal do Next.js, React e ESLint ficam de fora, porque exigem
+  migração planejada.
 
 ---
 
@@ -202,7 +209,7 @@ flowchart LR
 
 | Branch | Uso |
 | --- | --- |
-| `main` | Código em produção. Só recebe merges de `release/*` e `hotfix/*`, sempre com tag de versão |
+| `main` | Código em produção. Só recebe merges de `release/*` e `hotfix/*`; a tag de versão é criada pela pipeline |
 | `develop` | Integração das funcionalidades prontas |
 | `feature/<nome>` | Uma funcionalidade, criada a partir da `develop` e integrada nela |
 | `release/<versão>` | Preparação de uma versão, da `develop` para a `main` |
