@@ -18,7 +18,8 @@
     "db:extrato": "node scripts/carrega-extrato.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:teste": "node scripts/cria-base-teste.mjs"
   },
   "dependencies": {
     "@prisma/adapter-mssql": "^7.10.1",
