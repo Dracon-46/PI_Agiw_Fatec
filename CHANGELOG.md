@@ -2,6 +2,20 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [2.3.0] - 2026-11-20
+
+### Adicionado
+- Base de teste local: `npm run db:teste` cria o banco `BDCONCILIACAO_TESTE` com as
+  tabelas do ERP usadas pelo módulo e dados de demonstração (contas Itaú e Safra,
+  usuário com permissões, lançamentos e extrato de outubro/2026). Só aceita bancos
+  com TESTE no nome; `--recriar` começa do zero.
+- `.env.teste.example` com a configuração pronta para a base de teste.
+- README: execução local do projeto, requisitos não funcionais definidos pelo
+  cliente com as fontes e passo a passo para rodar com a base de teste.
+
+### Alterado
+- Monografia revisada, com o capítulo de implantação detalhado.
+
 ## [2.2.1] - 2026-11-18
 
 ### Corrigido
