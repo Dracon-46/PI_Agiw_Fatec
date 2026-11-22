@@ -221,7 +221,7 @@ O workflow CI executa push em qualquer branch e Pull Request para `main`. No Git
 
 ### CD para o destino configurado
 
-O CD atual mira um único host por meio dos secrets/vars `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_APP_DIR`. Para outro destino, use deploy manual abaixo ou evolua o workflow para ambientes separados; não sobrescreva secrets compartilhados sem controlar o destino.
+O CD atual mira um único host por meio dos secrets/vars `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_APP_DIR`. Pushes que alteram apenas arquivos Markdown, `docs/**` ou `.github/workflows/**` não disparam deploy; o workflow pode ser iniciado manualmente em **Actions → CD — Deploy EC2 → Run workflow**. Para outro destino, use deploy manual abaixo ou evolua o workflow para ambientes separados; não sobrescreva secrets compartilhados sem controlar o destino. Antes do deploy automático, deixe a EC2 ligada e confirme que `EC2_HOST` contém o endereço público atual. Um Elastic IP associado mantém o endereço após stop/start; sem ele, atualize o secret/variable quando o IP mudar. EC2 desligada ou endereço antigo causa timeout SSH.
 
 Depois do CI passar, conecte-se à EC2 do ambiente:
 

@@ -28,6 +28,11 @@ name: CD — Deploy EC2
 on:
   push:
     branches: [main, projeto-nuvem-glauco]
+    paths-ignore:
+      - '*.md'
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:

@@ -240,7 +240,7 @@ Verifica ausência de credenciais no código
 
 **Arquivo:** [`.github/workflows/cd.yml`](../.github/workflows/cd.yml)
 
-**Disparadores atuais:** push para `main` ou `projeto-nuvem-glauco`, ou execução manual (`workflow_dispatch`). Cada execução usa um único host/chave e faz deploy em um destino. Para configurar ou operar a implantação, consulte o [guia AWS](DEPLOY-AWS.md).
+**Disparadores atuais:** push para `main` ou `projeto-nuvem-glauco` quando há mudanças fora de Markdown, `docs/**` e `.github/workflows/**`, ou execução manual (`workflow_dispatch`). Cada execução usa um único host/chave. Antes de executar, a EC2 precisa estar ligada e `EC2_HOST` deve corresponder ao IP público atual; um Elastic IP associado permanece estável após stop/start. Para configurar ou operar a implantação, consulte o [guia AWS](DEPLOY-AWS.md).
 
 **Fluxo:**
 
@@ -846,7 +846,7 @@ Na instância de referência, o Security Group tem 22, 80 e 443 liberadas; a reg
 > Backup diário enviado ao S3, com cópia local em `/home/ec2-user/backups/`. Restore pelo script `infra/restore-conciliacao.sh`, usando arquivo local ou URI S3. Detalhes na Seção 8.
 
 > **Como publicamos uma nova versão?**
-> Push em `main`/`projeto-nuvem-glauco` ou execução manual dispara CD para o host configurado. O workflow não distribui para múltiplos hosts; operações e atualização estão no [guia AWS](DEPLOY-AWS.md).
+> Push de alterações da aplicação em `main`/`projeto-nuvem-glauco` (documentação/workflows são ignorados) ou execução manual dispara CD para o host configurado. A EC2 deve estar ligada e `EC2_HOST` atualizado. O workflow não distribui para múltiplos hosts; operações e atualização estão no [guia AWS](DEPLOY-AWS.md).
 
 > **Como voltamos para uma versão anterior?**
 > `git checkout <commit>` + `docker compose up -d --build` na EC2. Detalhes na Seção 10.
